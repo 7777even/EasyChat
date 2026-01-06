@@ -5,12 +5,7 @@ import com.easychat.entity.po.UserContact;
 
 import java.util.List;
 
-/**
- * @ClassName GroupInfoVO
- * @Description TODO
- * @Author 程序员老罗 https://space.bilibili.com/499388891
- * @Date 2024/2/6 14:01
- */
+
 public class GroupInfoVO {
     private GroupInfo groupInfo;
     private List<UserContact> userContactList;

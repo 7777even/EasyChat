@@ -19,12 +19,7 @@ import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @return
- * @Description ws 启动类
- * @Author 程序员老罗
- * @Date 2023/12/17 10:06
- */
+
 @Component
 public class NettyWebSocketStarter implements Runnable {
 

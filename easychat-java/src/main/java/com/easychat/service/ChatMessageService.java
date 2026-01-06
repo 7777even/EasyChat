@@ -78,4 +78,9 @@ public interface ChatMessageService {
     void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile cover);
 
     File downloadFile(TokenUserInfoDto userInfoDto, Long messageId, Boolean cover);
+
+    /**
+     * 撤回消息
+     */
+    MessageSendDto recallMessage(Long messageId, TokenUserInfoDto tokenUserInfoDto);
 }

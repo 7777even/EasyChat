@@ -18,11 +18,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 
-/**
- * @Description ws 业务处理
- * @Author 程序员老罗
- * @Date 2023/12/17 10:10
- */
+
 
 /**
  * 设置通道共享

@@ -24,12 +24,7 @@ import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.List;
 
-/**
- * @ClassName GroupController
- * @Description TODO
- * @Author 程序员老罗 https://space.bilibili.com/499388891
- * @Date 2023/12/24 20:04
- */
+
 @RestController("groupController")
 @RequestMapping("/group")
 public class GroupController extends ABaseController {

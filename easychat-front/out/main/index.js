@@ -892,7 +892,8 @@ const createWs = () => {
       case 8:
       case 11:
       case 12:
-        if (message.sendUserId === store$1.getUserId() && message.contactType == 1) {
+      case 14:
+        if (message.sendUserId === store$1.getUserId() && message.contactType == 1 && messageType != 14) {
           break;
         }
         const sessionInfo = {};
@@ -910,7 +911,14 @@ const createWs = () => {
         }
         console.log("sessionInfo", sessionInfo);
         await saveOrUpdate4Message(store$1.getUserData("currentSessionId"), sessionInfo);
-        await saveMessage(message);
+        if (messageType == 14) {
+          updateMessage({
+            messageType: 14,
+            messageContent: message.messageContent || "该消息已撤回"
+          }, { messageId: message.messageId });
+        } else {
+          await saveMessage(message);
+        }
         const dbSessionInfo = await selectUserSessionByContactId(message.contactId);
         message.extendData = dbSessionInfo;
         if (messageType == 11 && leaveGroupUserId == store$1.getUserId()) {
@@ -1054,6 +1062,11 @@ const onAddLocalMessage = () => {
     data.lastReceiveTime = data.sendTime;
     updateSessionInfo4Message(store$1.getUserData("currentSessionId"), data);
     e.sender.send("addLocalCallback", { status: 1, messageId: data.messageId });
+  });
+};
+const onUpdateLocalMessage = () => {
+  electron.ipcMain.on("updateLocalMessage", async (e, data) => {
+    await updateMessage(data, { messageId: data.messageId });
   });
 };
 const onSaveAs = () => {
@@ -1345,6 +1358,7 @@ function createWindow() {
   onLoadContactApply();
   onUpdateContactNoReadCount();
   onAddLocalMessage();
+  onUpdateLocalMessage();
   onCreateCover();
   onSaveAs();
   onGetSettingInfo();

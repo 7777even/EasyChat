@@ -29,6 +29,7 @@ const api = {
     logout: "/userInfo/logout",
     sendMessage: "/chat/sendMessage",//发送消息
     uploadFile: "/chat/uploadFile",//上传文件地址
+    recallMessage: "/chat/recallMessage",//撤回消息
     loadAdminAccount: "/admin/loadUser",//后台获取用户列表
     updateUserStatus: "/admin/updateUserStatus",//后台更新用户状态
     forceOffLine: "/admin/forceOffLine",//强制下线

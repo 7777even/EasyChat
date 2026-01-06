@@ -1,6 +1,10 @@
 <template>
-  <div class="message-content-my" v-if="data.sendUserId == userInfoStore.getInfo().userId">
-    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '']">
+  <div 
+    class="message-content-my" 
+    v-if="data.sendUserId == userInfoStore.getInfo().userId"
+    @contextmenu.stop="onContextMenu($event)"
+  >
+    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 ? 'recalled-message' : '']">
       <div class="sending" v-if="data.status == 0">
         <el-skeleton :animated="true">
           <template #template>
@@ -9,7 +13,10 @@
         </el-skeleton>
       </div>
       <template v-else>
-        <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+        <div class="content recalled-content" v-if="data.messageType == 14">
+          <span class="recall-text">{{ getRecallText() }}</span>
+        </div>
+        <div class="content" v-html="data.messageContent" v-else-if="data.messageType != 5"></div>
         <div class="content" v-else>
           <template v-if="data.fileType == 0">
             <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -25,7 +32,11 @@
     </div>
     <Avatar :width="35" :userId="userInfoStore.getInfo().userId"> </Avatar>
   </div>
-  <div class="message-content-other" v-else>
+  <div 
+    class="message-content-other" 
+    v-else
+    @contextmenu.stop="onContextMenu($event)"
+  >
     <div class="user-avatar">
       <Avatar :width="35" :userId="data.sendUserId"></Avatar>
     </div>
@@ -33,10 +44,11 @@
       :class="[
         'content-panel',
         data.contactType == 1 ? 'group-content' : '',
-        data.messageType == 5 ? 'content-panel-media' : ''
+        data.messageType == 5 ? 'content-panel-media' : '',
+        data.messageType == 14 ? 'recalled-message' : ''
       ]"
     >
-      <div class="nick-name" v-if="data.contactType == 1">
+      <div class="nick-name" v-if="data.contactType == 1 && data.messageType != 14">
         {{ data.sendUserNickName }}
       </div>
       <div class="sending" v-if="data.status == 0">
@@ -47,7 +59,10 @@
         </el-skeleton>
       </div>
       <template v-else>
-        <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+        <div class="content recalled-content" v-if="data.messageType == 14">
+          <span class="recall-text">{{ getRecallText() }}</span>
+        </div>
+        <div class="content" v-html="data.messageContent" v-else-if="data.messageType != 5"></div>
         <div class="content" v-else>
           <template v-if="data.fileType == 0">
             <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -68,6 +83,8 @@
 import ChatMessageVideo from './ChatMessageVideo.vue'
 import ChatMessageImage from './ChatMessageImage.vue'
 import ChatMessageFile from './ChatMessageFile.vue'
+import ContextMenu from '@imengyu/vue3-context-menu'
+import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 import { ref, reactive, getCurrentInstance, nextTick, computed } from 'vue'
 const { proxy } = getCurrentInstance()
 
@@ -85,12 +102,57 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['showMediaDetail'])
+const emit = defineEmits(['showMediaDetail', 'recallMessage'])
+
 const showDetail = () => {
   if (props.data.stauts == 0) {
     return
   }
   emit('showMediaDetail', props.data.messageId)
+}
+
+// 获取撤回提示文本
+const getRecallText = () => {
+  // 群聊中显示撤回者信息
+  if (props.data.contactType == 1 && props.data.sendUserNickName) {
+    return `${props.data.sendUserNickName} 撤回了一条消息`
+  }
+  return '该消息已撤回'
+}
+
+// 右键菜单
+const onContextMenu = (e) => {
+  // 只有自己的消息且不是撤回消息才能撤回
+  const isMyMessage = props.data.sendUserId == userInfoStore.getInfo().userId
+  const isRecalled = props.data.messageType == 14
+  const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5
+  
+  if (!isMyMessage || isRecalled || !isNormalMessage) {
+    return
+  }
+  
+  // 检查是否在2分钟内
+  const currentTime = Date.now()
+  const sendTime = props.data.sendTime
+  const timeDiff = currentTime - sendTime
+  const canRecall = timeDiff <= 120000 // 2分钟 = 120000毫秒
+  
+  if (!canRecall) {
+    return
+  }
+  
+  ContextMenu.showContextMenu({
+    x: e.x,
+    y: e.y,
+    items: [
+      {
+        label: '撤回',
+        onClick: () => {
+          emit('recallMessage', props.data.messageId)
+        }
+      }
+    ]
+  })
 }
 </script>
 
@@ -203,6 +265,21 @@ const showDetail = () => {
     left: -4px;
     top: 35px;
     background: #fff;
+  }
+}
+
+.recalled-message {
+  .recalled-content {
+    background: #e5e5e5 !important;
+    color: #999;
+    font-style: italic;
+    padding: 8px 12px;
+    .recall-text {
+      font-size: 12px;
+    }
+  }
+  &::after {
+    display: none;
   }
 }
 </style>

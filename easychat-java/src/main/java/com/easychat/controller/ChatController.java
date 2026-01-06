@@ -31,12 +31,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/**
- * @ClassName ChatController
- * @Description TODO
- * @Author 程序员老罗 https://space.bilibili.com/499388891
- * @Date 2023/12/17 21:50
- */
+
 @RestController
 @RequestMapping("/chat")
 public class ChatController extends ABaseController {
@@ -139,5 +134,14 @@ public class ChatController extends ABaseController {
                 }
             }
         }
+    }
+
+    @RequestMapping("/recallMessage")
+    @GlobalInterceptor
+    public ResponseVO recallMessage(HttpServletRequest request,
+                                    @NotNull Long messageId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        MessageSendDto messageSendDto = chatMessageService.recallMessage(messageId, tokenUserInfoDto);
+        return getSuccessResponseVO(messageSendDto);
     }
 }

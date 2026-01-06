@@ -15,11 +15,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import javax.servlet.MultipartConfigElement;
 
-/**
- * @ClassName EasychatApplication
- * @Author 程序员老罗
- * @Date 2023/12/10 21:10
- */
+
 @EnableAsync
 @SpringBootApplication(scanBasePackages = {"com.easychat"})
 @MapperScan(basePackages = {"com.easychat.mappers"})

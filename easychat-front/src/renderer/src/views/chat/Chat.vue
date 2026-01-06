@@ -71,12 +71,13 @@
               <ChatMessageSys :data="data"></ChatMessageSys>
             </template>
             <template
-              v-if="data.messageType == 1 || data.messageType == 2 || data.messageType == 5"
+              v-if="data.messageType == 1 || data.messageType == 2 || data.messageType == 5 || data.messageType == 14"
             >
               <ChatMessage
                 :data="data"
                 :currentChatSession="currentChatSession"
                 @showMediaDetail="showMediaDetailHandler"
+                @recallMessage="recallMessageHandler"
               ></ChatMessage>
             </template>
           </div>
@@ -119,18 +120,17 @@ import MessageSend from './MessageSend.vue'
 import {ref, reactive, getCurrentInstance, nextTick, onMounted, watch, onUnmounted} from 'vue'
 import {useRoute} from 'vue-router'
 
+import {useUserInfoStore} from '@/stores/UserInfoStore'
+import {useMessageCountStore} from '@/stores/MessageCountStore'
+import {useContactStateStore} from '@/stores/ContactStateStore'
+
 const route = useRoute()
 
 const {proxy} = getCurrentInstance()
-import {useUserInfoStore} from '@/stores/UserInfoStore'
 
 const userInfoStore = useUserInfoStore()
 //消息数
-import {useMessageCountStore} from '@/stores/MessageCountStore'
-
 const messageCountStore = useMessageCountStore()
-
-import {useContactStateStore} from '@/stores/ContactStateStore'
 
 const contactStateStore = useContactStateStore()
 
@@ -266,6 +266,29 @@ const onReciveMessage = () => {
       if (localMessage != null) {
         localMessage.status = 1
       }
+      return
+    }
+    //如果是撤回消息，更新消息显示
+    if (message.messageType == 14) {
+      const localMessage = messageList.value.find((item) => {
+        if (item.messageId == message.messageId) {
+          return item
+        }
+      })
+      if (localMessage != null) {
+        localMessage.messageType = 14
+        localMessage.messageContent = message.messageContent || '该消息已撤回'
+        // 如果是群聊，更新撤回者信息
+        if (message.contactType == 1) {
+          localMessage.sendUserNickName = message.sendUserNickName
+        }
+      }
+      // 更新本地数据库
+      window.ipcRenderer.send('updateLocalMessage', {
+        messageId: message.messageId,
+        messageType: 14,
+        messageContent: message.messageContent || '该消息已撤回'
+      })
       return
     }
     //添加好友、创建群、加入群
@@ -583,6 +606,32 @@ const search = () => {
 const searchClickHandler = (data) => {
   searchKey.value = undefined
   chatSessionClickHandler(data)
+}
+
+// 撤回消息
+const recallMessageHandler = async (messageId) => {
+  const result = await proxy.Request({
+    url: proxy.Api.recallMessage,
+    showLoading: false,
+    params: {
+      messageId: messageId
+    },
+    showError: true
+  })
+  if (result) {
+    // 更新本地消息列表
+    const message = messageList.value.find((item) => item.messageId == messageId)
+    if (message) {
+      message.messageType = 14
+      message.messageContent = '该消息已撤回'
+    }
+    // 更新本地数据库
+    window.ipcRenderer.send('updateLocalMessage', {
+      messageId: messageId,
+      messageType: 14,
+      messageContent: '该消息已撤回'
+    })
+  }
 }
 </script>
 

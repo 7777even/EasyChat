@@ -7,7 +7,7 @@ import {
   onSetLocalStore, onGetLocalStore,
   onLoginSuccess, onLoadChatMessage, onLoadSessionData, onReLogin, onLoginOrRegister, winTitleOp,
   onOpenNewWindow, openWindow, onSetSessionSelect, onLoadContactApply, onUpdateContactNoReadCount,
-  onAddLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
+  onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession
 } from "./ipc"
@@ -212,6 +212,9 @@ function createWindow() {
 
   //增加本地消息
   onAddLocalMessage();
+
+  //更新本地消息（撤回消息）
+  onUpdateLocalMessage();
 
   //生成缩略图
   onCreateCover();

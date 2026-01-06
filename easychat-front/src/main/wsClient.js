@@ -90,8 +90,9 @@ const createWs = () => {
             case 8://解散群聊
             case 11://退出群聊
             case 12://提出群聊
+            case 14://撤回消息
                 //如果是群聊消息，那么这个群里的所有人都会收到聊天消息，发送人和接收人是同一个人不做处理 
-                if (message.sendUserId === store.getUserId() && message.contactType == 1) {
+                if (message.sendUserId === store.getUserId() && message.contactType == 1 && messageType != 14) {
                     break;
                 }
                 //收到ws消息更新会话信息
@@ -112,8 +113,16 @@ const createWs = () => {
                 }
                 console.log("sessionInfo", sessionInfo);
                 await saveOrUpdate4Message(store.getUserData("currentSessionId"), sessionInfo);
-                //写入本地消息
-                await saveMessage(message);
+                //撤回消息更新本地消息，不新增消息
+                if (messageType == 14) {
+                    updateMessage({ 
+                        messageType: 14, 
+                        messageContent: message.messageContent || '该消息已撤回' 
+                    }, { messageId: message.messageId });
+                } else {
+                    //写入本地消息
+                    await saveMessage(message);
+                }
                 //查询本地session 单聊联系人就是发送人，群聊联系人就是群号
                 const dbSessionInfo = await selectUserSessionByContactId(message.contactId);
                 message.extendData = dbSessionInfo;

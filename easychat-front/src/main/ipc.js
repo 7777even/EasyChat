@@ -137,6 +137,13 @@ const onAddLocalMessage = () => {
     });
 }
 
+//更新本地消息（用于撤回消息）
+const onUpdateLocalMessage = () => {
+    ipcMain.on("updateLocalMessage", async (e, data) => {
+        await updateMessage(data, { messageId: data.messageId });
+    });
+}
+
 const onSaveAs = () => {
     ipcMain.on("saveAs", async (e, data) => {
         saveAs(data);
@@ -313,6 +320,7 @@ export {
     onLoadContactApply,
     onUpdateContactNoReadCount,
     onAddLocalMessage,
+    onUpdateLocalMessage,
     onCreateCover,
     onSaveAs,
     onGetSettingInfo,

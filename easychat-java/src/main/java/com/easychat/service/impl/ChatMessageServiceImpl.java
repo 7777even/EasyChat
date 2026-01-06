@@ -333,4 +333,56 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
         return file;
     }
+
+    @Override
+    public MessageSendDto recallMessage(Long messageId, TokenUserInfoDto tokenUserInfoDto) {
+        // 查询消息
+        ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
+        if (message == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
+        // 检查是否是发送者本人
+        if (!message.getSendUserId().equals(tokenUserInfoDto.getUserId())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
+        // 检查消息类型，只有普通聊天消息和媒体消息可以撤回
+        if (!ArraysUtil.contains(new Integer[]{
+                MessageTypeEnum.CHAT.getType(),
+                MessageTypeEnum.MEDIA_CHAT.getType()
+        }, message.getMessageType())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
+        // 检查是否在2分钟内（120000毫秒）
+        long currentTime = System.currentTimeMillis();
+        long timeDiff = currentTime - message.getSendTime();
+        if (timeDiff > 120000) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
+        // 更新消息类型为撤回消息
+        ChatMessage updateMessage = new ChatMessage();
+        updateMessage.setMessageType(MessageTypeEnum.RECALL_MESSAGE.getType());
+        updateMessage.setMessageContent("该消息已撤回");
+        chatMessageMapper.updateByMessageId(updateMessage, messageId);
+
+        // 构建撤回通知消息
+        MessageSendDto recallNotify = new MessageSendDto();
+        recallNotify.setMessageId(messageId);
+        recallNotify.setMessageType(MessageTypeEnum.RECALL_MESSAGE.getType());
+        recallNotify.setSessionId(message.getSessionId());
+        recallNotify.setContactId(message.getContactId());
+        recallNotify.setContactType(message.getContactType());
+        recallNotify.setSendUserId(tokenUserInfoDto.getUserId());
+        recallNotify.setSendUserNickName(tokenUserInfoDto.getNickName());
+        recallNotify.setSendTime(currentTime);
+        recallNotify.setMessageContent("该消息已撤回");
+
+        // 发送WebSocket通知
+        messageHandler.sendMessage(recallNotify);
+
+        return recallNotify;
+    }
 }
