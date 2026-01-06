@@ -1,0 +1,19 @@
+# Node.js dependencies
+node_modules/
+
+# npm / yarn / pnpm lock（可选）
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.local
+
+# build
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
