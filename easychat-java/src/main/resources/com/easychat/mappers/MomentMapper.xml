@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MomentMapper">
+
+    <resultMap id="base_result_map" type="com.easychat.entity.po.Moment">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="content" property="content"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="location" property="location"/>
+        <result column="visibility" property="visibility"/>
+        <result column="visible_list" property="visibleList"/>
+        <result column="invisible_list" property="invisibleList"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id,user_id,content,media_type,location,visibility,visible_list,invisible_list,status,create_time,update_time
+    </sql>
+
+    <sql id="base_condition_field">
+        <if test="query.id != null">
+            and id = #{query.id}
+        </if>
+        <if test="query.userId != null and query.userId!=''">
+            and user_id = #{query.userId}
+        </if>
+        <if test="query.visibility != null">
+            and visibility = #{query.visibility}
+        </if>
+        <if test="query.status != null">
+            and status = #{query.status}
+        </if>
+        <if test="query.startCreateTime != null">
+            and create_time &gt;= #{query.startCreateTime}
+        </if>
+        <if test="query.endCreateTime != null">
+            and create_time &lt;= #{query.endCreateTime}
+        </if>
+    </sql>
+
+    <sql id="base_condition">
+        <where>
+            <include refid="base_condition_field"/>
+        </where>
+    </sql>
+
+    <select id="selectList" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment
+        <include refid="base_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        select count(1) from moment
+        <include refid="base_condition"/>
+    </select>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.Moment" useGeneratedKeys="true" keyProperty="bean.id">
+        insert into moment
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.userId!=null">user_id,</if>
+            <if test="bean.content!=null">content,</if>
+            <if test="bean.mediaType!=null">media_type,</if>
+            <if test="bean.location!=null">location,</if>
+            <if test="bean.visibility!=null">visibility,</if>
+            <if test="bean.visibleList!=null">visible_list,</if>
+            <if test="bean.invisibleList!=null">invisible_list,</if>
+            <if test="bean.status!=null">status,</if>
+            <if test="bean.createTime!=null">create_time,</if>
+            <if test="bean.updateTime!=null">update_time,</if>
+        </trim>
+        <trim prefix="values(" suffix=")" suffixOverrides=",">
+            <if test="bean.userId!=null">#{bean.userId},</if>
+            <if test="bean.content!=null">#{bean.content},</if>
+            <if test="bean.mediaType!=null">#{bean.mediaType},</if>
+            <if test="bean.location!=null">#{bean.location},</if>
+            <if test="bean.visibility!=null">#{bean.visibility},</if>
+            <if test="bean.visibleList!=null">#{bean.visibleList},</if>
+            <if test="bean.invisibleList!=null">#{bean.invisibleList},</if>
+            <if test="bean.status!=null">#{bean.status},</if>
+            <if test="bean.createTime!=null">#{bean.createTime},</if>
+            <if test="bean.updateTime!=null">#{bean.updateTime},</if>
+        </trim>
+    </insert>
+
+    <insert id="insertBatch" parameterType="com.easychat.entity.po.Moment" useGeneratedKeys="true" keyProperty="id">
+        insert into moment(
+        user_id,content,media_type,location,visibility,visible_list,invisible_list,status,create_time,update_time
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.userId},
+            #{item.content},
+            #{item.mediaType},
+            #{item.location},
+            #{item.visibility},
+            #{item.visibleList},
+            #{item.invisibleList},
+            #{item.status},
+            #{item.createTime},
+            #{item.updateTime}
+            )
+        </foreach>
+    </insert>
+
+    <insert id="insertOrUpdateBatch" parameterType="com.easychat.entity.po.Moment">
+        insert into moment(
+        id,user_id,content,media_type,location,visibility,visible_list,invisible_list,status,create_time,update_time
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.id},
+            #{item.userId},
+            #{item.content},
+            #{item.mediaType},
+            #{item.location},
+            #{item.visibility},
+            #{item.visibleList},
+            #{item.invisibleList},
+            #{item.status},
+            #{item.createTime},
+            #{item.updateTime}
+            )
+        </foreach>
+        on duplicate key update
+        user_id = values(user_id),
+        content = values(content),
+        media_type = values(media_type),
+        location = values(location),
+        visibility = values(visibility),
+        visible_list = values(visible_list),
+        invisible_list = values(invisible_list),
+        status = values(status),
+        create_time = values(create_time),
+        update_time = values(update_time)
+    </insert>
+
+    <update id="updateByParam" parameterType="com.easychat.entity.query.MomentQuery">
+        update moment
+        <set>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.content!=null">content = #{bean.content},</if>
+            <if test="bean.mediaType!=null">media_type = #{bean.mediaType},</if>
+            <if test="bean.location!=null">location = #{bean.location},</if>
+            <if test="bean.visibility!=null">visibility = #{bean.visibility},</if>
+            <if test="bean.visibleList!=null">visible_list = #{bean.visibleList},</if>
+            <if test="bean.invisibleList!=null">invisible_list = #{bean.invisibleList},</if>
+            <if test="bean.status!=null">status = #{bean.status},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+            <if test="bean.updateTime!=null">update_time = #{bean.updateTime},</if>
+        </set>
+        <include refid="base_condition"/>
+    </update>
+
+    <delete id="deleteByParam">
+        delete from moment
+        <include refid="base_condition"/>
+    </delete>
+
+    <update id="updateById" parameterType="com.easychat.entity.po.Moment">
+        update moment
+        <set>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.content!=null">content = #{bean.content},</if>
+            <if test="bean.mediaType!=null">media_type = #{bean.mediaType},</if>
+            <if test="bean.location!=null">location = #{bean.location},</if>
+            <if test="bean.visibility!=null">visibility = #{bean.visibility},</if>
+            <if test="bean.visibleList!=null">visible_list = #{bean.visibleList},</if>
+            <if test="bean.invisibleList!=null">invisible_list = #{bean.invisibleList},</if>
+            <if test="bean.status!=null">status = #{bean.status},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+            <if test="bean.updateTime!=null">update_time = #{bean.updateTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from moment where id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment where id = #{id}
+    </select>
+</mapper>
+

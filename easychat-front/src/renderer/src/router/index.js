@@ -56,6 +56,10 @@ const router = createRouter({
         name: "聊天",
         component: () => import('@/views/chat/Chat.vue'),
       }, {
+        path: "/moment",
+        name: "朋友圈",
+        component: () => import('@/views/moment/Moment.vue'),
+      }, {
         path: "/contact",
         name: "联系人",
         redirect: "/contact/blank",

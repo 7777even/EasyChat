@@ -16,7 +16,11 @@ public enum MessageTypeEnum {
     LEAVE_GROUP(11, "%s退出了群聊", "退出群聊"),
     REMOVE_GROUP(12, "%s被管理员移出了群聊", "被管理员移出了群聊"),
     ADD_FRIEND_SELF(13, "", "添加好友打招呼消息发送给自己"),
-    RECALL_MESSAGE(14, "", "撤回消息");
+    RECALL_MESSAGE(14, "", "撤回消息"),
+    MOMENT_NEW(15, "", "朋友圈新动态"),
+    MOMENT_LIKE(16, "", "朋友圈点赞"),
+    MOMENT_COMMENT(17, "", "朋友圈评论"),
+    MOMENT_AT(18, "", "朋友圈@提醒");
 
     private Integer type;
     private String initMessage;

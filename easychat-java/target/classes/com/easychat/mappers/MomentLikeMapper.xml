@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MomentLikeMapper">
+
+    <resultMap id="base_result_map" type="com.easychat.entity.po.MomentLike">
+        <id column="id" property="id"/>
+        <result column="moment_id" property="momentId"/>
+        <result column="user_id" property="userId"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id,moment_id,user_id,create_time
+    </sql>
+
+    <sql id="base_condition_field">
+        <if test="query.id!=null">and id = #{query.id}</if>
+        <if test="query.momentId!=null">and moment_id = #{query.momentId}</if>
+        <if test="query.userId!=null and query.userId!=''">and user_id = #{query.userId}</if>
+    </sql>
+
+    <sql id="base_condition">
+        <where>
+            <include refid="base_condition_field"/>
+        </where>
+    </sql>
+
+    <select id="selectList" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_like
+        <include refid="base_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        select count(1) from moment_like
+        <include refid="base_condition"/>
+    </select>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.MomentLike" useGeneratedKeys="true" keyProperty="bean.id">
+        insert into moment_like
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.momentId!=null">moment_id,</if>
+            <if test="bean.userId!=null">user_id,</if>
+            <if test="bean.createTime!=null">create_time,</if>
+        </trim>
+        <trim prefix="values(" suffix=")" suffixOverrides=",">
+            <if test="bean.momentId!=null">#{bean.momentId},</if>
+            <if test="bean.userId!=null">#{bean.userId},</if>
+            <if test="bean.createTime!=null">#{bean.createTime},</if>
+        </trim>
+    </insert>
+
+    <insert id="insertBatch" parameterType="com.easychat.entity.po.MomentLike" useGeneratedKeys="true" keyProperty="id">
+        insert into moment_like(moment_id,user_id,create_time) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.momentId},#{item.userId},#{item.createTime})
+        </foreach>
+    </insert>
+
+    <insert id="insertOrUpdateBatch" parameterType="com.easychat.entity.po.MomentLike">
+        insert into moment_like(id,moment_id,user_id,create_time) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id},#{item.momentId},#{item.userId},#{item.createTime})
+        </foreach>
+        on duplicate key update
+        moment_id = values(moment_id),
+        user_id = values(user_id),
+        create_time = values(create_time)
+    </insert>
+
+    <update id="updateByParam" parameterType="com.easychat.entity.query.MomentLikeQuery">
+        update moment_like
+        <set>
+            <if test="bean.momentId!=null">moment_id = #{bean.momentId},</if>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+        </set>
+        <include refid="base_condition"/>
+    </update>
+
+    <delete id="deleteByParam">
+        delete from moment_like
+        <include refid="base_condition"/>
+    </delete>
+
+    <update id="updateById" parameterType="com.easychat.entity.po.MomentLike">
+        update moment_like
+        <set>
+            <if test="bean.momentId!=null">moment_id = #{bean.momentId},</if>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from moment_like where id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_like where id = #{id}
+    </select>
+</mapper>
+

@@ -168,4 +168,89 @@ CREATE TABLE `user_info_beauty`  (
   UNIQUE INDEX `idx_key_email`(`email`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4  COMMENT = '靓号表';
 
+-- ----------------------------
+-- Table structure for moment
+-- ----------------------------
+DROP TABLE IF EXISTS `moment`;
+CREATE TABLE `moment` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '动态ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '作者ID',
+  `content` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '文本内容',
+  `media_type` tinyint(1) NULL DEFAULT 0 COMMENT '0无 1图片 2视频 3混合',
+  `location` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '地理位置',
+  `visibility` tinyint(1) NULL DEFAULT 0 COMMENT '0公开 1好友 2私密 3白名单 4黑名单过滤',
+  `visible_list` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '白名单/分组 列表 JSON',
+  `invisible_list` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '黑名单过滤列表 JSON',
+  `status` tinyint(1) NULL DEFAULT 1 COMMENT '1正常 0删除',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
+  `update_time` bigint(20) NULL DEFAULT NULL COMMENT '更新时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_user_create`(`user_id`, `create_time`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈动态';
+
+-- ----------------------------
+-- Table structure for moment_media
+-- ----------------------------
+DROP TABLE IF EXISTS `moment_media`;
+CREATE TABLE `moment_media` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `moment_id` bigint(20) NOT NULL COMMENT '动态ID',
+  `file_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '文件路径或ID',
+  `media_type` tinyint(1) NULL DEFAULT 0 COMMENT '0图 1视频',
+  `cover_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '封面',
+  `width` int(11) NULL DEFAULT NULL COMMENT '宽',
+  `height` int(11) NULL DEFAULT NULL COMMENT '高',
+  `duration` int(11) NULL DEFAULT NULL COMMENT '时长秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_moment_id`(`moment_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈媒体';
+
+-- ----------------------------
+-- Table structure for moment_like
+-- ----------------------------
+DROP TABLE IF EXISTS `moment_like`;
+CREATE TABLE `moment_like` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `moment_id` bigint(20) NOT NULL COMMENT '动态ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户ID',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_moment_user`(`moment_id`, `user_id`) USING BTREE,
+  INDEX `idx_user`(`user_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈点赞';
+
+-- ----------------------------
+-- Table structure for moment_comment
+-- ----------------------------
+DROP TABLE IF EXISTS `moment_comment`;
+CREATE TABLE `moment_comment` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `moment_id` bigint(20) NOT NULL COMMENT '动态ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '评论人',
+  `parent_id` bigint(20) NULL DEFAULT 0 COMMENT '父评论ID',
+  `reply_to_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '被回复人',
+  `content` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '评论内容',
+  `status` tinyint(1) NULL DEFAULT 1 COMMENT '1正常 0删除',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_moment_id`(`moment_id`) USING BTREE,
+  INDEX `idx_parent`(`parent_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈评论';
+
+-- ----------------------------
+-- Table structure for moment_notify
+-- ----------------------------
+DROP TABLE IF EXISTS `moment_notify`;
+CREATE TABLE `moment_notify` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '收件人',
+  `type` tinyint(1) NOT NULL COMMENT '0新动态 1点赞 2评论 3回复 4@',
+  `ref_id` bigint(20) NULL DEFAULT NULL COMMENT '关联ID 动态或评论',
+  `from_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '触发人',
+  `read_status` tinyint(1) NULL DEFAULT 0 COMMENT '0未读 1已读',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_user`(`user_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈通知';
+
 SET FOREIGN_KEY_CHECKS = 1;

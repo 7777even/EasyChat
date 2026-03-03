@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MomentMediaMapper">
+
+    <resultMap id="base_result_map" type="com.easychat.entity.po.MomentMedia">
+        <id column="id" property="id"/>
+        <result column="moment_id" property="momentId"/>
+        <result column="file_path" property="filePath"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="cover_path" property="coverPath"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
+        <result column="duration" property="duration"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id,moment_id,file_path,media_type,cover_path,width,height,duration
+    </sql>
+
+    <sql id="base_condition_field">
+        <if test="query.id != null">and id = #{query.id}</if>
+        <if test="query.momentId != null">and moment_id = #{query.momentId}</if>
+        <if test="query.mediaType != null">and media_type = #{query.mediaType}</if>
+    </sql>
+
+    <sql id="base_condition">
+        <where>
+            <include refid="base_condition_field"/>
+        </where>
+    </sql>
+
+    <select id="selectList" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_media
+        <include refid="base_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        select count(1) from moment_media
+        <include refid="base_condition"/>
+    </select>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.MomentMedia" useGeneratedKeys="true" keyProperty="bean.id">
+        insert into moment_media
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.momentId!=null">moment_id,</if>
+            <if test="bean.filePath!=null">file_path,</if>
+            <if test="bean.mediaType!=null">media_type,</if>
+            <if test="bean.coverPath!=null">cover_path,</if>
+            <if test="bean.width!=null">width,</if>
+            <if test="bean.height!=null">height,</if>
+            <if test="bean.duration!=null">duration,</if>
+        </trim>
+        <trim prefix="values(" suffix=")" suffixOverrides=",">
+            <if test="bean.momentId!=null">#{bean.momentId},</if>
+            <if test="bean.filePath!=null">#{bean.filePath},</if>
+            <if test="bean.mediaType!=null">#{bean.mediaType},</if>
+            <if test="bean.coverPath!=null">#{bean.coverPath},</if>
+            <if test="bean.width!=null">#{bean.width},</if>
+            <if test="bean.height!=null">#{bean.height},</if>
+            <if test="bean.duration!=null">#{bean.duration},</if>
+        </trim>
+    </insert>
+
+    <insert id="insertBatch" parameterType="com.easychat.entity.po.MomentMedia" useGeneratedKeys="true" keyProperty="id">
+        insert into moment_media(
+        moment_id,file_path,media_type,cover_path,width,height,duration
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.momentId},
+            #{item.filePath},
+            #{item.mediaType},
+            #{item.coverPath},
+            #{item.width},
+            #{item.height},
+            #{item.duration}
+            )
+        </foreach>
+    </insert>
+
+    <insert id="insertOrUpdateBatch" parameterType="com.easychat.entity.po.MomentMedia">
+        insert into moment_media(
+        id,moment_id,file_path,media_type,cover_path,width,height,duration
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.id},
+            #{item.momentId},
+            #{item.filePath},
+            #{item.mediaType},
+            #{item.coverPath},
+            #{item.width},
+            #{item.height},
+            #{item.duration}
+            )
+        </foreach>
+        on duplicate key update
+        moment_id = values(moment_id),
+        file_path = values(file_path),
+        media_type = values(media_type),
+        cover_path = values(cover_path),
+        width = values(width),
+        height = values(height),
+        duration = values(duration)
+    </insert>
+
+    <update id="updateByParam" parameterType="com.easychat.entity.query.MomentMediaQuery">
+        update moment_media
+        <set>
+            <if test="bean.momentId!=null">moment_id = #{bean.momentId},</if>
+            <if test="bean.filePath!=null">file_path = #{bean.filePath},</if>
+            <if test="bean.mediaType!=null">media_type = #{bean.mediaType},</if>
+            <if test="bean.coverPath!=null">cover_path = #{bean.coverPath},</if>
+            <if test="bean.width!=null">width = #{bean.width},</if>
+            <if test="bean.height!=null">height = #{bean.height},</if>
+            <if test="bean.duration!=null">duration = #{bean.duration},</if>
+        </set>
+        <include refid="base_condition"/>
+    </update>
+
+    <delete id="deleteByParam">
+        delete from moment_media
+        <include refid="base_condition"/>
+    </delete>
+
+    <update id="updateById" parameterType="com.easychat.entity.po.MomentMedia">
+        update moment_media
+        <set>
+            <if test="bean.momentId!=null">moment_id = #{bean.momentId},</if>
+            <if test="bean.filePath!=null">file_path = #{bean.filePath},</if>
+            <if test="bean.mediaType!=null">media_type = #{bean.mediaType},</if>
+            <if test="bean.coverPath!=null">cover_path = #{bean.coverPath},</if>
+            <if test="bean.width!=null">width = #{bean.width},</if>
+            <if test="bean.height!=null">height = #{bean.height},</if>
+            <if test="bean.duration!=null">duration = #{bean.duration},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from moment_media where id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_media where id = #{id}
+    </select>
+</mapper>
+

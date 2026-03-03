@@ -45,6 +45,11 @@ const api = {
     saveBeautAccount: "/admin/saveBeautAccount",//保存靓号
     delBeautAccount: "/admin/delBeautAccount",//删除靓号
     checkVersion: "/update/checkVersion",//更新检测
+    //朋友圈
+    publishMoment: "/moment/publish",
+    loadMomentList: "/moment/list",
+    likeMoment: "/moment/like",
+    commentMoment: "/moment/comment",
 }
 
 export default api;
