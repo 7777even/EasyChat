@@ -72,19 +72,34 @@ instance.interceptors.response.use(
 const request = (config) => {
     const { url, params, dataType, showLoading = true, responseType = responseTypeJson, showError = true } = config;
     let contentType = contentTypeForm;
-    let formData = new FormData();// 创建form对象
-    for (let key in params) {
-        formData.append(key, params[key] == undefined ? "" : params[key]);
+    let formData;
+    
+    // 如果 params 已经是 FormData，直接使用
+    if (params instanceof FormData) {
+        formData = params;
+        contentType = 'multipart/form-data'; // 让浏览器自动设置正确的 Content-Type（包含 boundary）
+    } else {
+        // 否则创建新的 FormData
+        formData = new FormData();
+        for (let key in params) {
+            formData.append(key, params[key] == undefined ? "" : params[key]);
+        }
+        if (dataType != null && dataType == 'json') {
+            contentType = contentTypeJson;
+        }
     }
-    if (dataType != null && dataType == 'json') {
-        contentType = contentTypeJson;
-    }
+    
     const token = localStorage.getItem('token')
     let headers = {
-        'Content-Type': contentType,
         'X-Requested-With': 'XMLHttpRequest',
         "token": token
     }
+    
+    // 如果是 multipart/form-data，不设置 Content-Type，让浏览器自动设置
+    if (contentType !== 'multipart/form-data') {
+        headers['Content-Type'] = contentType;
+    }
+    
     return instance.post(url, formData, {
         headers: headers,
         showLoading: showLoading,

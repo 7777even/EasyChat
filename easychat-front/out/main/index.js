@@ -566,6 +566,16 @@ const getLocalFilePath = async (partType, showCover, fileId) => {
       let fileSuffix = messageInfo.fileName;
       fileSuffix = fileSuffix.substring(fileSuffix.lastIndexOf("."));
       localPath = localFolder + "/" + fileId + fileSuffix;
+    } else if (partType == "moment") {
+      localFolder = localFolder + "/moment/";
+      if (!fs.existsSync(localFolder)) {
+        mkdirs(localFolder);
+      }
+      if (fileId.includes(".")) {
+        localPath = localFolder + fileId;
+      } else {
+        localPath = localFolder + fileId + image_suffix;
+      }
     } else if (partType == "tmp") {
       localFolder = localFolder + "/tmp/";
       if (!fs.existsSync(localFolder)) {
@@ -587,7 +597,7 @@ expressServer.get("/file", async (req, res) => {
     res.send("请求参数错误");
     return;
   }
-  showCover = showCover == void 0 ? false : Boolean(showCover);
+  showCover = showCover === "true" || showCover === true;
   const localPath = await getLocalFilePath(partType, showCover, fileId);
   if (!fs.existsSync(localPath) || forceGet == "true") {
     if (forceGet == "true" && partType == "avatar") {
@@ -637,14 +647,15 @@ expressServer.get("/file", async (req, res) => {
   }
 });
 const downloadFile = (fileId, showCover, savePath, partType) => {
-  showCover = showCover + "";
+  showCover = Boolean(showCover);
   let url = `${getDomain()}/api/chat/downloadFile`;
   const token = store$1.getUserData("token");
   return new Promise(async (resolve, reject) => {
     const config = { responseType: "stream", headers: { "Content-Type": "multipart/form-data", "token": token } };
     let response = await axios.post(url, {
       fileId,
-      showCover
+      showCover,
+      partType
     }, config);
     const folder = savePath.substring(0, savePath.lastIndexOf("/"));
     mkdirs(folder);

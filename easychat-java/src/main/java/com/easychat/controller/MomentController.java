@@ -8,7 +8,9 @@ import com.easychat.entity.vo.MomentVO;
 import com.easychat.entity.vo.ResponseVO;
 import com.easychat.service.MomentService;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -68,6 +70,19 @@ public class MomentController extends ABaseController {
         MomentCommentVO vo = momentService.addComment(momentId, content, parentId, replyToUserId, userInfoDto);
         return getSuccessResponseVO(vo);
     }
+
+
+    @RequestMapping("/uploadMedia")
+    @GlobalInterceptor
+    public ResponseVO uploadMedia(HttpServletRequest request,
+                                  @RequestParam("momentId") @NotNull Long momentId,
+                                  @RequestParam("file") @NotNull MultipartFile file,
+                                  @RequestParam(value = "mediaType", required = false) Integer mediaType) {
+        TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
+        String filePath = momentService.uploadMedia(momentId, file, mediaType, userInfoDto);
+        return getSuccessResponseVO(filePath);
+    }
+
 }
 
 

@@ -88,13 +88,31 @@ public class ChatController extends ABaseController {
     @GlobalInterceptor
     public void downloadFile(HttpServletRequest request, HttpServletResponse response,
                              @NotEmpty String fileId,
-                             @NotNull Boolean showCover) throws Exception {
+                             @NotNull Boolean showCover,
+                             String partType) throws Exception {
+        logger.info("下载文件请求: fileId={}, showCover={}, partType={}", fileId, showCover, partType);
+        
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
         OutputStream out = null;
         FileInputStream in = null;
         try {
             File file = null;
-            if (!StringTools.isNumber(fileId)) {
+            // 处理朋友圈文件
+            if ("moment".equals(partType)) {
+                String momentFolderName = Constants.FILE_FOLDER_FILE + "moment/";
+                String momentPath = appConfig.getProjectFolder() + momentFolderName + fileId;
+                if (showCover) {
+                    momentPath = momentPath + Constants.COVER_IMAGE_SUFFIX;
+                }
+                logger.info("朋友圈文件路径: {}", momentPath);
+                file = new File(momentPath);
+                if (!file.exists()) {
+                    logger.error("朋友圈文件不存在: {}", momentPath);
+                    throw new BusinessException(ResponseCodeEnum.CODE_602);
+                }
+                logger.info("朋友圈文件存在，大小: {} bytes", file.length());
+            } else if (!StringTools.isNumber(fileId)) {
+                // 处理头像文件
                 String avatarFolderName = Constants.FILE_FOLDER_FILE + Constants.FILE_FOLDER_AVATAR_NAME;
                 String avatarPath = appConfig.getProjectFolder() + avatarFolderName + fileId + Constants.IMAGE_SUFFIX;
                 if (showCover) {
@@ -105,6 +123,7 @@ public class ChatController extends ABaseController {
                     throw new BusinessException(ResponseCodeEnum.CODE_602);
                 }
             } else {
+                // 处理聊天消息文件
                 file = chatMessageService.downloadFile(userInfoDto, Long.parseLong(fileId), showCover);
             }
             response.setContentType("application/x-msdownload; charset=UTF-8");

@@ -1,5 +1,7 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.config.AppConfig;
+import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.PageSize;
 import com.easychat.entity.enums.ResponseCodeEnum;
@@ -28,9 +30,13 @@ import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.MomentService;
 import com.easychat.utils.StringTools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,6 +47,8 @@ import java.util.stream.Collectors;
 
 @Service("momentService")
 public class MomentServiceImpl implements MomentService {
+
+    private static final Logger logger = LoggerFactory.getLogger(MomentServiceImpl.class);
 
     @Resource
     private MomentMapper<Moment, MomentQuery> momentMapper;
@@ -54,6 +62,8 @@ public class MomentServiceImpl implements MomentService {
     private UserInfoMapper<UserInfo, UserInfoQuery> userInfoMapper;
     @Resource
     private RedisComponet redisComponet;
+    @Resource
+    private AppConfig appConfig;
 
     @Override
     public MomentVO publish(String content, Integer visibility, String visibleList, String invisibleList, String location, TokenUserInfoDto tokenUserInfoDto) {
@@ -331,6 +341,58 @@ public class MomentServiceImpl implements MomentService {
         userInfo.setUserId(tokenUserInfoDto.getUserId());
         userInfo.setNickName(tokenUserInfoDto.getNickName());
         return userInfo;
+    }
+
+    @Override
+    public String uploadMedia(Long momentId, MultipartFile file, Integer mediaType, TokenUserInfoDto tokenUserInfoDto) {
+        logger.info("开始上传朋友圈媒体文件, momentId: {}, mediaType: {}, fileName: {}", momentId, mediaType, file.getOriginalFilename());
+        
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        
+        Moment moment = momentMapper.selectById(momentId);
+        if (moment == null || !moment.getUserId().equals(tokenUserInfoDto.getUserId())) {
+            logger.error("朋友圈不存在或无权限, momentId: {}, userId: {}", momentId, tokenUserInfoDto.getUserId());
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        
+        try {
+            String momentFolderName = Constants.FILE_FOLDER_FILE + "moment/";
+            File folder = new File(appConfig.getProjectFolder() + momentFolderName);
+            if (!folder.exists()) {
+                folder.mkdirs();
+                logger.info("创建朋友圈文件夹: {}", folder.getAbsolutePath());
+            }
+            
+            String originalFilename = file.getOriginalFilename();
+            String fileExtName = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                fileExtName = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            
+            Long mediaId = System.currentTimeMillis();
+            String fileName = momentId + "_" + mediaId + fileExtName;
+            String filePath = fileName;
+            
+            File uploadFile = new File(folder, fileName);
+            file.transferTo(uploadFile);
+            logger.info("文件保存成功: {}", uploadFile.getAbsolutePath());
+            
+            MomentMedia momentMedia = new MomentMedia();
+            momentMedia.setMomentId(momentId);
+            momentMedia.setFilePath(filePath);
+            momentMedia.setMediaType(mediaType == null ? 0 : mediaType);
+            
+            Integer result = momentMediaMapper.insert(momentMedia);
+            logger.info("数据库插入结果: {}, momentMedia: momentId={}, filePath={}, mediaType={}", 
+                result, momentMedia.getMomentId(), momentMedia.getFilePath(), momentMedia.getMediaType());
+            
+            return filePath;
+        } catch (Exception e) {
+            logger.error("文件上传失败", e);
+            throw new BusinessException("文件上传失败: " + e.getMessage());
+        }
     }
 }
 

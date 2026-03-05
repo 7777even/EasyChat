@@ -78,7 +78,7 @@
             class="media-item"
             @click.stop="previewImages(item.mediaList, index)"
           >
-            <img :src="media.filePath" />
+            <img :src="getImageUrl(media.filePath)" />
             <div v-if="media.mediaType === 1" class="video-icon">
               <i class="iconfont icon-video"></i>
             </div>
@@ -167,14 +167,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, getCurrentInstance, nextTick } from 'vue'
+import { ref, reactive, onMounted, getCurrentInstance, nextTick, computed } from 'vue'
 import Avatar from '@/components/Avatar.vue'
 import PublishMoment from './PublishMoment.vue'
 import MomentDetail from './MomentDetail.vue'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
+import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 
 const { proxy } = getCurrentInstance()
 const userInfoStore = useUserInfoStore()
+const globalInfoStore = useGlobalInfoStore()
 const currentUserId = userInfoStore.getInfo().userId
 
 const publishMomentRef = ref(null)
@@ -205,6 +207,13 @@ const selectedImages = ref([])
 const imageInputRef = ref(null)
 const commentInputRef = ref(null)
 const scrollbarRef = ref(null)
+
+const getImageUrl = (filePath) => {
+  if (!filePath) return ''
+  const serverPort = globalInfoStore.getInfo('localServerPort')
+  // 朋友圈图片不需要封面，设置 showCover=false
+  return `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`
+}
 
 const formatTime = (time) => {
   if (!time) return ''
@@ -300,9 +309,13 @@ const showPublishDialog = () => {
 
 const publishMoment = async () => {
   if (!form.content || !form.content.trim()) {
-    proxy.Message.warning('请先输入内容')
-    return
+    if (selectedImages.value.length === 0) {
+      proxy.Message.warning('请先输入内容或选择图片')
+      return
+    }
   }
+  
+  console.log('Moment.vue - 开始发布朋友圈, 图片数量:', selectedImages.value.length)
   
   publishing.value = true
   const result = await proxy.Request({
@@ -316,16 +329,45 @@ const publishMoment = async () => {
     },
     showLoading: false
   })
+  
+  if (!result) {
+    publishing.value = false
+    return
+  }
+  
+  const momentId = result.data.id
+  console.log('Moment.vue - 朋友圈发布成功, momentId:', momentId)
+  
+  // 上传图片
+  if (selectedImages.value.length > 0) {
+    for (let i = 0; i < selectedImages.value.length; i++) {
+      const img = selectedImages.value[i]
+      console.log(`Moment.vue - 开始上传第 ${i + 1} 个文件:`, img.file.name)
+      
+      const formDataObj = new FormData()
+      formDataObj.append('momentId', momentId)
+      formDataObj.append('file', img.file)
+      formDataObj.append('mediaType', 0) // 0表示图片
+      
+      const uploadResult = await proxy.Request({
+        url: proxy.Api.uploadMomentMedia,
+        params: formDataObj,
+        showLoading: false
+      })
+      
+      console.log(`Moment.vue - 第 ${i + 1} 个文件上传结果:`, uploadResult)
+      
+      if (!uploadResult || uploadResult.code !== 200) {
+        proxy.Message.error(`图片上传失败: ${uploadResult?.info || '未知错误'}`)
+      }
+    }
+  }
+  
   publishing.value = false
   
-  if (!result) return
-  
-  const moment = result.data
-  moment.showCommentBox = false
-  moment.commentDraft = ''
-  moment.commentSubmitting = false
-  moment.replyTo = null
-  momentList.value.unshift(moment)
+  // 重新加载朋友圈列表以显示新发布的内容（包含图片）
+  pageNo.value = 1
+  await loadMomentList(false)
   
   form.content = ''
   form.location = ''

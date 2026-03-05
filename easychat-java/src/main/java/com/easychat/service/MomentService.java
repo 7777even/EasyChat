@@ -4,6 +4,7 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.vo.MomentCommentVO;
 import com.easychat.entity.vo.MomentLikeResultVO;
 import com.easychat.entity.vo.MomentVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -37,6 +38,11 @@ public interface MomentService {
      * 新增评论
      */
     MomentCommentVO addComment(Long momentId, String content, Long parentId, String replyToUserId, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 上传朋友圈媒体文件
+     */
+    String uploadMedia(Long momentId, MultipartFile file, Integer mediaType, TokenUserInfoDto tokenUserInfoDto);
 }
 
 

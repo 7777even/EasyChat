@@ -27,8 +27,8 @@
           class="media-item"
           @click="previewMedia(index)"
         >
-          <img v-if="media.mediaType === 0" :src="media.filePath" />
-          <video v-else :src="media.filePath" />
+          <img v-if="media.mediaType === 0" :src="getImageUrl(media.filePath)" />
+          <video v-else :src="getImageUrl(media.filePath)" />
           <div v-if="media.mediaType === 1" class="video-icon">
             <i class="iconfont icon-video"></i>
           </div>
@@ -118,11 +118,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, getCurrentInstance } from 'vue'
+import { ref, reactive, getCurrentInstance, computed } from 'vue'
 import Dialog from '@/components/Dialog.vue'
 import Avatar from '@/components/Avatar.vue'
+import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 
 const { proxy } = getCurrentInstance()
+const globalInfoStore = useGlobalInfoStore()
 
 const emit = defineEmits(['refresh'])
 
@@ -135,6 +137,13 @@ const moment = ref(null)
 const commentDraft = ref('')
 const replyTo = ref(null)
 const submitting = ref(false)
+
+const getImageUrl = (filePath) => {
+  if (!filePath) return ''
+  const serverPort = globalInfoStore.getInfo('localServerPort')
+  // 朋友圈图片不需要封面，设置 showCover=false
+  return `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`
+}
 
 const formatTime = (time) => {
   if (!time) return ''

@@ -20,7 +20,7 @@
       <!-- 图片/视频预览 -->
       <div v-if="mediaList.length > 0" class="media-preview">
         <div v-for="(media, index) in mediaList" :key="index" class="media-item">
-          <img v-if="media.type === 'image'" :src="media.preview" />
+          <img v-if="media.type === 'image'" :src="media.preview" alt="preview" />
           <video v-else :src="media.preview" />
           <div class="media-mask">
             <i class="iconfont icon-close" @click="removeMedia(index)"></i>
@@ -177,25 +177,47 @@ const publishMoment = async () => {
     return
   }
 
-  // TODO: 上传媒体文件
-  const uploadedMedia = []
-  for (const media of mediaList.value) {
-    // 这里应该调用文件上传接口
-    // const result = await uploadFile(media.file)
-    // uploadedMedia.push(result)
-  }
+  console.log('开始发布朋友圈, 媒体数量:', mediaList.value.length)
 
+  // 先发布朋友圈获取momentId
   const result = await proxy.Request({
     url: proxy.Api.publishMoment,
     params: {
       content: formData.content,
       visibility: formData.visibility,
       location: formData.location
-      // mediaList: uploadedMedia
     }
   })
 
   if (!result) return
+
+  const momentId = result.data.id
+  console.log('朋友圈发布成功, momentId:', momentId)
+
+  // 上传媒体文件
+  if (mediaList.value.length > 0) {
+    for (let i = 0; i < mediaList.value.length; i++) {
+      const media = mediaList.value[i]
+      console.log(`开始上传第 ${i + 1} 个文件:`, media.file.name)
+      
+      const formDataObj = new FormData()
+      formDataObj.append('momentId', momentId)
+      formDataObj.append('file', media.file)
+      formDataObj.append('mediaType', media.type === 'image' ? 0 : 1)
+
+      const uploadResult = await proxy.Request({
+        url: proxy.Api.uploadMomentMedia,
+        params: formDataObj,
+        showLoading: false
+      })
+      
+      console.log(`第 ${i + 1} 个文件上传结果:`, uploadResult)
+      
+      if (!uploadResult || uploadResult.code !== 200) {
+        proxy.Message.error(`文件上传失败: ${uploadResult?.info || '未知错误'}`)
+      }
+    }
+  }
 
   proxy.Message.success('发表成功')
   closeDialog()
