@@ -394,6 +394,26 @@ public class MomentServiceImpl implements MomentService {
             throw new BusinessException("文件上传失败: " + e.getMessage());
         }
     }
+
+    @Override
+    public void deleteMoment(Long momentId, TokenUserInfoDto tokenUserInfoDto) {
+        Moment moment = momentMapper.selectById(momentId);
+        if (moment == null || moment.getStatus() == 0) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        
+        // 只有作者本人可以删除
+        if (!moment.getUserId().equals(tokenUserInfoDto.getUserId())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        
+        // 软删除：更新状态为0
+        moment.setStatus(0);
+        moment.setUpdateTime(System.currentTimeMillis());
+        momentMapper.updateById(moment, momentId);
+        
+        logger.info("删除朋友圈成功, momentId: {}, userId: {}", momentId, tokenUserInfoDto.getUserId());
+    }
 }
 
 

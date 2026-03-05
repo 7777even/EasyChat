@@ -463,13 +463,26 @@ const submitComment = async (moment) => {
 
 const handleMomentAction = async (command, moment) => {
   if (command === 'delete') {
-    await proxy.Confirm('确定要删除这条朋友圈吗？')
-    // TODO: 调用删除接口
-    const index = momentList.value.findIndex((item) => item.id === moment.id)
-    if (index > -1) {
-      momentList.value.splice(index, 1)
-      proxy.Message.success('删除成功')
-    }
+    proxy.Confirm({
+      message: '确定要删除这条朋友圈吗？',
+      okfun: async () => {
+        const result = await proxy.Request({
+          url: proxy.Api.deleteMoment,
+          params: {
+            momentId: moment.id
+          },
+          showLoading: false
+        })
+        
+        if (!result) return
+        
+        const index = momentList.value.findIndex((item) => item.id === moment.id)
+        if (index > -1) {
+          momentList.value.splice(index, 1)
+        }
+        proxy.Message.success('删除成功')
+      }
+    })
   }
 }
 

@@ -43,6 +43,11 @@ public interface MomentService {
      * 上传朋友圈媒体文件
      */
     String uploadMedia(Long momentId, MultipartFile file, Integer mediaType, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 删除朋友圈
+     */
+    void deleteMoment(Long momentId, TokenUserInfoDto tokenUserInfoDto);
 }
 
 

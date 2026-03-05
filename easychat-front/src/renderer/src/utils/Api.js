@@ -51,6 +51,7 @@ const api = {
     likeMoment: "/moment/like",
     commentMoment: "/moment/comment",
     uploadMomentMedia: "/moment/uploadMedia",
+    deleteMoment: "/moment/delete",
 }
 
 export default api;

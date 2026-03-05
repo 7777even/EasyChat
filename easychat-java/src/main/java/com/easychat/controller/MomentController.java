@@ -83,6 +83,16 @@ public class MomentController extends ABaseController {
         return getSuccessResponseVO(filePath);
     }
 
+    @RequestMapping("/delete")
+    @GlobalInterceptor
+    public ResponseVO delete(HttpServletRequest request,
+                             @NotNull Long momentId) {
+        TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
+        momentService.deleteMoment(momentId, userInfoDto);
+        return getSuccessResponseVO(null);
+    }
+
+
 }
 
 
