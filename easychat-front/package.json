@@ -24,9 +24,8 @@
     "productName": "EasyChat",
     "appId": "com.easychat",
     "directories": {
-      "output": "installPackages"
+      "output": "dist"
     },
-    "afterSign": "./asarmor.js",
     "nsis": {
       "oneClick": false,
       "allowElevation": true,
@@ -46,7 +45,9 @@
       "icon": "resources/icon.ico",
       "target": [
         "nsis"
-      ]
+      ],
+      "sign": null,
+      "verifyUpdateCodeSignature": false
     }
   },
   "dependencies": {

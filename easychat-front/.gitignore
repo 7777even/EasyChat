@@ -13,6 +13,8 @@ pnpm-debug.log*
 # build
 dist/
 build/
+out/
+installPackages/
 
 # OS
 .DS_Store
