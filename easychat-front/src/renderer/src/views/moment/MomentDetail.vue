@@ -42,7 +42,7 @@
       </div>
 
       <!-- 点赞和评论统计 -->
-      <div class="stats">
+      <!-- <div class="stats">
         <span class="stat-item">
           <i class="iconfont icon-like"></i>
           {{ moment.likeList?.length || 0 }}
@@ -51,14 +51,14 @@
           <i class="iconfont icon-comment"></i>
           {{ moment.commentList?.length || 0 }}
         </span>
-      </div>
+      </div> -->
 
       <el-divider />
 
       <!-- 点赞列表 -->
       <div v-if="moment.likeList && moment.likeList.length" class="like-section">
         <div class="section-title">
-          <i class="iconfont icon-like-fill"></i>
+          <span class="like-icon">👍</span>
           点赞
         </div>
         <div class="like-list">
@@ -114,11 +114,19 @@
         </div>
       </div>
     </div>
+
+    <!-- 图片预览 -->
+    <el-image-viewer
+      v-if="showImageViewer"
+      :url-list="previewImageList"
+      :initial-index="previewStartIndex"
+      @close="closeImageViewer"
+    />
   </Dialog>
 </template>
 
 <script setup>
-import { ref, reactive, getCurrentInstance, computed } from 'vue'
+import { ref, getCurrentInstance } from 'vue'
 import Dialog from '@/components/Dialog.vue'
 import Avatar from '@/components/Avatar.vue'
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
@@ -212,9 +220,31 @@ const submitComment = async () => {
   emit('refresh')
 }
 
+const showImageViewer = ref(false)
+const previewImageList = ref([])
+const previewStartIndex = ref(0)
+
 const previewMedia = (index) => {
-  // TODO: 实现媒体预览
-  console.log('预览媒体', index)
+  // 只预览图片类型的媒体
+  const imageMediaList = moment.value.mediaList.filter((m) => m.mediaType === 0)
+  if (imageMediaList.length === 0) {
+    proxy.Message.warning('暂不支持视频预览')
+    return
+  }
+  
+  previewImageList.value = imageMediaList.map((m) => getImageUrl(m.filePath))
+  // 找到当前点击的图片在图片列表中的索引
+  const clickedMedia = moment.value.mediaList[index]
+  if (clickedMedia.mediaType === 0) {
+    previewStartIndex.value = imageMediaList.findIndex((m) => m.id === clickedMedia.id)
+    showImageViewer.value = true
+  } else {
+    proxy.Message.warning('暂不支持视频预览')
+  }
+}
+
+const closeImageViewer = () => {
+  showImageViewer.value = false
 }
 
 defineExpose({
@@ -349,8 +379,8 @@ defineExpose({
       font-size: 16px;
     }
 
-    .icon-like-fill {
-      color: #ff6b6b;
+    .like-icon {
+      font-size: 16px;
     }
   }
 }

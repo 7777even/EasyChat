@@ -103,7 +103,7 @@
         <div v-if="(item.likeList && item.likeList.length) || (item.commentList && item.commentList.length)" class="interaction-panel">
           <!-- 点赞列表 -->
           <div v-if="item.likeList && item.likeList.length" class="moment-likes">
-            <i class="iconfont icon-like-fill"></i>
+            <span class="like-icon">👍</span>
             <span class="like-user" v-for="(like, idx) in item.likeList" :key="like.userId">
               {{ like.nickName || like.userId }}{{ idx < item.likeList.length - 1 ? '，' : '' }}
             </span>
@@ -163,11 +163,19 @@
 
     <!-- 朋友圈详情对话框 -->
     <MomentDetail ref="momentDetailRef" @refresh="loadMomentList" />
+
+    <!-- 图片预览 -->
+    <el-image-viewer
+      v-if="showImageViewer"
+      :url-list="previewImageList"
+      :initial-index="previewStartIndex"
+      @close="closeImageViewer"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, getCurrentInstance, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, getCurrentInstance, nextTick } from 'vue'
 import Avatar from '@/components/Avatar.vue'
 import PublishMoment from './PublishMoment.vue'
 import MomentDetail from './MomentDetail.vue'
@@ -274,6 +282,10 @@ const loadMomentList = async (append = false) => {
   }
 }
 
+const showPublishDialog = () => {
+  publishMomentRef.value.show()
+}
+
 const selectImages = () => {
   imageInputRef.value.click()
 }
@@ -301,10 +313,6 @@ const handleImageSelect = (e) => {
 
 const removeImage = (index) => {
   selectedImages.value.splice(index, 1)
-}
-
-const showPublishDialog = () => {
-  publishMomentRef.value.show()
 }
 
 const publishMoment = async () => {
@@ -486,10 +494,20 @@ const handleMomentAction = async (command, moment) => {
   }
 }
 
+const showImageViewer = ref(false)
+const previewImageList = ref([])
+const previewStartIndex = ref(0)
+
 const previewImages = (mediaList, startIndex) => {
-  const urls = mediaList.map((m) => m.filePath)
-  // TODO: 使用 Element Plus 的图片预览组件
-  console.log('预览图片', urls, startIndex)
+  previewImageList.value = mediaList
+    .filter((m) => m.mediaType === 0) // 只预览图片
+    .map((m) => getImageUrl(m.filePath))
+  previewStartIndex.value = startIndex
+  showImageViewer.value = true
+}
+
+const closeImageViewer = () => {
+  showImageViewer.value = false
 }
 
 const handleScroll = () => {
@@ -804,8 +822,7 @@ onMounted(() => {
   align-items: flex-start;
   line-height: 1.6;
   
-  .icon-like-fill {
-    color: #ff6b6b;
+  .like-icon {
     font-size: 14px;
     margin-right: 6px;
     flex-shrink: 0;
@@ -815,6 +832,7 @@ onMounted(() => {
   .like-user {
     color: #576b95;
     cursor: pointer;
+    line-height: 2.2;
     
     &:hover {
       text-decoration: underline;
