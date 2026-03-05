@@ -20,7 +20,8 @@ public enum MessageTypeEnum {
     MOMENT_NEW(15, "", "朋友圈新动态"),
     MOMENT_LIKE(16, "", "朋友圈点赞"),
     MOMENT_COMMENT(17, "", "朋友圈评论"),
-    MOMENT_AT(18, "", "朋友圈@提醒");
+    MOMENT_AT(18, "", "朋友圈@提醒"),
+    WEBRTC_SIGNAL(19, "", "WebRTC信令");
 
     private Integer type;
     private String initMessage;

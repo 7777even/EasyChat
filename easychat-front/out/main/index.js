@@ -937,6 +937,9 @@ const createWs = () => {
         }
         sender.send("reciveMessage", message);
         break;
+      case 19:
+        sender.send("reciveMessage", message);
+        break;
     }
   };
   ws.onclose = function(evt) {

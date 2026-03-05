@@ -86,6 +86,7 @@
           ref="messageSendRef"
           :currentChatSession="currentChatSession"
           @sendMessage4Local="sendMessage4LocalHandler"
+          @startCall="handleStartCall"
         >
         </MessageSend>
       </div>
@@ -98,6 +99,8 @@
     ref="chatGroupDetailRef"
     @delChatSessionCallback="delChatSession"
   ></ChatGroupDetail>
+  <!-- WebRTC 通话集成 -->
+  <CallIntegration ref="callIntegrationRef" />
 </template>
 <script>
 export default {
@@ -110,6 +113,7 @@ import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 
 import SearchResult from './SearchResult.vue'
 import ChatGroupDetail from './ChatGroupDetail.vue'
+import CallIntegration from './CallIntegration.vue'
 import {getFileType} from '@/utils/Constants.js'
 import Blank from '@/components/Blank.vue'
 import ChatSession from './ChatSession.vue'
@@ -117,6 +121,7 @@ import ChatMessage from './ChatMessage.vue'
 import ChatMessageTime from './ChatMessageTime.vue'
 import ChatMessageSys from './ChatMessageSys.vue'
 import MessageSend from './MessageSend.vue'
+import callManager from '@/utils/CallManager'
 import {ref, reactive, getCurrentInstance, nextTick, onMounted, watch, onUnmounted} from 'vue'
 import {useRoute} from 'vue-router'
 
@@ -438,6 +443,9 @@ const onReloadChatSession = () => {
 
 //监听主进程消息
 onMounted(() => {
+  // 设置当前用户ID
+  callManager.setCurrentUserId(userInfoStore.getInfo().userId)
+
   onReciveMessage()
 
   onLoadChatMessage()
@@ -633,6 +641,35 @@ const recallMessageHandler = async (messageId) => {
     })
   }
 }
+
+// WebRTC 通话功能
+const callIntegrationRef = ref()
+
+// 处理发起通话
+const handleStartCall = (callType) => {
+  if (!currentChatSession.value || !currentChatSession.value.contactId) {
+    proxy.Message.warning('请先选择聊天对象')
+    return
+  }
+
+  const isGroup = currentChatSession.value.contactType == 1
+  const callInfo = {
+    callType: callType, // 0-语音 1-视频
+    isGroup: isGroup,
+    callName: currentChatSession.value.contactName,
+    toId: currentChatSession.value.contactId
+  }
+
+  // 如果是群组，需要获取群成员列表
+  if (isGroup) {
+    // 这里需要从群详情中获取成员列表
+    // 暂时使用空数组，实际使用时需要调用接口获取
+    callInfo.members = []
+  }
+
+  callIntegrationRef.value.startCall(callInfo)
+}
+
 </script>
 
 <style lang="scss" scoped>

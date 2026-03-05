@@ -39,6 +39,11 @@
       >
         <div class="iconfont icon-folder"></div>
       </el-upload>
+      <!-- WebRTC 通话按钮 -->
+      <div class="call-buttons">
+        <div class="iconfont icon-chat2" @click="startAudioCall" title="语音通话"></div>
+        <div class="iconfont icon-video" @click="startVideoCall" title="视频通话"></div>
+      </div>
     </div>
     <div class="input-area" @drop="dropHandler" @dragover="dragOverHandler">
       <el-input
@@ -109,10 +114,20 @@ defineExpose({
 
 const activeEmoji = ref('笑脸')
 
+// WebRTC 通话功能
+const emit = defineEmits(['sendMessage4Local', 'startCall'])
+
+const startAudioCall = () => {
+  emit('startCall', 0) // 0-语音通话
+}
+
+const startVideoCall = () => {
+  emit('startCall', 1) // 1-视频通话
+}
+
 //发送消息
 const msgContent = ref('')
 
-const emit = defineEmits(['sendMessage4Local'])
 const sendMessage = async (e) => {
   //shift +enter 换行  enter 发送
   if (e.shiftKey && e.keyCode === 13) {
@@ -377,6 +392,25 @@ onUnmounted(() => {
       font-size: 20px;
       margin-left: 10px;
       cursor: pointer;
+    }
+
+    .call-buttons {
+      display: flex;
+      align-items: center;
+      margin-left: auto;
+      margin-right: 10px;
+      gap: 10px;
+
+      .iconfont {
+        color: #666;
+        font-size: 20px;
+        cursor: pointer;
+        transition: color 0.3s;
+
+        &:hover {
+          color: #07c160;
+        }
+      }
     }
 
     :deep(.el-tabs__header) {

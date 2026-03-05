@@ -132,6 +132,9 @@ const createWs = () => {
                 }
                 sender.send("reciveMessage", message);
                 break;
+            case 19://WebRTC信令
+                sender.send("reciveMessage", message);
+                break;
         }
     }
 

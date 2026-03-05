@@ -72,20 +72,26 @@ instance.interceptors.response.use(
 const request = (config) => {
     const { url, params, dataType, showLoading = true, responseType = responseTypeJson, showError = true } = config;
     let contentType = contentTypeForm;
-    let formData;
+    let requestData;
     
     // 如果 params 已经是 FormData，直接使用
     if (params instanceof FormData) {
-        formData = params;
+        requestData = params;
         contentType = 'multipart/form-data'; // 让浏览器自动设置正确的 Content-Type（包含 boundary）
-    } else {
-        // 否则创建新的 FormData
-        formData = new FormData();
+    } else if (dataType != null && dataType == 'json') {
+        // JSON 请求：直接发送 JSON 对象，过滤掉 undefined 值
+        contentType = contentTypeJson;
+        requestData = {};
         for (let key in params) {
-            formData.append(key, params[key] == undefined ? "" : params[key]);
+            if (params[key] !== undefined) {
+                requestData[key] = params[key];
+            }
         }
-        if (dataType != null && dataType == 'json') {
-            contentType = contentTypeJson;
+    } else {
+        // 表单请求：创建 FormData
+        requestData = new FormData();
+        for (let key in params) {
+            requestData.append(key, params[key] == undefined ? "" : params[key]);
         }
     }
     
@@ -100,7 +106,7 @@ const request = (config) => {
         headers['Content-Type'] = contentType;
     }
     
-    return instance.post(url, formData, {
+    return instance.post(url, requestData, {
         headers: headers,
         showLoading: showLoading,
         errorCallback: config.errorCallback,
