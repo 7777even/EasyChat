@@ -29,6 +29,9 @@ const api = {
     logout: "/userInfo/logout",
     sendMessage: "/chat/sendMessage",//发送消息
     uploadFile: "/chat/uploadFile",//上传文件地址
+    uploadChunk: "/upload/uploadChunk",//上传文件分片
+    mergeChunks: "/upload/mergeChunks",//合并文件分片
+    checkChunks: "/upload/checkChunks",//检查已上传分片
     recallMessage: "/chat/recallMessage",//撤回消息
     loadAdminAccount: "/admin/loadUser",//后台获取用户列表
     updateUserStatus: "/admin/updateUserStatus",//后台更新用户状态
@@ -51,6 +54,9 @@ const api = {
     likeMoment: "/moment/like",
     commentMoment: "/moment/comment",
     uploadMomentMedia: "/moment/uploadMedia",
+    uploadMomentMediaChunk: "/moment/uploadMediaChunk",
+    mergeMomentMediaChunks: "/moment/mergeMediaChunks",
+    checkMomentMediaChunks: "/moment/checkMediaChunks",
     deleteMoment: "/moment/delete",
 }
 

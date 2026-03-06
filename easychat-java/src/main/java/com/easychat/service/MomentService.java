@@ -45,6 +45,21 @@ public interface MomentService {
     String uploadMedia(Long momentId, MultipartFile file, Integer mediaType, TokenUserInfoDto tokenUserInfoDto);
 
     /**
+     * 上传朋友圈媒体文件分片
+     */
+    void uploadMediaChunk(String fileId, Integer chunkIndex, Integer totalChunks, MultipartFile chunk, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 合并朋友圈媒体文件分片
+     */
+    String mergeMediaChunks(String fileId, Long momentId, String fileName, Integer totalChunks, Integer mediaType, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 检查朋友圈媒体已上传的分片
+     */
+    List<Integer> checkMediaChunks(String fileId, Integer totalChunks, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
      * 删除朋友圈
      */
     void deleteMoment(Long momentId, TokenUserInfoDto tokenUserInfoDto);

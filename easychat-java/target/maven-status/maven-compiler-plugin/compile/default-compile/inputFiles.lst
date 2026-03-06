@@ -40,6 +40,7 @@ C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\c
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\enums\GroupStatusEnum.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\service\UserContactService.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\po\UserContact.java
+C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\service\FileUploadService.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\redis\RedisConfig.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\vo\MomentCommentVO.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\vo\PaginationResultVO.java
@@ -72,6 +73,7 @@ C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\c
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\dto\WsInitData.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\enums\UserContactStatusEnum.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\service\ChatSessionUserService.java
+C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\service\impl\FileUploadServiceImpl.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\mappers\BaseMapper.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\vo\MomentLikeResultVO.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\InitRun.java
@@ -105,6 +107,7 @@ C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\c
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\controller\UpdateController.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\po\UserInfoBeauty.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\exception\BusinessException.java
+C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\controller\FileUploadController.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\query\UserContactQuery.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\entity\dto\MessageSendDto.java
 C:\Users\seven.zhong\project\EasyChat\easychat-all\easychat-java\src\main\java\com\easychat\websocket\netty\HandlerHeartBeat.java

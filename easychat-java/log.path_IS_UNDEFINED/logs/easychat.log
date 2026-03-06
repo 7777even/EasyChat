@@ -1,0 +1,286 @@
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/userInfo/getUserInfo", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/account/getSysSetting", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UserInfoController#getUserInfo(HttpServletRequest)
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.AccountController#getSysSetting()
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@145ca106] was not registered for synchronization because synchronization is not active
+2026-03-06 11:24:10 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@6cf298c1]
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1514622245 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==>  Preparing: select user_id ,email,nick_name,join_type, sex,password,personal_signature,status,create_time, last_login_time,area_name,area_code,last_off_time from user_info where user_id=? 
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==> Parameters: U24837209535(String)
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> <==      Total: 1
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@145ca106]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@4f8845ed]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@d78a282] was not registered for synchronization because synchronization is not active
+2026-03-06 11:24:10 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1153780363 wrapping com.mysql.cj.jdbc.ConnectionImpl@129d182b] will not be managed by Spring
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), (String)
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@d78a282]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@3c7417e7]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/account/getSysSetting", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/userInfo/getUserInfo", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UserInfoController#getUserInfo(HttpServletRequest)
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.AccountController#getSysSetting()
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@741ebb14] was not registered for synchronization because synchronization is not active
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@77687b05]
+2026-03-06 11:24:10 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@2076969132 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==>  Preparing: select user_id ,email,nick_name,join_type, sex,password,personal_signature,status,create_time, last_login_time,area_name,area_code,last_off_time from user_info where user_id=? 
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==> Parameters: U99887808286(String)
+2026-03-06 11:24:10 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@25b1c293] was not registered for synchronization because synchronization is not active
+2026-03-06 11:24:10 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@424633477 wrapping com.mysql.cj.jdbc.ConnectionImpl@129d182b] will not be managed by Spring
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> <==      Total: 1
+2026-03-06 11:24:10 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), (String)
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@741ebb14]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@51a94a5e]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@384853dc]
+2026-03-06 11:24:10 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@25b1c293]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@5ab17334]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:24:10 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:24:10 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@2fa0858a]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:24:10 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:24:10 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@29a1874]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:24:10 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:24:10 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@4975f6b0]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:24:10 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@61a04b9e] was not registered for synchronization because synchronization is not active
+2026-03-06 11:33:55 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@2056291893 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), U99887808286(String)
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@61a04b9e]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@6b048bcf]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@502ad6b5] was not registered for synchronization because synchronization is not active
+2026-03-06 11:33:55 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1560299120 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), U24837209535(String)
+2026-03-06 11:33:55 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:33:55 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@502ad6b5]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@4fe4dda3]
+2026-03-06 11:33:55 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/userInfo/getUserInfo", parameters={multipart}
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/account/getSysSetting", parameters={multipart}
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UserInfoController#getUserInfo(HttpServletRequest)
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.AccountController#getSysSetting()
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@aaefdbb] was not registered for synchronization because synchronization is not active
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@77c9af84]
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:38:06 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@27423bda] was not registered for synchronization because synchronization is not active
+2026-03-06 11:38:06 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1736303443 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@799272694 wrapping com.mysql.cj.jdbc.ConnectionImpl@129d182b] will not be managed by Spring
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==>  Preparing: select user_id ,email,nick_name,join_type, sex,password,personal_signature,status,create_time, last_login_time,area_name,area_code,last_off_time from user_info where user_id=? 
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==> Parameters: U99887808286(String)
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), (String)
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:38:06 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> <==      Total: 1
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@27423bda]
+2026-03-06 11:38:06 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@aaefdbb]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@1f751fe7]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@2ec7701b]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:38:06 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:38:06 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@6c3057cd]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:38:06 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:38:06 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@713f97ab]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:38:06 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/update/checkVersion", parameters={multipart}
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/userInfo/getUserInfo", parameters={multipart}
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UserInfoController#getUserInfo(HttpServletRequest)
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/account/getSysSetting", parameters={multipart}
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.AccountController#getSysSetting()
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7f556c5b] was not registered for synchronization because synchronization is not active
+2026-03-06 11:38:07 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@68016933]
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1755448643 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==>  Preparing: select user_id ,email,nick_name,join_type, sex,password,personal_signature,status,create_time, last_login_time,area_name,area_code,last_off_time from user_info where user_id=? 
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> ==> Parameters: U24837209535(String)
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.UpdateController#loadAllCategory(String, String)
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.UserInfoMapper.selectByUserId][debug][159]-> <==      Total: 1
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7f556c5b]
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3738a75] was not registered for synchronization because synchronization is not active
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:07 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@6eca6d21]
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@685032260 wrapping com.mysql.cj.jdbc.ConnectionImpl@7ff81957] will not be managed by Spring
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==>  Preparing: select id ,version,update_desc,create_time,status, grayscale_uid,file_type,outer_link from app_update where version>? and (status = 2 or (status=1 and find_in_set(?,grayscale_uid))) order by id desc limit 0,1 
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> ==> Parameters: 1.0.0(String), (String)
+2026-03-06 11:38:07 [DEBUG][com.easychat.mappers.AppUpdateMapper.selectLatestUpdate][debug][159]-> <==      Total: 0
+2026-03-06 11:38:07 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3738a75]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@7a15fd51]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:38:07 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:38:07 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@1589ce7f]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][traceDebug][108]-> POST "/api/chat/downloadFile", parameters={multipart}
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping][getHandler][522]-> Mapped to com.easychat.controller.ChatController#downloadFile(HttpServletRequest, HttpServletResponse, String, Boolean, String)
+2026-03-06 11:38:07 [INFO][com.easychat.controller.ChatController][downloadFile][93]-> 下载文件请求: fileId=Urobot, showCover=true, partType=avatar
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][doResolveHandlerMethodException][416]-> Using @ExceptionHandler com.easychat.controller.AGlobalExceptionHandlerController#handleException(Exception, HttpServletRequest)
+2026-03-06 11:38:07 [ERROR][com.easychat.controller.AGlobalExceptionHandlerController][handleException][25]-> 请求错误，请求地址http://127.0.0.1:5050/api/chat/downloadFile,错误信息:
+com.easychat.exception.BusinessException: 文件不存在
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][writeWithMessageConverters][268]-> Using 'application/json', given [application/json, text/plain, */*] and supported [application/json, application/*+json, application/json, application/*+json]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor][traceDebug][108]-> Writing [com.easychat.entity.vo.ResponseVO@49fd3594]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver][resolveException][146]-> Resolved [com.easychat.exception.BusinessException: 文件不存在]
+2026-03-06 11:38:07 [DEBUG][org.springframework.web.servlet.DispatcherServlet][logResult][1131]-> Completed 200 OK
+2026-03-06 11:42:50 [DEBUG][org.springframework.boot.availability.ApplicationAvailabilityBean][onApplicationEvent][77]-> Application availability state ReadinessState changed from ACCEPTING_TRAFFIC to REFUSING_TRAFFIC
+2026-03-06 11:42:50 [DEBUG][org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext][doClose][1049]-> Closing org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext@39de3d36, started on Fri Mar 06 11:13:06 CST 2026
+2026-03-06 11:42:50 [DEBUG][org.springframework.context.support.DefaultLifecycleProcessor][stop][365]-> Stopping beans in phase 2147483647
+2026-03-06 11:42:50 [DEBUG][org.springframework.context.support.DefaultLifecycleProcessor][lambda$doStop$3][238]-> Bean 'webServerGracefulShutdown' completed its stop procedure
+2026-03-06 11:42:50 [DEBUG][org.springframework.context.support.DefaultLifecycleProcessor][stop][365]-> Stopping beans in phase 2147483646
+2026-03-06 11:42:50 [DEBUG][org.springframework.context.support.DefaultLifecycleProcessor][lambda$doStop$3][238]-> Bean 'webServerStartStop' completed its stop procedure
+2026-03-06 11:42:50 [DEBUG][org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler][shutdown][218]-> Shutting down ExecutorService 'taskScheduler'
+2026-03-06 11:42:50 [DEBUG][org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor][shutdown][218]-> Shutting down ExecutorService 'applicationTaskExecutor'
+2026-03-06 11:42:50 [DEBUG][io.netty.handler.logging.LoggingHandler][log][145]-> [id: 0x468be317, L:/0:0:0:0:0:0:0:0:5051] INACTIVE
+2026-03-06 11:42:50 [INFO][com.easychat.websocket.netty.HandlerWebSocket][channelInactive][58]-> 有连接已经断开。。。
+2026-03-06 11:42:50 [INFO][com.easychat.websocket.netty.HandlerWebSocket][channelInactive][58]-> 有连接已经断开。。。
+2026-03-06 11:42:50 [DEBUG][io.netty.handler.logging.LoggingHandler][log][145]-> [id: 0x468be317, L:/0:0:0:0:0:0:0:0:5051] UNREGISTERED
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][getSqlSession][97]-> Creating a new SqlSession
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3821ce81] was not registered for synchronization because synchronization is not active
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][registerSessionHolder][148]-> SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@82bf830] was not registered for synchronization because synchronization is not active
+2026-03-06 11:42:50 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:42:50 [DEBUG][org.springframework.jdbc.datasource.DataSourceUtils][doGetConnection][116]-> Fetching JDBC Connection from DataSource
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1405529161 wrapping com.mysql.cj.jdbc.ConnectionImpl@55168277] will not be managed by Spring
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.transaction.SpringManagedTransaction][openConnection][87]-> JDBC Connection [HikariProxyConnection@1672608228 wrapping com.mysql.cj.jdbc.ConnectionImpl@129d182b] will not be managed by Spring
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> ==>  Preparing: UPDATE user_info SET last_off_time = ? where user_id=? 
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> ==>  Preparing: UPDATE user_info SET last_off_time = ? where user_id=? 
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> ==> Parameters: 1772768570771(Long), U99887808286(String)
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> ==> Parameters: 1772768570771(Long), U24837209535(String)
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> <==    Updates: 1
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@82bf830]
+2026-03-06 11:42:50 [DEBUG][com.easychat.mappers.UserInfoMapper.updateByUserId][debug][159]-> <==    Updates: 1
+2026-03-06 11:42:50 [DEBUG][org.mybatis.spring.SqlSessionUtils][closeSqlSession][191]-> Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3821ce81]
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-9
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-3
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-6
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-11
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 3 thread-local buffer(s) from thread: redisson-netty-6-4
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-5
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-12
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-22
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-7
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-2
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-10
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-8
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-14
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 3 thread-local buffer(s) from thread: redisson-netty-6-15
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-13
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-16
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-20
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-18
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-19
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-21
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-17
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 4 thread-local buffer(s) from thread: redisson-netty-6-26
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 3 thread-local buffer(s) from thread: redisson-netty-6-25
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-24
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 2 thread-local buffer(s) from thread: redisson-netty-6-23
+2026-03-06 11:42:50 [DEBUG][io.netty.buffer.PoolThreadCache][free][247]-> Freed 34 thread-local buffer(s) from thread: lettuce-nioEventLoop-9-1
+2026-03-06 11:42:50 [INFO][com.zaxxer.hikari.HikariDataSource][close][350]-> HikariCPDatasource - Shutdown initiated...
+2026-03-06 11:42:50 [INFO][com.zaxxer.hikari.HikariDataSource][close][352]-> HikariCPDatasource - Shutdown completed.

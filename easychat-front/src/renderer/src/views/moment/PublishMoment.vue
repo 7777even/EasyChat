@@ -65,6 +65,27 @@
           />
         </el-select>
       </div>
+
+      <!-- 上传进度显示 -->
+      <div v-if="uploadingFiles.length > 0" class="uploading-panel">
+        <div class="uploading-title">
+          <i class="iconfont icon-loading"></i>
+          正在上传媒体文件...
+        </div>
+        <div v-for="(item, index) in uploadingFiles" :key="index" class="upload-item">
+          <div class="file-info">
+            <span class="file-name">{{ item.fileName }}</span>
+            <span class="file-type">{{ item.type }}</span>
+          </div>
+          <el-progress 
+            :percentage="item.progress" 
+            :status="item.status === 'success' ? 'success' : item.status === 'error' ? 'exception' : ''"
+          />
+          <div class="progress-text">
+            {{ item.uploadedChunks }}/{{ item.totalChunks }} 分片
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 隐藏的文件选择器 -->
@@ -82,6 +103,7 @@
 <script setup>
 import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
 import Dialog from '@/components/Dialog.vue'
+import MomentChunkUploadApi from '@/utils/MomentChunkUploadApi'
 
 const { proxy } = getCurrentInstance()
 
@@ -116,15 +138,32 @@ const visibilityOptions = [
 const mediaList = ref([])
 const mediaInputRef = ref(null)
 
+// 上传进度状态
+const uploadingFiles = ref([])
+const isUploading = ref(false)
+
 const show = () => {
   dialogConfig.value.show = true
   formData.content = ''
   formData.location = ''
   formData.visibility = 0
   mediaList.value = []
+  uploadingFiles.value = []
+  isUploading.value = false
 }
 
 const closeDialog = () => {
+  if (isUploading.value) {
+    proxy.Confirm({
+      message: '文件正在上传中，确定要关闭吗？',
+      okfun: () => {
+        dialogConfig.value.show = false
+        isUploading.value = false
+        uploadingFiles.value = []
+      }
+    })
+    return
+  }
   dialogConfig.value.show = false
 }
 
@@ -177,6 +216,11 @@ const publishMoment = async () => {
     return
   }
 
+  if (isUploading.value) {
+    proxy.Message.warning('文件正在上传中，请稍候...')
+    return
+  }
+
   console.log('开始发布朋友圈, 媒体数量:', mediaList.value.length)
 
   // 先发布朋友圈获取momentId
@@ -194,34 +238,92 @@ const publishMoment = async () => {
   const momentId = result.data.id
   console.log('朋友圈发布成功, momentId:', momentId)
 
-  // 上传媒体文件
+  // 上传媒体文件（使用分片上传）
   if (mediaList.value.length > 0) {
-    for (let i = 0; i < mediaList.value.length; i++) {
-      const media = mediaList.value[i]
-      console.log(`开始上传第 ${i + 1} 个文件:`, media.file.name)
-      
-      const formDataObj = new FormData()
-      formDataObj.append('momentId', momentId)
-      formDataObj.append('file', media.file)
-      formDataObj.append('mediaType', media.type === 'image' ? 0 : 1)
-
-      const uploadResult = await proxy.Request({
-        url: proxy.Api.uploadMomentMedia,
-        params: formDataObj,
-        showLoading: false
-      })
-      
-      console.log(`第 ${i + 1} 个文件上传结果:`, uploadResult)
-      
-      if (!uploadResult || uploadResult.code !== 200) {
-        proxy.Message.error(`文件上传失败: ${uploadResult?.info || '未知错误'}`)
-      }
-    }
+    await uploadMediaFiles(momentId)
+  } else {
+    proxy.Message.success('发表成功')
+    closeDialog()
+    emit('refresh')
   }
+}
 
-  proxy.Message.success('发表成功')
-  closeDialog()
-  emit('refresh')
+// 使用分片上传媒体文件
+const uploadMediaFiles = async (momentId) => {
+  isUploading.value = true
+  
+  // 初始化上传进度列表
+  uploadingFiles.value = mediaList.value.map((media, index) => ({
+    fileName: media.file.name,
+    type: media.type === 'image' ? '图片' : '视频',
+    progress: 0,
+    uploadedChunks: 0,
+    totalChunks: 0,
+    status: 'uploading',
+    index
+  }))
+
+  try {
+    // 并发上传所有文件
+    const uploadPromises = mediaList.value.map(async (media, index) => {
+      const mediaType = media.type === 'image' ? 0 : 1
+      
+      console.log(`开始上传第 ${index + 1} 个文件:`, media.file.name, '大小:', (media.file.size / 1024 / 1024).toFixed(2), 'MB')
+      
+      try {
+        await MomentChunkUploadApi.uploadMedia(media.file, momentId, mediaType, {
+          onProgress: (progress, uploadedCount, totalChunks) => {
+            if (uploadingFiles.value[index]) {
+              uploadingFiles.value[index].progress = progress
+              uploadingFiles.value[index].uploadedChunks = uploadedCount
+              uploadingFiles.value[index].totalChunks = totalChunks
+            }
+          },
+          
+          onChunkSuccess: (uploadedCount, totalChunks) => {
+            console.log(`文件 ${media.file.name} 分片上传: ${uploadedCount}/${totalChunks}`)
+          },
+          
+          onComplete: (fileId) => {
+            console.log(`文件 ${media.file.name} 上传完成, fileId:`, fileId)
+            if (uploadingFiles.value[index]) {
+              uploadingFiles.value[index].status = 'success'
+            }
+          },
+          
+          onError: (error) => {
+            console.error(`文件 ${media.file.name} 上传失败:`, error)
+            if (uploadingFiles.value[index]) {
+              uploadingFiles.value[index].status = 'error'
+            }
+            throw error
+          }
+        })
+      } catch (error) {
+        console.error(`文件 ${media.file.name} 上传异常:`, error)
+        throw error
+      }
+    })
+    
+    // 等待所有文件上传完成
+    await Promise.all(uploadPromises)
+    
+    console.log('所有媒体文件上传完成')
+    proxy.Message.success('发表成功')
+    
+    // 延迟关闭，让用户看到上传完成状态
+    setTimeout(() => {
+      isUploading.value = false
+      uploadingFiles.value = []
+      closeDialog()
+      emit('refresh')
+    }, 1000)
+    
+  } catch (error) {
+    console.error('媒体文件上传失败:', error)
+    proxy.Message.error('部分文件上传失败，请重试')
+    isUploading.value = false
+  }
 }
 
 defineExpose({
@@ -373,6 +475,79 @@ defineExpose({
   .label {
     font-size: 14px;
     color: #666;
+  }
+}
+
+.uploading-panel {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+
+  .uploading-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .iconfont {
+      font-size: 16px;
+      color: #07c160;
+      animation: rotate 1s linear infinite;
+    }
+  }
+
+  .upload-item {
+    margin-bottom: 15px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .file-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+
+      .file-name {
+        font-size: 13px;
+        color: #333;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin-right: 10px;
+      }
+
+      .file-type {
+        font-size: 12px;
+        color: #999;
+        padding: 2px 8px;
+        background: white;
+        border-radius: 4px;
+      }
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+      text-align: right;
+    }
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

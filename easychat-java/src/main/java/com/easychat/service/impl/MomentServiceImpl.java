@@ -414,6 +414,139 @@ public class MomentServiceImpl implements MomentService {
         
         logger.info("删除朋友圈成功, momentId: {}, userId: {}", momentId, tokenUserInfoDto.getUserId());
     }
+
+    /**
+     * 获取朋友圈媒体分片临时目录
+     */
+    private File getMomentChunkTempFolder(String fileId, String userId) {
+        String tempPath = appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE + "temp/moment/" + userId + "/" + fileId;
+        File folder = new File(tempPath);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        return folder;
+    }
+
+    @Override
+    public void uploadMediaChunk(String fileId, Integer chunkIndex, Integer totalChunks,
+                                 MultipartFile chunk, TokenUserInfoDto userInfoDto) {
+        try {
+            File chunkFolder = getMomentChunkTempFolder(fileId, userInfoDto.getUserId());
+            File chunkFile = new File(chunkFolder, chunkIndex + ".chunk");
+            
+            chunk.transferTo(chunkFile);
+            
+            logger.info("朋友圈媒体分片上传成功: fileId={}, chunkIndex={}/{}, size={}", 
+                    fileId, chunkIndex, totalChunks, chunk.getSize());
+        } catch (Exception e) {
+            logger.error("朋友圈媒体分片上传失败", e);
+            throw new BusinessException(ResponseCodeEnum.CODE_500);
+        }
+    }
+
+    @Override
+    public String mergeMediaChunks(String fileId, Long momentId, String fileName,
+                                   Integer totalChunks, Integer mediaType, TokenUserInfoDto userInfoDto) {
+        File chunkFolder = getMomentChunkTempFolder(fileId, userInfoDto.getUserId());
+        
+        try {
+            // 验证所有分片是否存在
+            for (int i = 0; i < totalChunks; i++) {
+                File chunkFile = new File(chunkFolder, i + ".chunk");
+                if (!chunkFile.exists()) {
+                    throw new BusinessException("分片" + i + "不存在，无法合并");
+                }
+            }
+
+            // 生成文件名
+            String fileExtName = fileName.substring(fileName.lastIndexOf("."));
+            String newFileName = StringTools.getRandomString(Constants.LENGTH_20) + fileExtName;
+            
+            // 创建目标文件目录
+            String momentFolderName = Constants.FILE_FOLDER_FILE + "moment/";
+            File targetFolder = new File(appConfig.getProjectFolder() + momentFolderName);
+            if (!targetFolder.exists()) {
+                targetFolder.mkdirs();
+            }
+            
+            File targetFile = new File(targetFolder, newFileName);
+            
+            // 合并分片
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(targetFile);
+                 java.io.BufferedOutputStream bos = new java.io.BufferedOutputStream(fos)) {
+                
+                for (int i = 0; i < totalChunks; i++) {
+                    File chunkFile = new File(chunkFolder, i + ".chunk");
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(chunkFile);
+                         java.io.BufferedInputStream bis = new java.io.BufferedInputStream(fis)) {
+                        
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = bis.read(buffer)) != -1) {
+                            bos.write(buffer, 0, len);
+                        }
+                    }
+                }
+                bos.flush();
+            }
+
+            logger.info("朋友圈媒体文件合并成功: fileId={}, momentId={}, targetFile={}", 
+                    fileId, momentId, targetFile.getAbsolutePath());
+
+            // 保存媒体记录
+            String filePath = newFileName;
+            MomentMedia momentMedia = new MomentMedia();
+            momentMedia.setMomentId(momentId);
+            momentMedia.setFilePath(filePath);
+            momentMedia.setMediaType(mediaType);
+            momentMediaMapper.insert(momentMedia);
+
+            // 清理临时分片文件
+            deleteChunkFolder(chunkFolder);
+
+            return filePath;
+
+        } catch (Exception e) {
+            logger.error("朋友圈媒体文件合并失败", e);
+            throw new BusinessException("文件合并失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<Integer> checkMediaChunks(String fileId, Integer totalChunks, TokenUserInfoDto userInfoDto) {
+        List<Integer> uploadedChunks = new ArrayList<>();
+        File chunkFolder = getMomentChunkTempFolder(fileId, userInfoDto.getUserId());
+        
+        if (!chunkFolder.exists()) {
+            return uploadedChunks;
+        }
+
+        for (int i = 0; i < totalChunks; i++) {
+            File chunkFile = new File(chunkFolder, i + ".chunk");
+            if (chunkFile.exists()) {
+                uploadedChunks.add(i);
+            }
+        }
+
+        logger.info("检查朋友圈媒体已上传分片: fileId={}, uploaded={}/{}", fileId, uploadedChunks.size(), totalChunks);
+        return uploadedChunks;
+    }
+
+    /**
+     * 删除分片临时文件夹
+     */
+    private void deleteChunkFolder(File folder) {
+        if (folder.exists() && folder.isDirectory()) {
+            File[] files = folder.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    file.delete();
+                }
+            }
+            folder.delete();
+            logger.info("清理朋友圈媒体临时分片文件夹: {}", folder.getAbsolutePath());
+        }
+    }
 }
 
 

@@ -83,6 +83,49 @@ public class MomentController extends ABaseController {
         return getSuccessResponseVO(filePath);
     }
 
+    /**
+     * 上传朋友圈媒体文件分片
+     */
+    @RequestMapping("/uploadMediaChunk")
+    @GlobalInterceptor
+    public ResponseVO uploadMediaChunk(HttpServletRequest request,
+                                       @NotEmpty String fileId,
+                                       @NotNull Integer chunkIndex,
+                                       @NotNull Integer totalChunks,
+                                       @NotNull MultipartFile chunk) {
+        TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
+        momentService.uploadMediaChunk(fileId, chunkIndex, totalChunks, chunk, userInfoDto);
+        return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 合并朋友圈媒体文件分片
+     */
+    @RequestMapping("/mergeMediaChunks")
+    @GlobalInterceptor
+    public ResponseVO mergeMediaChunks(HttpServletRequest request,
+                                       @NotEmpty String fileId,
+                                       @NotNull Long momentId,
+                                       @NotEmpty String fileName,
+                                       @NotNull Integer totalChunks,
+                                       @NotNull Integer mediaType) {
+        TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
+        String filePath = momentService.mergeMediaChunks(fileId, momentId, fileName, totalChunks, mediaType, userInfoDto);
+        return getSuccessResponseVO(filePath);
+    }
+
+    /**
+     * 检查朋友圈媒体已上传的分片
+     */
+    @RequestMapping("/checkMediaChunks")
+    @GlobalInterceptor
+    public ResponseVO checkMediaChunks(HttpServletRequest request,
+                                       @NotEmpty String fileId,
+                                       @NotNull Integer totalChunks) {
+        TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
+        return getSuccessResponseVO(momentService.checkMediaChunks(fileId, totalChunks, userInfoDto));
+    }
+
     @RequestMapping("/delete")
     @GlobalInterceptor
     public ResponseVO delete(HttpServletRequest request,

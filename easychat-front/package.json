@@ -5,7 +5,7 @@
   "main": "./out/main/index.js",
   "author": "example.com",
   "homepage": "https://www.electronjs.org",
-  "codeversion":"9425581304",
+  "codeversion": "9425581304",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -66,6 +66,7 @@
     "pinia": "^2.1.7",
     "sass": "^1.69.5",
     "sass-loader": "^13.3.2",
+    "spark-md5": "^3.0.2",
     "sqlite3": "5.1.6",
     "v-viewer": "^3.0.11",
     "vue-cookies": "^1.8.3",
