@@ -117,7 +117,8 @@ const createWs = () => {
                 if (messageType == 14) {
                     updateMessage({ 
                         messageType: 14, 
-                        messageContent: message.messageContent || '该消息已撤回' 
+                        messageContent: message.messageContent || '该消息已撤回',
+                        status: 1  // 确保消息状态为已发送
                     }, { messageId: message.messageId });
                 } else {
                     //写入本地消息

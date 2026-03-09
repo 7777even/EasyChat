@@ -278,6 +278,7 @@ const onReciveMessage = () => {
       if (localMessage != null) {
         localMessage.messageType = 14
         localMessage.messageContent = message.messageContent || '该消息已撤回'
+        localMessage.status = 1  // 确保消息状态为已发送，避免显示加载中
         // 如果是群聊，更新撤回者信息
         if (message.contactType == 1) {
           localMessage.sendUserNickName = message.sendUserNickName
