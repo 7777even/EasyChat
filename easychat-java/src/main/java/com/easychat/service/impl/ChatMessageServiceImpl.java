@@ -385,4 +385,37 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
         return recallNotify;
     }
+
+
+    @Override
+    public PaginationResultVO<ChatMessage> searchMessage(ChatMessageQuery query, String keyword, String sendUserId,
+                                                          Integer messageType, Long startTime, Long endTime) {
+        // 设置搜索条件
+        if (!StringTools.isEmpty(keyword)) {
+            query.setMessageContentFuzzy(keyword);
+        }
+        if (!StringTools.isEmpty(sendUserId)) {
+            query.setSendUserId(sendUserId);
+        }
+        if (messageType != null) {
+            query.setMessageType(messageType);
+        }
+        if (startTime != null) {
+            query.setSendTimeStart(startTime);
+        }
+        if (endTime != null) {
+            query.setSendTimeEnd(endTime);
+        }
+        
+        // 只搜索普通聊天消息和媒体消息
+        query.setMessageTypeList(new Integer[]{
+            MessageTypeEnum.CHAT.getType(),
+            MessageTypeEnum.MEDIA_CHAT.getType()
+        });
+        
+        query.setOrderBy("send_time desc");
+        
+        return this.findListByPage(query);
+    }
+
 }

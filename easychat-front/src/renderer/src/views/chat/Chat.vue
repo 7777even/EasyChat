@@ -35,12 +35,14 @@
           >({{ currentChatSession.memberCount }})</span
           >
         </div>
+        <div class="title-actions">
+          <span
+            v-if="currentChatSession.contactType == 1"
+            class="iconfont icon-more no-drag"
+            @click="showGroupDetail"
+          ></span>
+        </div>
       </div>
-      <div
-        v-if="currentChatSession.contactType == 1"
-        class="iconfont icon-more no-drag"
-        @click="showGroupDetail"
-      ></div>
 
       <div class="chat-panel" v-show="Object.keys(currentChatSession).length > 0">
         <div class="message-panel" id="message-panel">
@@ -86,6 +88,7 @@
           ref="messageSendRef"
           :currentChatSession="currentChatSession"
           @sendMessage4Local="sendMessage4LocalHandler"
+          @showSearch="showMessageSearch"
         >
         </MessageSend>
       </div>
@@ -98,6 +101,7 @@
     ref="chatGroupDetailRef"
     @delChatSessionCallback="delChatSession"
   ></ChatGroupDetail>
+  <MessageSearch ref="messageSearchRef" @jumpToMessage="jumpToMessage"></MessageSearch>
 </template>
 <script>
 export default {
@@ -109,6 +113,7 @@ import ContextMenu from '@imengyu/vue3-context-menu'
 import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 
 import SearchResult from './SearchResult.vue'
+import MessageSearch from './MessageSearch.vue'
 import ChatGroupDetail from './ChatGroupDetail.vue'
 import {getFileType} from '@/utils/Constants.js'
 import Blank from '@/components/Blank.vue'
@@ -553,6 +558,28 @@ const showGroupDetail = () => {
   chatGroupDetailRef.value.show(currentChatSession.value.contactId)
 }
 
+//消息搜索
+const messageSearchRef = ref()
+const showMessageSearch = () => {
+  if (currentChatSession.value.sessionId) {
+    messageSearchRef.value.show(currentChatSession.value.sessionId)
+  }
+}
+
+//跳转到指定消息
+const jumpToMessage = (messageId) => {
+  nextTick(() => {
+    const messageElement = document.getElementById('message' + messageId)
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      messageElement.classList.add('highlight-message')
+      setTimeout(() => {
+        messageElement.classList.remove('highlight-message')
+      }, 2000)
+    }
+  })
+}
+
 //发送消息
 const sendMessage = (contactId) => {
   let curSession = chatSessionList.value.find((item) => {
@@ -688,6 +715,23 @@ const recallMessageHandler = async (messageId) => {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .title-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding-right: 10px;
+
+    .iconfont {
+      font-size: 20px;
+      cursor: pointer;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #07c160;
+      }
+    }
+  }
 }
 
 .icon-more {
@@ -713,7 +757,20 @@ const recallMessageHandler = async (messageId) => {
     .message-item {
       margin-bottom: 15px;
       text-align: center;
+
+      &.highlight-message {
+        animation: highlight 2s ease;
+      }
     }
+  }
+}
+
+@keyframes highlight {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(7, 193, 96, 0.2);
   }
 }
 </style>

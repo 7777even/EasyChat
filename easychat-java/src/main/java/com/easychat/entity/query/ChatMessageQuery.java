@@ -25,6 +25,11 @@ public class ChatMessageQuery extends BaseParam {
      * 消息类型
      */
     private Integer messageType;
+    
+    /**
+     * 消息类型列表
+     */
+    private Integer[] messageTypeList;
 
     /**
      * 消息内容
@@ -51,6 +56,16 @@ public class ChatMessageQuery extends BaseParam {
      * 发送时间
      */
     private Long sendTime;
+    
+    /**
+     * 发送时间开始
+     */
+    private Long sendTimeStart;
+    
+    /**
+     * 发送时间结束
+     */
+    private Long sendTimeEnd;
 
     /**
      * 接收联系人ID
@@ -122,6 +137,14 @@ public class ChatMessageQuery extends BaseParam {
     public Integer getMessageType() {
         return this.messageType;
     }
+    
+    public Integer[] getMessageTypeList() {
+        return messageTypeList;
+    }
+
+    public void setMessageTypeList(Integer[] messageTypeList) {
+        this.messageTypeList = messageTypeList;
+    }
 
     public void setMessageContent(String messageContent) {
         this.messageContent = messageContent;
@@ -177,6 +200,22 @@ public class ChatMessageQuery extends BaseParam {
 
     public Long getSendTime() {
         return this.sendTime;
+    }
+    
+    public Long getSendTimeStart() {
+        return sendTimeStart;
+    }
+
+    public void setSendTimeStart(Long sendTimeStart) {
+        this.sendTimeStart = sendTimeStart;
+    }
+
+    public Long getSendTimeEnd() {
+        return sendTimeEnd;
+    }
+
+    public void setSendTimeEnd(Long sendTimeEnd) {
+        this.sendTimeEnd = sendTimeEnd;
     }
 
     public void setContactId(String contactId) {

@@ -84,10 +84,82 @@ const selectByMessageId = (messageId) => {
     return queryOne(sql, params)
 }
 
+const searchMessages = (query) => {
+    return new Promise(async (resolve, reject) => {
+        const { sessionId, keyword, sendUserId, messageType, startTime, endTime, pageNo } = query;
+        
+        let sql = "select count(1) from chat_message where session_id = ? and user_id = ?";
+        const countParams = [sessionId, store.getUserId()];
+        
+        // 构建查询条件
+        if (keyword) {
+            sql += " and message_content like ?";
+            countParams.push(`%${keyword}%`);
+        }
+        if (sendUserId) {
+            sql += " and send_user_id = ?";
+            countParams.push(sendUserId);
+        }
+        if (messageType) {
+            sql += " and message_type = ?";
+            countParams.push(messageType);
+        }
+        if (startTime) {
+            sql += " and send_time >= ?";
+            countParams.push(startTime);
+        }
+        if (endTime) {
+            sql += " and send_time <= ?";
+            countParams.push(endTime);
+        }
+        
+        const totalCount = await queryCount(sql, countParams);
+        const { pageTotal, offset, limit } = getPageOffset(pageNo, totalCount);
+        
+        // 构建查询语句
+        let querySql = "select * from chat_message where session_id = ? and user_id = ?";
+        const queryParams = [sessionId, store.getUserId()];
+        
+        if (keyword) {
+            querySql += " and message_content like ?";
+            queryParams.push(`%${keyword}%`);
+        }
+        if (sendUserId) {
+            querySql += " and send_user_id = ?";
+            queryParams.push(sendUserId);
+        }
+        if (messageType) {
+            querySql += " and message_type = ?";
+            queryParams.push(messageType);
+        }
+        if (startTime) {
+            querySql += " and send_time >= ?";
+            queryParams.push(startTime);
+        }
+        if (endTime) {
+            querySql += " and send_time <= ?";
+            queryParams.push(endTime);
+        }
+        
+        queryParams.push(offset);
+        queryParams.push(limit);
+        querySql += " order by send_time desc limit ?,?";
+        
+        const dataList = await queryAll(querySql, queryParams);
+        resolve({
+            dataList,
+            pageTotal,
+            pageNo,
+            totalCount
+        })
+    })
+}
+
 export {
     saveMessage,
     updateMessage,
     selectMessageList,
     saveMessageBatch,
-    selectByMessageId
+    selectByMessageId,
+    searchMessages
 }

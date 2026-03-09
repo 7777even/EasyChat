@@ -83,4 +83,10 @@ public interface ChatMessageService {
      * 撤回消息
      */
     MessageSendDto recallMessage(Long messageId, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 搜索消息
+     */
+    PaginationResultVO<ChatMessage> searchMessage(ChatMessageQuery query, String keyword, String sendUserId, 
+                                                   Integer messageType, Long startTime, Long endTime);
 }

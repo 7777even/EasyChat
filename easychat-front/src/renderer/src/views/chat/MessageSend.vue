@@ -39,6 +39,7 @@
       >
         <div class="iconfont icon-folder"></div>
       </el-upload>
+      <div class="iconfont icon-search" @click="showSearchDialog" title="搜索消息"></div>
     </div>
     <div class="input-area" @drop="dropHandler" @dragover="dragOverHandler">
       <el-input
@@ -133,7 +134,7 @@ const activeEmoji = ref('笑脸')
 //发送消息
 const msgContent = ref('')
 
-const emit = defineEmits(['sendMessage4Local'])
+const emit = defineEmits(['sendMessage4Local', 'showSearch'])
 const sendMessage = async (e) => {
   //shift +enter 换行  enter 发送
   if (e.shiftKey && e.keyCode === 13) {
@@ -474,6 +475,12 @@ onMounted(() => {
     )
   })
 })
+
+// 搜索消息
+const showSearchDialog = () => {
+  emit('showSearch')
+}
+
 onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('saveClipBoardFileCallback')
 })

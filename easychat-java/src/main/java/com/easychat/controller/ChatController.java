@@ -163,4 +163,22 @@ public class ChatController extends ABaseController {
         MessageSendDto messageSendDto = chatMessageService.recallMessage(messageId, tokenUserInfoDto);
         return getSuccessResponseVO(messageSendDto);
     }
+
+    @RequestMapping("/searchMessage")
+    @GlobalInterceptor
+    public ResponseVO searchMessage(HttpServletRequest request,
+                                    @NotEmpty String sessionId,
+                                    String keyword,
+                                    String sendUserId,
+                                    Integer messageType,
+                                    Long startTime,
+                                    Long endTime,
+                                    Integer pageNo) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        com.easychat.entity.query.ChatMessageQuery query = new com.easychat.entity.query.ChatMessageQuery();
+        query.setSessionId(sessionId);
+        query.setPageNo(pageNo);
+        query.setPageSize(20);
+        return getSuccessResponseVO(chatMessageService.searchMessage(query, keyword, sendUserId, messageType, startTime, endTime));
+    }
 }

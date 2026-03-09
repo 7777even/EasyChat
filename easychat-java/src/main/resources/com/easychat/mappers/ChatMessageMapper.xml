@@ -119,6 +119,15 @@
             <if test="query.contactIdList!=null and query.contactIdList.size()>0">
                 and contact_id in(<foreach collection="query.contactIdList" separator="," item="item">#{item}</foreach>)
             </if>
+            <if test="query.messageTypeList!=null and query.messageTypeList.length>0">
+                and message_type in(<foreach collection="query.messageTypeList" separator="," item="item">#{item}</foreach>)
+            </if>
+            <if test="query.sendTimeStart!=null">
+                and send_time >= #{query.sendTimeStart}
+            </if>
+            <if test="query.sendTimeEnd!=null">
+                and send_time &lt;= #{query.sendTimeEnd}
+            </if>
         </where>
     </sql>
 

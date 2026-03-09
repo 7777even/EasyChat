@@ -58,6 +58,7 @@ const api = {
     mergeMomentMediaChunks: "/moment/mergeMediaChunks",
     checkMomentMediaChunks: "/moment/checkMediaChunks",
     deleteMoment: "/moment/delete",
+    searchMessage: "/chat/searchMessage",//搜索消息
 }
 
 export default api;
