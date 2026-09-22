@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  项目：EasyChat 实时聊天系统（Electron 桌面端 + Spring Boot 后端 + Vue 3 前端），同仓库双目录结构。
+  技术栈：
+    后端：Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）
+    前端：Electron + Vue 3 + Element Plus + Vite + Pinia + sql.js
+  关键约束：
+    - Result<T> 统一响应包络（code/message/data），code=0 成功
+    - Token + Redis 会话，@GlobalInterceptor 鉴权
+    - Netty WebSocket 实现心跳 + 消息分发
+    - Electron 上下文隔离（contextIsolation: true / nodeIntegration: false）
+    - 接口前缀 /api/，HTTP 端口 5050，WS 端口 5051
+  测试：后端 mvn compile / package，前端 vite build
+
+rules:
+  proposal:
+    - 必须含 Why / What Changes / Capabilities / Impact 四节
+    - 控制在 500 字内，聚焦单一变更
+    - 涉及对外接口时必须写明后端 VO 字段同步范围
+    - 涉及数据结构时必须写明存量影响与回退方案
+  tasks:
+    - 任务拆为可勾选清单，单条不超过 2 小时工作量
+    - 标注 [TDD] 的任务须先写失败测试再实现
