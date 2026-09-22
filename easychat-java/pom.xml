@@ -166,6 +166,8 @@
                 <version>2.2.6.RELEASE</version>
                 <configuration>
                     <mainClass>com.easychat.EasyChatApplication</mainClass>
+                    <!-- Redisson FST 编码在 Java 17+ 下需要开放模块访问权限 -->
+                    <jvmArguments>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.math=ALL-UNNAMED</jvmArguments>
                 </configuration>
             </plugin>
         </plugins>

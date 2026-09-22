@@ -3,6 +3,7 @@ package com.easychat.redis;
 import io.lettuce.core.RedisConnectionException;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,8 @@ public class RedisConfig<V> {
         try {
             // 创建配置 指定redis地址及节点信息
             Config config = new Config();
+            // 使用 JSON 编码替代 FST，避免 Java 17+ 模块化系统下的反射访问限制
+            config.setCodec(new JsonJacksonCodec());
             config.useSingleServer().setAddress("redis://" + redisHost + ":" + redisPort);
             // 根据config创建出RedissonClient实例
             RedissonClient redissonClient = Redisson.create(config);
