@@ -11,7 +11,7 @@ let loading = null;
 
 const instance = axios.create({
     withCredentials: true,
-    baseURL: (import.meta.env.PROD ? Api.prodDomain : "") + "/api",
+    baseURL: (import.meta.env.PROD ? Api.prodDomain : Api.devDomain) + "/api",
     timeout: 10 * 1000,
 });
 
