@@ -2,16 +2,39 @@ import axios from 'axios'
 import { ElLoading } from 'element-plus'
 import Message from '../utils/Message'
 import Api from '../utils/Api'
+
 const contentTypeForm = 'application/x-www-form-urlencoded;charset=UTF-8'
 const contentTypeJson = 'application/json'
 const responseTypeJson = 'json'
+
 let loading = null;
+
 const instance = axios.create({
     withCredentials: true,
     baseURL: (import.meta.env.PROD ? Api.prodDomain : "") + "/api",
     timeout: 10 * 1000,
 });
-//请求前拦截器
+
+// ======================== 错误码枚举（与后端同步） ========================
+export const ErrorCode = {
+    SUCCESS: 0,
+    PARAM_ERROR: 1001,
+    SYSTEM_ERROR: 1002,
+    NOT_FOUND: 1003,
+    TOKEN_EXPIRED: 2001,
+    TOKEN_INVALID: 2002,
+    FORBIDDEN: 2003,
+    USER_NOT_FOUND: 2101,
+    USER_EXISTS: 2102,
+    PASSWORD_ERROR: 2103,
+    FILE_NOT_FOUND: 2104,
+    // 向后兼容旧码
+    LEGACY_TOKEN_EXPIRED: 901,
+    LEGACY_NOT_FRIEND: 902,
+    LEGACY_NOT_IN_GROUP: 903,
+};
+
+// ======================== 请求前拦截器 ========================
 instance.interceptors.request.use(
     (config) => {
         if (config.showLoading) {
@@ -31,7 +54,8 @@ instance.interceptors.request.use(
         return Promise.reject("请求发送失败");
     }
 );
-//请求后拦截器
+
+// ======================== 请求后拦截器 ========================
 instance.interceptors.response.use(
     (response) => {
         const { showLoading, errorCallback, showError = true, responseType } = response.config;
@@ -43,22 +67,23 @@ instance.interceptors.response.use(
             return responseData;
         }
 
-        //正常请求
-        if (responseData.code == 200) {
+        // 正常请求成功
+        if (responseData.code == 0) {
             return responseData;
-        } else if (responseData.code == 901) {
-            //登录超时
+        }
+        // Token 过期 -> 跳转登录
+        else if (responseData.code == ErrorCode.TOKEN_EXPIRED || responseData.code == ErrorCode.LEGACY_TOKEN_EXPIRED) {
             setTimeout(() => {
                 window.ipcRenderer.send('reLogin')
             }, 2000);
             return Promise.reject({ showError: true, msg: "登录超时" });
-
-        } else {
-            //其他错误
+        }
+        // 其他错误
+        else {
             if (errorCallback) {
                 errorCallback(responseData);
             }
-            return Promise.reject({ showError: showError, msg: responseData.info });
+            return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
         }
     },
     (error) => {
@@ -69,11 +94,12 @@ instance.interceptors.response.use(
     }
 );
 
+// ======================== 请求封装 ========================
 const request = (config) => {
     const { url, params, dataType, showLoading = true, responseType = responseTypeJson, showError = true } = config;
     let contentType = contentTypeForm;
     let formData;
-    
+
     // 如果 params 已经是 FormData，直接使用
     if (params instanceof FormData) {
         formData = params;
@@ -88,18 +114,18 @@ const request = (config) => {
             contentType = contentTypeJson;
         }
     }
-    
+
     const token = localStorage.getItem('token')
     let headers = {
         'X-Requested-With': 'XMLHttpRequest',
         "token": token
     }
-    
+
     // 如果是 multipart/form-data，不设置 Content-Type，让浏览器自动设置
     if (contentType !== 'multipart/form-data') {
         headers['Content-Type'] = contentType;
     }
-    
+
     return instance.post(url, formData, {
         headers: headers,
         showLoading: showLoading,
