@@ -16,7 +16,7 @@ import com.easychat.service.UserContactService;
 import com.easychat.service.UserInfoService;
 import com.easychat.utils.CopyTools;
 import com.easychat.websocket.MessageHandler;
-import com.wf.captcha.ArithmeticCaptcha;
+import com.wf.captcha.SpecCaptcha;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,7 +62,7 @@ public class AccountController extends ABaseController {
      */
     @GetMapping(value = "/checkCode")
     public Result<Map<String, String>> checkCode() {
-        ArithmeticCaptcha captcha = new ArithmeticCaptcha(100, 42);
+        SpecCaptcha captcha = new SpecCaptcha(100, 42, 4);
         String code = captcha.text();
         String checkCodeKey = UUID.randomUUID().toString();
         redisUtils.setex(Constants.REDIS_KEY_CHECK_CODE + checkCodeKey, code, 60 * 10);
