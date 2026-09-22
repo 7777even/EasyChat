@@ -286,3 +286,20 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 - **需人工决策**：存在高风险 / 规范冲突 / 范围扩散等需拍板事项，转交人工确认（对应 L4 关卡）。
 
 > 不得出现「基本可以」「再看下」「问题不大」等模糊结论。L3 / L4 另需**双轴 Review**：①规格符合性（是否严格实现已确认 Task、契约与验收标准）；②代码质量（越界改动、错误边界、测试遗漏、无关重构、无用依赖）。
+
+## 10. 自动化门禁（机控，对齐 `scripts/`）
+
+规范除自律外还需机控兜底。本仓库提供以下脚本（位于 `scripts/`），可将关键纪律翻译成"不通过就失败"的闸门：
+
+| 脚本 | 触发闸门 | 阻断条件 |
+|------|----------|----------|
+| `scripts/commit-msg-lint.mjs` | 提交时（`commit-msg` hook） | 格式不符 `type(scope): 描述`、type / scope 不在枚举、描述无中文、带 body |
+| `scripts/pre-commit-guard.mjs` | 提交时（`pre-commit` hook） | 暂存区命中黑名单（`target/`、`dist/`、`node_modules/`、`*.log`、`*-out.txt` 等） |
+| `scripts/check-openspec-hygiene.mjs` | 推送前（`pre-push` hook） | 进行中 Change 缺四件套、tasks.md 全勾但未归档 |
+| `scripts/check-api-contract.mjs` | 手动 / CI | 后端 Controller 路由 vs 前端调用路径漂移（`--strict` 时阻断） |
+
+**安装 hook**：`node scripts/setup-git-hooks.mjs`
+
+**AI 使用约束**：AI 不得自主建议用户用 `--no-verify` 跳过 hook 闸门；确需跳过须人工在特定场景下主动发起并说明理由。
+
+详细落点与 `--strict` 行为见 `scripts/README.md`。
