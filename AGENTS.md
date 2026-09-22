@@ -187,10 +187,88 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 - 简单组件内状态使用 `ref` / `reactive`
 - 跨页面共享状态使用 Store
 
-## 8. Review 结论三选一
+## 7. 工程记录闭环
 
-- **通过**：无需修改，可直接合入
-- **需修改**：明确指出修改点
-- **需人工决策**：存在高风险 / 规范冲突 / 范围扩散
+实施任务的唯一真源是 `openspec/changes/<name>/tasks.md`。
 
-> 不得出现「基本可以」「再看下」「问题不大」等模糊结论。
+- 会话内进度跟踪只作临时备忘，不写入仓库；任务状态只回填 `tasks.md` 勾选框。
+- 禁止在 `openspec/` 之外建立第二套需求规格或任务清单（含 skill 生成的计划文件、持久化待办）。
+
+三类目录职责不重叠：
+
+| 目录           | 回答的问题           | 特征                                 |
+| -------------- | -------------------- | ------------------------------------ |
+| `docs/`        | 系统**现在**是什么样 | 长期共识，跨版本有效，改了要同步代码 |
+| `openspec/`    | 系统**将要**怎么变   | 唯一业务规格来源                     |
+| `engineering/` | 这次**做得怎么样**   | 短期过程记录：计划、QA、复盘         |
+
+- 短期开发记录放 `engineering/`，**不放 `docs/`**；QA 结果、发布检查、复盘同理。
+
+### 7.1 L3 / L4 强制 OpenSpec 四件套
+
+L3 / L4 改动动手前必须完成并闭环以下四件套（位于 `openspec/changes/<name>/`），且经末尾「人工确认关卡」确认后才允许写代码：
+
+- `proposal.md`（Why / What / Capabilities / Impact + 人工确认关卡）
+- `design.md`（架构、决策 ADR、风险、依赖、数据影响）
+- `tasks.md`（≤2h 可勾选任务，[TDD] 先写失败测试；任务状态只回填此处）
+- `spec-delta.md`（新增 / 修改 / 移除 三段，与 `spec.md` 同构）
+
+四者须闭环：`proposal` 的 Capabilities ↔ `spec-delta` 的 Requirement ↔ `tasks` 的验收标准一一对应。禁止 L1 / L2 建立 OpenSpec Change。
+
+**归档闭环（全勾必归档）**：`tasks.md` 全部勾选后，必须在**同一次交付内**完成收尾，不允许滞留 `changes/`：
+
+1. **spec 回填**：将 `spec-delta.md` 合入 `openspec/specs/<capability>/spec.md`（新建或扩充 capability，Requirement/Scenario 格式）。
+2. **归档**：`git mv openspec/changes/<name> openspec/archive/<YYYY-MM-DD>-<name>`（日期前缀必带）。
+3. **命名与元数据**：进行中 Change 建议带 `YYYY-MM-DD-` 前缀，且每个 Change 含 `.openspec.yaml`（`schema: spec-driven` + `created: <YYYY-MM-DD>`）。
+
+### 7.2 QA / Retro 即刻记录
+
+L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`，不允许攒到最后补；L0–L2 不写。
+
+- QA：范围、验收口径、实际执行命令与用例数、未运行项、结论；**证据是结论必要附件**（接口用例附 curl / 冒烟终端输出快照，置于同目录引用文件名）。
+- Retro：做得好 / 问题 / 原因 / 改进方案四段式。
+
+### 7.3 模板体系
+
+新建上述四件套与 QA/Retro 时，复制 `templates/` 目录对应模板填充，避免格式漂移：
+
+| 模板                              | 用途                        |
+| --------------------------------- | --------------------------- |
+| `_openspec-proposal_template.md`  | 四件套 · proposal           |
+| `_openspec-design_template.md`    | 四件套 · design             |
+| `_openspec-tasks_template.md`     | 四件套 · tasks              |
+| `_openspec-spec-delta_template.md`| 四件套 · spec-delta         |
+| `_qa_template.md`                 | engineering/qa 记录         |
+| `_retro_template.md`              | engineering/retro 记录      |
+
+`templates/README.md` 为索引与用法说明。
+
+### 7.4 完成标准（Definition of Done）
+
+任一 L3 / L4 改动在声称完成前，必须满足：
+
+1. **验收标准达成**：`openspec/changes/<name>/tasks.md` 全部勾选，验收标准逐条满足。
+2. **回归全绿**：按 §2 矩阵对应行执行，`mvn compile` / `mvn package -DskipTests` 0 error、接口链路冒烟通过。
+3. **文档同步**：代码改动若改变契约 / 行为 / 数据结构，同步更新 `easychat.sql`、`docs/` 与前端请求调用方；禁止把短期记录写进 `docs/`。
+4. **归档闭环**：四件套中的 spec-delta 已回写 `specs/`，Change 已归档至 `archive/`（§7.1）。
+
+## 8. L4 硬门禁清单
+
+以下任一类改动命中即升 **L4**（按 §1 取得人工确认后才实施），不得按 L1 / L2 直接动手：
+
+- **契约语义**：`Result<T>` 包络结构、`ResponseCodeEnum` 错误码分段与语义、`/api/` 前缀变更。
+- **权限与认证**：`@GlobalInterceptor` 拦截器语义、Token 会话机制、鉴权白名单。
+- **数据库结构**：表 / 字段 / 索引 / 约束变更、逻辑删除与状态字段语义。
+- **WebSocket 协议**：Netty 处理器链、心跳协议、消息分发包络格式。
+- **横切配置**：`application.properties` 生产基线、`CorsConfig` 配置。
+- **依赖与框架**：生产依赖新增、Spring Boot / MyBatis / Netty 版本升级。
+
+## 9. Review 结论三选一
+
+任何代码评审 / 变更评审的结论必须为以下三者之一，**禁止含糊带过**：
+
+- **通过**：无需修改，可直接合入。
+- **需修改**：明确指出修改点，修改后无需再全员评审。
+- **需人工决策**：存在高风险 / 规范冲突 / 范围扩散等需拍板事项，转交人工确认（对应 L4 关卡）。
+
+> 不得出现「基本可以」「再看下」「问题不大」等模糊结论。L3 / L4 另需**双轴 Review**：①规格符合性（是否严格实现已确认 Task、契约与验收标准）；②代码质量（越界改动、错误边界、测试遗漏、无关重构、无用依赖）。
