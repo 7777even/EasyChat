@@ -4,12 +4,17 @@
 
 本项目是 **EasyChat** 实时聊天系统（Electron 桌面端 + Spring Boot 后端 + Vue 3 前端），与参考项目 `mm-security-platform` 共享同一套 AI 规范骨架（分级 / 契约 / 记录闭环）。
 
-## 0. 仓库结构
+## 0. 仓库结构 & 双轨事实
 
 ```
 EasyChat/
 ├─ AGENTS.md                      ← 本文件（AI 协作入口）
-├─ easychat-java/                  ← Spring Boot 后端服务
+├─ docs/
+│  └─ system-facts.md             ← 系统事实基线（人维护，记录"现在是什么"；与 AGENTS.md 双轨参见）
+├─ openspec/                      ← L3/L4 变更规格（AGENTS.md §7）
+├─ engineering/                   ← 过程记录（AGENTS.md §7）
+├─ templates/                     ← 四件套 + QA/Retro 模板（AGENTS.md §7）
+├─ easychat-java/
 │  ├─ src/main/java/com/easychat/
 │  │  ├─ controller/               ← HTTP 协议、DTO接收、鉴权入口、响应封装
 │  │  ├─ service/                  ← 业务编排、事务边界
@@ -29,33 +34,42 @@ EasyChat/
 │  └─ src/main/resources/
 │     ├─ application.properties
 │     └─ com/easychat/mappers/     ← MyBatis XML
-├─ easychat-front/                 ← Electron + Vue 3 桌面客户端
+├─ easychat-front/
+│  ├─ AGENTS.md                    ← 前端专属入口
 │  ├─ src/main/                    ← Electron 主进程
 │  ├─ src/preload/                 ← 预加载脚本
 │  └─ src/renderer/src/            ← Vue 3 渲染进程
 └─ easychat.sql                    ← 数据库初始化脚本
 ```
 
+**双轨事实**：`AGENTS.md` 规定「怎么改」（AI 指令），`docs/system-facts.md` 记录「现在是什么」（人维护的事实基线）。改动代码前应读 system-facts 确认现状；事实变化时须回写 system-facts。
+
 ## 1. 分级工作流（L0–L4 决策树）
 
 动手前先判定等级，并在回复中用一句话说明判定与理由。**分级只决定流程重量，不豁免 §3、§4、§6。**
 
-- **不改代码**（解释 / 评审 / 状态汇报 / 只读检查 / 文本润色）→ **L0**：直接完成；不建文件、不起子 Agent。
+- **不改代码**（解释 / 评审 / 状态汇报 / 只读检查 / 文本润色）→ **L0**：直接完成；不建文件、不起子 Agent、不调 openspec。
 - **改代码但不改业务能力 / 接口契约 / 权限语义，且 L1 四门槛全满足** → **L1**：说明范围 → 直接改 → 跑最小验证 → 输出结果。
 - **改代码但属依赖 / 构建 / 脚手架 / lint / 配置 / 非业务技术债，或 L1 门槛缺一** → **L2**：说明方案与影响 → 执行 → 跑受影响目标验证。
 - **改业务能力**（接口能力 / 业务规则 / 状态流转 / 权限语义 / 数据模型）→ **L3**：提案 → 人工确认 → 实施 → 验收。
 - **高风险**（认证鉴权 / 数据库结构 / WebSocket 协议 / 部署配置基线）→ **L4**：按 L3 执行，且实施前取得人工确认。
 
-### 1.1 L1 四条门槛（缺一即升 L2 / L3）
+### 1.2 L1 四条门槛（缺一即升 L2 / L3）
 
-① 不新增或改变业务能力、接口契约、权限语义、数据库结构；② 改动不超过 3 个文件；③ 目标明确、可逆，验证可在 5 分钟内完成；④ 不新增生产依赖。
+① 不新增或改变业务能力、接口契约、权限语义、数据库结构；② 改动不超过 3 个文件；③ 目标明确、可逆，验证可在 5 分钟内完成；④ 不新增生产依赖。L1/L2 禁止创建 openspec Change、计划文档或子 Agent。
 
-### 1.2 规则优先级仲裁
+### 1.3 规则优先级仲裁
 
-1. 平台安全策略与人工当场指令
-2. 本文档（含 §3 接口契约、§6 红线）
-3. 已确认的设计文档与任务清单
-4. Skill / 插件自带的工作方法
+高 → 低，低阶规则不得覆盖高阶：
+
+1. 平台安全策略与人工当场指令。
+2. **本文档**（含 §3 接口契约、§6 红线）。
+3. 已确认的 `openspec/changes/<name>/` 与 `openspec/specs/`。
+4. 当前 Change 的 `tasks.md` 中正在执行的 Task。
+5. 各库 `docs/system-facts.md`（系统事实：约束「现状认知」，不直接约束代码写法）。
+6. Skill / 插件自带的工作方法。
+
+任何 skill 或插件不得绕过上级规则、自行扩大需求、新增平行任务源或改写既有契约。
 
 ## 2. 最小验证矩阵
 
@@ -66,7 +80,7 @@ EasyChat/
 | Entity / Mapper / SQL / 分页 | `mvn compile` + 启动验证 |
 | pom.xml、依赖、构建配置 | `mvn package -DskipTests` |
 | 对外接口增删改 | 接口联冒烟 |
-| L3 / L4 | 按验收标准全量 |
+| L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
 ## 3. 接口契约规则
 
