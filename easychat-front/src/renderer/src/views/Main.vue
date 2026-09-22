@@ -117,7 +117,8 @@ const getLoginInfo = async () => {
 //获取系统设置信息
 const getSysSetting = async () => {
   let result = await proxy.Request({
-    url: proxy.Api.getSysSetting
+    url: proxy.Api.getSysSetting,
+    method: 'GET'
   })
   if (!result) {
     return

@@ -127,14 +127,16 @@ const userInfoStore = useUserInfoStore()
 
 const checkCodeUrl = ref(null)
 const changeCheckCode = async () => {
-  let result = await proxy.Request({
-    url: proxy.Api.checkCode
-  })
-  if (!result) {
-    return
-  }
-  checkCodeUrl.value = result.data.checkCode
-  localStorage.setItem('checkCodeKey', result.data.checkCodeKey)
+    let result = await proxy.Request({
+        url: proxy.Api.checkCode,
+        method: 'GET',
+        showLoading: false
+    })
+    if (!result) {
+        return
+    }
+    checkCodeUrl.value = result.data.checkCode
+    localStorage.setItem('checkCodeKey', result.data.checkCodeKey)
 }
 changeCheckCode()
 

@@ -96,7 +96,7 @@ instance.interceptors.response.use(
 
 // ======================== 请求封装 ========================
 const request = (config) => {
-    const { url, params, dataType, showLoading = true, responseType = responseTypeJson, showError = true } = config;
+    const { url, params, dataType, method = 'POST', showLoading = true, responseType = responseTypeJson, showError = true } = config;
     let contentType = contentTypeForm;
     let formData;
 
@@ -126,7 +126,11 @@ const request = (config) => {
         headers['Content-Type'] = contentType;
     }
 
-    return instance.post(url, formData, {
+    return instance({
+        url: url,
+        method: method.toLowerCase(),
+        data: method.toLowerCase() === 'post' ? formData : undefined,
+        params: method.toLowerCase() === 'get' ? params : undefined,
         headers: headers,
         showLoading: showLoading,
         errorCallback: config.errorCallback,
