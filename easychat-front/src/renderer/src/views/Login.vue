@@ -216,7 +216,7 @@ const submit = async () => {
     errorCallback: (response) => {
       showLoading.value = false
       changeCheckCode()
-      errorMsg.value = response.info
+      errorMsg.value = response.message || response.info || '登录失败'
     }
   })
   if (!result) {

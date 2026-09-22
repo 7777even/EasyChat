@@ -72,7 +72,7 @@ const show = async (groupId) => {
     },
     showError: false,
     errorCallback: (response) => {
-      proxy.Confirm({ message: response.info, showCancelBtn: false })
+      proxy.Confirm({ message: response.message || response.info, showCancelBtn: false })
     }
   })
   if (!result) {

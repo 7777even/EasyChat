@@ -202,7 +202,7 @@ const sendMessageDo = async (
     showError: false,
     errorCallback: (responseData) => {
       proxy.Confirm({
-        message: responseData.info,
+        message: responseData.message || responseData.info,
         okfun: () => {
           addContact(props.currentChatSession.contactId, responseData.code)
         },
