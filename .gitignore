@@ -6,6 +6,11 @@ out/
 *.jar.original
 easychat-java/target/
 
+# 日志文件
+easychat-java/log.path_IS_UNDEFINED/
+easychat-java/logs/
+*.log
+
 # ffmpeg/ffprobe 二进制
 easychat-front/assets/ffprobe.exe
 easychat-front/assets/ffmpeg.exe
