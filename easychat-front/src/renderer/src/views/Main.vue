@@ -111,6 +111,8 @@ const getLoginInfo = async () => {
     return
   }
   userInfoStore.setInfo(result.data)
+  //登录后强制回源本人头像一次，修复重新登录后展示本地旧缓存/兜底图的问题
+  avatarInfoStore.setFoceReload(result.data.userId, true)
   window.ipcRenderer.send('getLocalStore', result.data.userId + 'localServerPort')
 }
 
@@ -138,9 +140,9 @@ onMounted(() => {
     router.push('/login')
   })
 
-  //重新加载头像
+  //重新加载头像：强制回源下载完成后置回 false，避免 forceGet 常驻导致每次渲染都回源
   window.ipcRenderer.on('reloadAvatar', (e, fileId) => {
-    avatarInfoStore.setFoceReload(fileId, true)
+    avatarInfoStore.setFoceReload(fileId, false)
   })
 })
 

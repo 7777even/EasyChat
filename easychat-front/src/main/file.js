@@ -142,6 +142,46 @@ const getDomain = () => {
     return NODE_ENV !== 'development' ? store.getData("prodDomain") : store.getData("devDomain")
 }
 
+//校验本地图片缓存是否为有效图片（魔数 + PNG IHDR），损坏缓存触发回源重新下载
+const isValidImageCache = (filePath) => {
+    try {
+        if (!fs.existsSync(filePath)) {
+            return false;
+        }
+        if (fs.statSync(filePath).size < 16) {
+            return false;
+        }
+        const fd = fs.openSync(filePath, 'r');
+        const buf = Buffer.alloc(16);
+        fs.readSync(fd, buf, 0, 16, 0);
+        fs.closeSync(fd);
+        //PNG：校验签名 + 第一个块必须是 IHDR
+        if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+            return buf.toString('ascii', 12, 16) === 'IHDR';
+        }
+        //JPEG
+        if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
+            return true;
+        }
+        //GIF
+        if (buf.toString('ascii', 0, 3) === 'GIF') {
+            return true;
+        }
+        //BMP
+        if (buf[0] === 0x42 && buf[1] === 0x4D) {
+            return true;
+        }
+        //WEBP
+        if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('校验本地图片缓存失败', filePath, e);
+        return false;
+    }
+}
+
 
 //express 本地服务器
 const FILE_TYPE_CONTENT_TYPE = {
@@ -229,7 +269,9 @@ expressServer.get('/file', async (req, res) => {
     // 正确处理字符串 "false" 和 "true"
     showCover = showCover === 'true' || showCover === true;
     const localPath = await getLocalFilePath(partType, showCover, fileId);
-    if (!fs.existsSync(localPath) || forceGet == "true") {
+    //头像缓存命中前校验有效性：本地文件损坏时强制回源重新下载，避免坏图/旧图被永久命中
+    const avatarCacheBroken = partType == "avatar" && fs.existsSync(localPath) && !isValidImageCache(localPath);
+    if (!fs.existsSync(localPath) || forceGet == "true" || avatarCacheBroken) {
         if (forceGet == "true" && partType == "avatar") {
             await downloadFile(fileId, true, localPath + cover_image_suffix, partType);
         }
@@ -286,12 +328,42 @@ expressServer.get('/file', async (req, res) => {
         fs.createReadStream(localPath).pipe(res);
     }
 })
+//同一文件的并发下载去重：forceGet 突发（侧栏+气泡+会话列表同时渲染）只回源一次
+const pendingDownloads = new Map();
+
+//先写临时文件再原子 rename，读方要么读到旧完整文件、要么读到新完整文件，不会读到半截
+const writeAtomically = (savePath, dataStream) => {
+    return new Promise((resolve, reject) => {
+        const tmpPath = savePath + ".downloading";
+        const stream = fs.createWriteStream(tmpPath);
+        dataStream.pipe(stream);
+        stream.on('finish', () => {
+            stream.close();
+            try {
+                fs.renameSync(tmpPath, savePath);
+                resolve();
+            } catch (renameErr) {
+                reject(renameErr);
+            }
+        });
+        stream.on('error', (err) => {
+            console.error('写入文件失败', savePath, err);
+            try { fs.unlinkSync(tmpPath); } catch (e) { /* 忽略清理失败 */ }
+            reject(err);
+        });
+    });
+};
+
 const downloadFile = (fileId, showCover, savePath, partType) => {
     // 确保 showCover 是布尔值
     showCover = Boolean(showCover);
+    //并发去重：同一 savePath 已有在途下载时直接复用其 Promise
+    if (pendingDownloads.has(savePath)) {
+        return pendingDownloads.get(savePath);
+    }
     let url = `${getDomain()}/api/chat/downloadFile`;
     const token = store.getUserData("token");
-    return new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
         // validateStatus 允许 4xx/5xx 也进入响应处理，避免 README 400 JSON 响应被当作网络错误
         const config = {
             responseType: 'stream',
@@ -303,32 +375,21 @@ const downloadFile = (fileId, showCover, savePath, partType) => {
             fileId,
             showCover,
             partType
-        }, config).then((response) => {
+        }, config).then(async (response) => {
             const folder = savePath.substring(0, savePath.lastIndexOf("/"));
             mkdirs(folder);
-            const stream = fs.createWriteStream(savePath);
             if (response.headers["content-type"] && response.headers["content-type"].includes("application/json")) {
                 // 后端返回了 JSON（文件不存在等业务错误），使用兜底图片
                 let resourcesPath = path.join(app.getAppPath(), '/');
                 if (NODE_ENV !== 'development') {
                     resourcesPath = path.join(path.dirname(app.getPath('exe')), '/resources/');
                 }
-                if (partType == "avatar") {
-                    fs.createReadStream(resourcesPath + "assets/user.png").pipe(stream);
-                } else {
-                    fs.createReadStream(resourcesPath + "assets/404.png").pipe(stream);
-                }
+                const defaultImage = partType == "avatar" ? "assets/user.png" : "assets/404.png";
+                await writeAtomically(savePath, fs.createReadStream(resourcesPath + defaultImage));
             } else {
-                response.data.pipe(stream);
+                await writeAtomically(savePath, response.data);
             }
-            stream.on('finish', () => {
-                stream.close();
-                resolve();
-            });
-            stream.on('error', (err) => {
-                console.error('写入文件失败', savePath, err);
-                reject(err);
-            });
+            resolve();
         }).catch(async (err) => {
             console.error('下载文件失败', url, fileId, err);
             // 网络异常等无法拿到响应时，也写入兜底图片，避免后续读取本地文件报错
@@ -347,6 +408,9 @@ const downloadFile = (fileId, showCover, savePath, partType) => {
             resolve();
         });
     });
+    pendingDownloads.set(savePath, promise);
+    promise.finally(() => pendingDownloads.delete(savePath));
+    return promise;
 }
 
 const saveAs = async ({ partType, fileId, fileType }) => {
