@@ -81,21 +81,31 @@ const saveUserInfo = () => {
     if (!valid) {
       return
     }
-    let params = {}
-    Object.assign(params, formData.value)
-
-    params.areaName = ''
-    params.areaCode = ''
-    if (params.area) {
-      params.areaName = params.area.areaName.join(',')
-      params.areaCode = params.area.areaCode.join(',')
-      delete params.area
+    const submitFormData = new FormData()
+    submitFormData.append('nickName', formData.value.nickName)
+    if (formData.value.sex !== null && formData.value.sex !== undefined) {
+      submitFormData.append('sex', formData.value.sex)
+    }
+    if (formData.value.personalSignature) {
+      submitFormData.append('personalSignature', formData.value.personalSignature)
+    }
+    submitFormData.append('areaName', '')
+    submitFormData.append('areaCode', '')
+    if (formData.value.area) {
+      submitFormData.append('areaName', formData.value.area.areaName.join(','))
+      submitFormData.append('areaCode', formData.value.area.areaCode.join(','))
+    }
+    if (formData.value.avatarFile instanceof File) {
+      submitFormData.append('avatarFile', formData.value.avatarFile)
+    }
+    if (formData.value.avatarCover instanceof File) {
+      submitFormData.append('avatarCover', formData.value.avatarCover)
     }
 
     avatarInfoStore.setFoceReload(userInfoStore.getInfo().userId, false)
     let result = await proxy.Request({
       url: proxy.Api.saveUserInfo,
-      params
+      params: submitFormData
     })
     if (!result) {
       return
