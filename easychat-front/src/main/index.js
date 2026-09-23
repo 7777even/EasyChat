@@ -10,7 +10,7 @@ import {
   onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck, onSendClientAck
-} from "ipc"
+} from "./ipc"
 import { saveWindow } from './windowProxy'
 
 const login_width = 300;

@@ -24,6 +24,43 @@ const ACK_TIMEOUT = 30000;
 //避免onclose onerror都重连相当于加个锁
 let lockReconnect = false;
 
+// ===== 消息可靠性协议辅助方法（模块顶层，供 IPC 调用） =====
+const sendHeartbeat = () => {
+    if (ws != null && ws.readyState === 1) {
+        const hb = JSON.stringify({ messageType: -4 });
+        ws.send(hb);
+    }
+}
+
+const sendSyncFrame = () => {
+    if (ws != null && ws.readyState === 1 && lastSeqMap.size > 0) {
+        const sync = {};
+        for (const [sid, seq] of lastSeqMap.entries()) {
+            sync[sid] = seq;
+        }
+        ws.send(JSON.stringify({ messageType: -2, extendData: { sync } }));
+        console.log('SYNC 补推请求, sessions=' + lastSeqMap.size);
+    }
+}
+
+const sendClientAck = (ackType, messageIds) => {
+    if (ws != null && ws.readyState === 1 && messageIds && messageIds.length > 0) {
+        ws.send(JSON.stringify({ messageType: -3, extendData: { ackType, messageIds } }));
+    }
+}
+
+const registerPendingAck = (clientId, messageObj) => {
+    if (pendingMap.has(clientId)) {
+        clearTimeout(pendingMap.get(clientId).timer);
+    }
+    const timer = setTimeout(() => {
+        pendingMap.delete(clientId);
+        console.warn('ACK 超时, clientId=' + clientId);
+        sender.send('addLocalCallback', { clientId, status: 0, timeout: true });
+    }, ACK_TIMEOUT);
+    pendingMap.set(clientId, { timer, messageObj });
+}
+
 //wsUrl
 let wsUrl = null;
 let sender = null;
@@ -216,53 +253,7 @@ const createWs = () => {
         reconnect('onerror')
     }
 
-    // ===== 心跳 / SYNC / ACK 等辅助方法 =====
-    const sendHeartbeat = () => {
-        if (ws != null && ws.readyState === 1) {
-            const hb = JSON.stringify({ messageType: -4 });
-            ws.send(hb);
-        }
-    }
-
-    const sendSyncFrame = () => {
-        if (ws != null && ws.readyState === 1 && lastSeqMap.size > 0) {
-            const sync = {};
-            for (const [sid, seq] of lastSeqMap.entries()) {
-                sync[sid] = seq;
-            }
-            ws.send(JSON.stringify({ messageType: -2, extendData: { sync } }));
-            console.log('SYNC 补推请求, sessions=' + lastSeqMap.size);
-        }
-    }
-
-    /**
-     * 注册待 ACK 消息，超时后在 local DB 标记发送失败
-     * @param {string} clientId 客户端生成的消息 ID
-     * @param {object} messageObj 渲染层已本地写入的消息对象
-     */
-    /**
-     * 发送 CLIENT_ACK 帧到服务端，告知消息已送达/已读
-     * @param {number} ackType 2=已送达, 3=已读
-     * @param {string[]} messageIds 消息 ID 列表（字符串）
-     */
-    const sendClientAck = (ackType, messageIds) => {
-        if (ws != null && ws.readyState === 1 && messageIds && messageIds.length > 0) {
-            ws.send(JSON.stringify({ messageType: -3, extendData: { ackType, messageIds } }));
-        }
-    }
-
-    const registerPendingAck = (clientId, messageObj) => {
-        // 已有则先清理
-        if (pendingMap.has(clientId)) {
-            clearTimeout(pendingMap.get(clientId).timer);
-        }
-        const timer = setTimeout(() => {
-            pendingMap.delete(clientId);
-            console.warn('ACK 超时, clientId=' + clientId);
-            sender.send('addLocalCallback', { clientId, status: 0, timeout: true });
-        }, ACK_TIMEOUT);
-        pendingMap.set(clientId, { timer, messageObj });
-    }
+    // （辅助方法已移至模块顶层）
 
     const reconnect = (type) => {
         if (!needReconnect) {
