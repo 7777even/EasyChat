@@ -70,7 +70,7 @@ const initWs = (config, _sender) => {
     wsUrl = `${NODE_ENV !== 'development' ? store.getData("prodWsDomain") : store.getData("devWsDomain")}?token=${config.token}`;
     sender = _sender;
     needReconnect = true;
-    maxReConnectTimes = 5;
+    maxReConnectTimes = 20;
     createWs();
 }
 
@@ -87,7 +87,7 @@ const createWs = () => {
     ws.onopen = function (params) {
         console.log('客户端连接成功')
         sendHeartbeat()
-        maxReConnectTimes = 5
+        maxReConnectTimes = 20
         // 连接后立即发送 SYNC 帧，请求补推本地离线期间错过的消息
         sendSyncFrame()
     }
@@ -193,6 +193,16 @@ const createWs = () => {
                 if (message.sendUserId === store.getUserId() && message.contactType == 1 && messageType != 14) {
                     break;
                 }
+                //防御：单聊消息的 contactId 异常为“当前用户自己”（历史离线补推脏数据导致），
+                //按发送方修正，避免再次以 contact_id=自己 新建脏会话、误用自己头像
+                if (message.contactType == 0 && message.sendUserId
+                    && String(message.contactId) === String(store.getUserId())
+                    && String(message.sendUserId) !== String(store.getUserId())) {
+                    message.contactId = message.sendUserId;
+                    if (!message.contactName) {
+                        message.contactName = message.sendUserNickName;
+                    }
+                }
                 // 维护 lastSeq（有 seq 的消息）
                 if (message.seq != null && message.sessionId) {
                     const cur = lastSeqMap.get(message.sessionId) || 0;
@@ -277,7 +287,13 @@ const createWs = () => {
                 lockReconnect = false;
             }, 5000)
         } else {
-            console.log('TCP连接已超时')
+            // 重连次数耗尽也不放弃：重置配额继续周期重试，确保后端重启等场景下能自动恢复
+            console.log('重连次数已耗尽，5 秒后继续重试');
+            maxReConnectTimes = 20;
+            setTimeout(function () {
+                lockReconnect = false;
+                createWs()
+            }, 5000)
         }
     }
 

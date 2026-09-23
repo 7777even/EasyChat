@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
@@ -247,12 +248,36 @@ public class ChannelContextUtils {
 
 
     /**
+     * 需要做「联系人=发送人」语义转换的聊天会话消息帧类型白名单。
+     * <p>
+     * 在接收者视角，其会话联系人就是消息发送人，因此发送给接收者的消息帧
+     * 必须把 contactId/contactName 置为发送方；而 INIT(0)/FORCE_OFF_LINE(7)/
+     * 朋友圈(15~18) 等帧的 contactId 语义不同，不得转换。
+     */
+    private static final Set<Integer> CONTACT_CONVERT_TYPES = Set.of(
+            MessageTypeEnum.ADD_FRIEND.getType(),           // 1 添加好友打招呼
+            MessageTypeEnum.CHAT.getType(),                 // 2 普通聊天
+            MessageTypeEnum.CONTACT_APPLY.getType(),        // 4 好友申请
+            MessageTypeEnum.MEDIA_CHAT.getType(),           // 5 媒体文件
+            MessageTypeEnum.FILE_UPLOAD.getType(),          // 6 文件上传完成
+            MessageTypeEnum.ADD_GROUP.getType(),            // 9 加入群聊
+            MessageTypeEnum.CONTACT_NAME_UPDATE.getType(),  // 10 更新群昵称
+            MessageTypeEnum.LEAVE_GROUP.getType(),          // 11 退出群聊
+            MessageTypeEnum.REMOVE_GROUP.getType(),         // 12 被移出群聊
+            MessageTypeEnum.RECALL_MESSAGE.getType()        // 14 撤回消息
+    );
+
+    /**
      * 向指定用户投递单条 WS 消息；若用户当前离线，压入 Redis 离线缓冲队列。
      */
     private void sendMsg(MessageSendDto messageSendDto, String reciveId) {
         if (reciveId == null) {
             return;
         }
+        // 联系人语义转换必须先于「在线/离线」判断完成：保证离线缓冲队列中
+        // 存储的 JSON 与在线直推语义一致，否则重连补推时前端会以 contactId=自己
+        // 新建脏会话（表现为会话列表出现重复条目 + 头像错用当前用户头像）。
+        applyContactConvert(messageSendDto);
         ChannelGroup userGroup = USER_CONTEXT_MAP.get(reciveId);
         if (userGroup == null || userGroup.isEmpty()) {
             // 离线缓冲：把消息 JSON 压入该用户的 Redis 队列，重连后补推
@@ -264,18 +289,38 @@ public class ChannelContextUtils {
             }
             return;
         }
-        //相当于客户而言，联系人就是发送人，所以这里转换一下再发送,好友打招呼信息发送给自己需要特殊处理
-        if (MessageTypeEnum.ADD_FRIEND_SELF.getType().equals(messageSendDto.getMessageType())) {
-            UserInfo userInfo = (UserInfo) messageSendDto.getExtendData();
-            messageSendDto.setMessageType(MessageTypeEnum.ADD_FRIEND.getType());
-            messageSendDto.setContactId(userInfo.getUserId());
-            messageSendDto.setContactName(userInfo.getNickName());
-            messageSendDto.setExtendData(null);
-        } else {
-            messageSendDto.setContactId(messageSendDto.getSendUserId());
-            messageSendDto.setContactName(messageSendDto.getSendUserNickName());
-        }
         userGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
+    }
+
+    /**
+     * 联系人语义转换：聊天会话消息帧在接收者视角，联系人 = 发送人。
+     * <p>
+     * 好友打招呼（ADD_FRIEND_SELF）特殊处理：转为 ADD_FRIEND，联系人为打招呼对象本人。
+     * 控制帧（INIT、强制下线、朋友圈等）不做转换，保持各自 contactId 语义。
+     */
+    private void applyContactConvert(MessageSendDto messageSendDto) {
+        if (messageSendDto == null || messageSendDto.getMessageType() == null) {
+            return;
+        }
+        Integer messageType = messageSendDto.getMessageType();
+        // 好友打招呼信息发送给自己需要特殊处理
+        if (MessageTypeEnum.ADD_FRIEND_SELF.getType().equals(messageType)) {
+            UserInfo userInfo = (UserInfo) messageSendDto.getExtendData();
+            if (userInfo != null) {
+                messageSendDto.setMessageType(MessageTypeEnum.ADD_FRIEND.getType());
+                messageSendDto.setContactId(userInfo.getUserId());
+                messageSendDto.setContactName(userInfo.getNickName());
+                messageSendDto.setExtendData(null);
+            }
+            return;
+        }
+        // 仅聊天会话帧做联系人转换
+        if (!CONTACT_CONVERT_TYPES.contains(messageType)) {
+            return;
+        }
+        // 相当于客户而言，联系人就是发送人，所以转换后再发送
+        messageSendDto.setContactId(messageSendDto.getSendUserId());
+        messageSendDto.setContactName(messageSendDto.getSendUserNickName());
     }
 
     /**
@@ -301,6 +346,9 @@ public class ChannelContextUtils {
 
     /**
      * 重连后补推离线缓冲队列中的消息（正序）
+     * <p>
+     * 补推前对每条消息执行联系人语义转换（幂等：已转换过的帧再次转换结果不变），
+     * 以兼容历史脏数据（修复前入队的队列 JSON 中 contactId=接收者自己）。
      *
      * @param userId 已重连的用户
      */
@@ -316,7 +364,15 @@ public class ChannelContextUtils {
             }
             logger.info("用户{}重连，补推离线消息{}条", userId, offlineList.size());
             for (String jsonMsg : offlineList) {
-                userGroup.writeAndFlush(new TextWebSocketFrame(jsonMsg));
+                // 反序列化为对象后转换，确保历史脏数据也能纠正为发送方联系人
+                try {
+                    MessageSendDto sendDto = JsonUtils.convertJson2Obj(jsonMsg, MessageSendDto.class);
+                    applyContactConvert(sendDto);
+                    userGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(sendDto)));
+                } catch (Exception parseError) {
+                    logger.warn("补推消息解析失败，原样透传: {}", jsonMsg, parseError);
+                    userGroup.writeAndFlush(new TextWebSocketFrame(jsonMsg));
+                }
             }
         } catch (Exception e) {
             logger.error("补推离线消息失败, userId={}", userId, e);
