@@ -61,7 +61,7 @@ public class UserInfoController extends ABaseController {
     /**
      * 保存/更新用户信息
      */
-    @PutMapping("/saveUserInfo")
+    @PostMapping("/saveUserInfo")
     @GlobalInterceptor
     public Result<UserInfoVO> saveUserInfo(HttpServletRequest request, UserUpdateDTO dto) throws IOException {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);

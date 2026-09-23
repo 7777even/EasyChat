@@ -302,7 +302,7 @@ const downloadFile = (fileId, showCover, savePath, partType) => {
         const folder = savePath.substring(0, savePath.lastIndexOf("/"));
         mkdirs(folder);
         const stream = fs.createWriteStream(savePath);
-        if (response.headers["content-type"] == "application/json") {
+        if (response.headers["content-type"] && response.headers["content-type"].includes("application/json")) {
             //console.log("获取图片失败", url);
             let resourcesPath = path.join(app.getAppPath(), '/');
             if (NODE_ENV !== 'development') {
