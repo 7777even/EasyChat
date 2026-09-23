@@ -1,0 +1,49 @@
+Evidence — 2026-09-23-recall-sender-sync 冒烟输出快照
+====================================================
+
+[1] 冒烟脚本 recall_smoke.js：三设备拓扑（U29953535216 x2 = 发送方两台，U04259455805 x1 = 对端）
+    流程：三路 WS 连接(ws://127.0.0.1:5051/ws?token=...) -> HTTP POST /api/chat/sendMessage
+    (messageType=2, content=recall-sync-smoke) -> 立即 POST /api/chat/recallMessage -> 收帧 3s 断言
+
+SENT messageId=1827
+{
+  "PASS": true,
+  "messageId": 1827,
+  "recallApi": { "status": 200, "code": 0 },
+  "A1_senderCopy": { "contactId": "U04259455805", "sendUserId": "U29953535216", "messageContent": "该消息已撤回" },
+  "A2_senderCopy": { "contactId": "U04259455805", "sendUserId": "U29953535216", "messageContent": "该消息已撤回" },
+  "B1_peerFrame":  { "contactId": "U29953535216", "sendUserId": "U29953535216", "messageContent": "该消息已撤回" },
+  "rawCounts": { "A1": 5, "A2": 5, "B1": 5 }
+}
+exit=0
+
+断言口径：
+- A1/A2（发送方其他设备）收到 14 帧且 contactId == 对端 U04259455805（未经 applyContactConvert，!= sendUserId）-> 防脏会话语义成立
+- B1（对端）收到 14 帧且 contactId == U29953535216（== sendUserId，转换后）-> 原对端投递不受影响
+- 撤回接口 code=0
+
+[2] 后端日志（新代码 sendRecallToSenderDevices INFO 行；devices=3 含用户运行中的 Electron 真机）
+2026-09-23 15:29:54 [INFO][com.easychat.websocket.ChannelContextUtils][sendRecallToSenderDevices][240]-> 撤回帧发送方副本已投递 sendUserId=U29953535216, devices=3
+
+[3] 编译
+mvn compile -q -> exit=0
+
+[4] 权限走查（任务 1.4，仅记录不修改）
+ChatMessageServiceImpl.recallMessage:
+  L381 if (!message.getSendUserId().equals(tokenUserInfoDto.getUserId())) throw CODE_600  <- 仅发送者本人
+  L386-L391 类型白名单 {CHAT(2), MEDIA_CHAT(5)}
+  L393-L398 2 分钟撤回窗口
+
+[5] 前端零改动走查（任务 1.5，仅记录不修改）
+wsClient.js L193 自发消息跳过规则 message.sendUserId === 当前用户 && contactType==1 && messageType != 14
+  -> type 14 豁免，自发撤回帧放行
+wsClient.js L231-L237 case 14 按 messageId updateMessage，不新增消息
+Chat.vue L310 messageType==14 更新本地消息；L734 recallMessageHandler HTTP 撤回入口
+
+[6] 冒烟数据回滚验证（会话 380571aaeed37621c53433dcbd238254）
+MySQL: DELETE message_id=1827 -> SELECT message_id>=1827 空；chat_session 恢复
+       last_message='1', last_receive_time=1790145608366（与冒烟前基线一致）
+本地 SQLite: chat_session_user (U299, 380571aa...) UPDATE 恢复 -> rows=1，读回
+       last_message='1', last_receive_time=1790145608366
+本地 chat_message 无 1827 幽灵行（发送方设备对 14 帧只 update 不 insert，符合设计）
+基线：chat_message 会话行数 10，MAX(message_id)=1826（恢复后不变）
