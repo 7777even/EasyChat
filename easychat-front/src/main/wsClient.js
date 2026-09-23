@@ -43,12 +43,6 @@ const sendSyncFrame = () => {
     }
 }
 
-const sendClientAck = (ackType, messageIds) => {
-    if (ws != null && ws.readyState === 1 && messageIds && messageIds.length > 0) {
-        ws.send(JSON.stringify({ messageType: -3, extendData: { ackType, messageIds } }));
-    }
-}
-
 const registerPendingAck = (clientId, messageObj) => {
     if (pendingMap.has(clientId)) {
         clearTimeout(pendingMap.get(clientId).timer);
@@ -153,17 +147,6 @@ const createWs = () => {
                     console.log('ACK 收到, clientId=' + ackClientId + ', seq=' + ackSeq);
                 }
                 // ACK 不需要渲染器展示，仅作状态更新
-                break;
-            }
-            case -5: { // ACK_NOTIFY：服务端通知发送方，对方已送达/已读
-                // 通知渲染层更新消息的已读/送达状态
-                // 注意：ackUserId 由服务端放在 contactId 字段中传递
-                sender.send('ackNotify', {
-                    messageId: message.messageId,
-                    ackUserId: message.contactId,    // 执行 ack 的用户 ID
-                    contactType: message.contactType,
-                    ackType: message.extendData     // 2=已送达, 3=已读
-                });
                 break;
             }
             case -6: { // SYNC_SESSION：跨端会话同步——更新本地会话元数据并通知渲染层
@@ -315,6 +298,5 @@ export {
     initWs,
     closeWs,
     registerPendingAck,
-    sendSyncFrame,
-    sendClientAck
+    sendSyncFrame
 }

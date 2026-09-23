@@ -64,8 +64,6 @@ const api = {
     checkMomentMediaChunks: "/moment/checkMediaChunks",
     deleteMoment: "/moment/delete",
     searchMessage: "/chat/searchMessage",//搜索消息
-    markRead: "/chat/markRead",//标记消息已读
-    batchGetAck: "/chat/batchGetAck",//批量查询消息已读/送达状态
 }
 
 export default api;

@@ -2,7 +2,7 @@ import { shell, BrowserWindow, ipcMain } from 'electron';
 const NODE_ENV = process.env.NODE_ENV
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { initWs, closeWs, registerPendingAck, sendClientAck } from './wsClient';
+import { initWs, closeWs, registerPendingAck } from './wsClient';
 import { selectMessageList, saveMessage, updateMessage } from "./db/ChatMessageModel";
 import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSession, topChatSession, updateStatus } from "./db/ChatSessionUserModel";
 import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser } from "./db/UserSetting";
@@ -120,13 +120,6 @@ const onUpdateContactNoReadCount = () => {
 const onRegisterPendingAck = () => {
     ipcMain.on("registerPendingAck", (e, { clientId, messageObj }) => {
         registerPendingAck(clientId, messageObj);
-    });
-}
-
-//发送 CLIENT_ACK 帧（由渲染层调用）
-const onSendClientAck = () => {
-    ipcMain.on("sendClientAck", (e, { ackType, messageIds }) => {
-        sendClientAck(ackType, messageIds);
     });
 }
 
@@ -347,6 +340,5 @@ export {
     onDelChatSession,
     onTopChatSession,
     onReloadChatSession,
-    onRegisterPendingAck,
-    onSendClientAck
+    onRegisterPendingAck
 }

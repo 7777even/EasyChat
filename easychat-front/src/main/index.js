@@ -9,7 +9,7 @@ import {
   onOpenNewWindow, openWindow, onSetSessionSelect, onLoadContactApply, onUpdateContactNoReadCount,
   onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
-  onTopChatSession, onReloadChatSession, onRegisterPendingAck, onSendClientAck
+  onTopChatSession, onReloadChatSession, onRegisterPendingAck
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 
@@ -215,9 +215,6 @@ function createWindow() {
 
   //注册待 ACK 消息
   onRegisterPendingAck();
-
-  //发送 CLIENT_ACK 帧
-  onSendClientAck();
 
   //更新本地消息（撤回消息）
   onUpdateLocalMessage();
