@@ -280,7 +280,9 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         String filePath = targetFileFolder.getPath() + "/" + groupInfo.getGroupId() + Constants.IMAGE_SUFFIX;
         try {
             avatarFile.transferTo(new File(filePath));
-            avatarCover.transferTo(new File(filePath + Constants.COVER_IMAGE_SUFFIX));
+            if (avatarCover != null) {
+                avatarCover.transferTo(new File(filePath + Constants.COVER_IMAGE_SUFFIX));
+            }
         } catch (IOException e) {
             logger.error("头像上传失败", e);
             throw new BusinessException("头像上传失败");

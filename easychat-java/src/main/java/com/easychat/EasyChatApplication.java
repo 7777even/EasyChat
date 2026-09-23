@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import javax.servlet.MultipartConfigElement;
+import java.io.File;
 
 
 @EnableAsync
@@ -31,7 +32,13 @@ public class EasyChatApplication {
     MultipartConfigElement multipartConfigElement() {
         AppConfig appConfig = (AppConfig) ApplicationContextProvider.getBean("appConfig");
         MultipartConfigFactory factory = new MultipartConfigFactory();
-        factory.setLocation(appConfig.getProjectFolder() + Constants.FILE_FOLDER_TEMP);
+        // Tomcat multipart location 目录必须存在，否则上传时 part.write 会抛 FileNotFoundException
+        String tempLocation = appConfig.getProjectFolder() + Constants.FILE_FOLDER_TEMP;
+        File tempFolder = new File(tempLocation);
+        if (!tempFolder.exists()) {
+            tempFolder.mkdirs();
+        }
+        factory.setLocation(tempLocation);
         return factory.createMultipartConfig();
     }
 }

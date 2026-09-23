@@ -297,7 +297,9 @@ public class UserInfoServiceImpl implements UserInfoService {
             }
             String filePath = targetFileFolder.getPath() + "/" + userInfo.getUserId() + Constants.IMAGE_SUFFIX;
             avatarFile.transferTo(new File(filePath));
-            avatarCover.transferTo(new File(filePath + Constants.COVER_IMAGE_SUFFIX));
+            if (avatarCover != null) {
+                avatarCover.transferTo(new File(filePath + Constants.COVER_IMAGE_SUFFIX));
+            }
         }
         UserInfo dbInfo = this.userInfoMapper.selectByUserId(userInfo.getUserId());
 
