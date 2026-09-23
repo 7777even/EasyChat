@@ -24,5 +24,14 @@ public interface UserContactMapper<T,P> extends BaseMapper<T,P> {
 	 */
 	 T selectByUserIdAndContactId(@Param("userId") String userId,@Param("contactId") String contactId);
 
+	/**
+	 * 修改群成员角色（群主/管理员/成员）
+	 */
+	Integer updateRole(@Param("userId") String userId, @Param("contactId") String contactId, @Param("role") Integer role);
+
+	/**
+	 * 修改禁言到期时间（设为NULL解除禁言）
+	 */
+	Integer updateMuteEndTime(@Param("userId") String userId, @Param("contactId") String contactId, @Param("muteEndTime") java.util.Date muteEndTime);
 
 }

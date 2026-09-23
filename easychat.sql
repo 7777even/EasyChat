@@ -130,6 +130,8 @@ CREATE TABLE `user_contact`  (
   `create_time` datetime NULL DEFAULT NULL COMMENT '创建时间',
   `status` tinyint(1) NULL DEFAULT NULL COMMENT '状态 0:非好友 1:好友 2:已删除好友 3:被好友删除 4:已拉黑好友 5:被好友拉黑',
   `last_update_time` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
+  `role` tinyint(1) NULL DEFAULT 2 COMMENT '群成员角色（仅群组 contact_type=1 有效）0:群主 1:管理员 2:成员',
+  `mute_end_time` datetime NULL DEFAULT NULL COMMENT '禁言到期时间（仅群组有效，NULL表示未被禁言）',
   PRIMARY KEY (`user_id`, `contact_id`) USING BTREE,
   INDEX `idx_contact_id`(`contact_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4  COMMENT = '联系人';

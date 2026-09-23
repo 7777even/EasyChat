@@ -209,6 +209,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
             userContact.setUserId(groupInfo.getGroupOwnerId());
             userContact.setCreateTime(curDate);
             userContact.setLastUpdateTime(curDate);
+            userContact.setRole(GroupMemberRoleEnum.OWNER.getRole());
             this.userContactMapper.insert(userContact);
 
             //创建会话
@@ -383,11 +384,10 @@ public class GroupInfoServiceImpl implements GroupInfoService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-
     public void addOrRemoveGroupUser(TokenUserInfoDto tokenUserInfoDto, String groupId, String contactIds, Integer opType) {
         GroupInfo groupInfo = groupInfoMapper.selectByGroupId(groupId);
         if (null == groupInfo || !groupInfo.getGroupOwnerId().equals(tokenUserInfoDto.getUserId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_2305);
         }
         String[] contactIdList = contactIds.split(",");
         for (String contactId : contactIdList) {
@@ -397,6 +397,142 @@ public class GroupInfoServiceImpl implements GroupInfoService {
             } else {
                 userContactService.addContact(contactId, null, groupId, UserContactTypeEnum.GROUP.getType(), null);
             }
+        }
+    }
+
+    /**
+     * 校验当前用户在该群的角色是否满足最低角色要求
+     */
+    private UserContact checkGroupRole(String userId, String groupId, GroupMemberRoleEnum minRole) {
+        UserContact userContact = userContactMapper.selectByUserIdAndContactId(userId, groupId);
+        if (userContact == null || !UserContactStatusEnum.FRIEND.getStatus().equals(userContact.getStatus())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2304);
+        }
+        Integer role = userContact.getRole();
+        if (role == null) {
+            role = GroupMemberRoleEnum.MEMBER.getRole();
+        }
+        if (role > minRole.getRole()) {
+            // role 数值越大权限越小：0 群主 > 1 管理员 > 2 成员
+            throw new BusinessException(ResponseCodeEnum.CODE_2305);
+        }
+        return userContact;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void transferOwner(TokenUserInfoDto tokenUserInfoDto, String groupId, String newOwnerUserId) {
+        // 仅群主可操作
+        checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.OWNER);
+        if (tokenUserInfoDto.getUserId().equals(newOwnerUserId)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        // 新群主必须是群成员
+        UserContact newOwnerContact = checkGroupRole(newOwnerUserId, groupId, GroupMemberRoleEnum.MEMBER);
+        Date curDate = new Date();
+
+        // 1. 新群主 role -> 0
+        newOwnerContact.setRole(GroupMemberRoleEnum.OWNER.getRole());
+        newOwnerContact.setLastUpdateTime(curDate);
+        userContactMapper.updateByUserIdAndContactId(newOwnerContact, newOwnerUserId, groupId);
+
+        // 2. 原群主 role -> 2（成员）
+        UserContact oldOwnerContact = new UserContact();
+        oldOwnerContact.setRole(GroupMemberRoleEnum.MEMBER.getRole());
+        oldOwnerContact.setLastUpdateTime(curDate);
+        userContactMapper.updateByUserIdAndContactId(oldOwnerContact, tokenUserInfoDto.getUserId(), groupId);
+
+        // 3. 更新群信息表群主
+        GroupInfo updateInfo = new GroupInfo();
+        updateInfo.setGroupOwnerId(newOwnerUserId);
+        groupInfoMapper.updateByGroupId(updateInfo, groupId);
+
+        // 4. 更新会话冗余字段（群联系人名称等）
+        chatSessionUserService.updateRedundanceInfo(null, groupId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setAdmin(TokenUserInfoDto tokenUserInfoDto, String groupId, String userId, GroupMemberRoleEnum roleEnum) {
+        // 仅群主可设置/取消管理员
+        checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.OWNER);
+        if (tokenUserInfoDto.getUserId().equals(userId)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2306);
+        }
+        // 目标用户必须是群成员
+        UserContact targetContact = checkGroupRole(userId, groupId, GroupMemberRoleEnum.MEMBER);
+        // 不能操作其他群主（理论上群只有一个）
+        if (GroupMemberRoleEnum.OWNER.getRole().equals(targetContact.getRole())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2306);
+        }
+        userContactMapper.updateRole(userId, groupId, roleEnum.getRole());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void muteMember(TokenUserInfoDto tokenUserInfoDto, String groupId, String userId, Integer minutes) {
+        // 群主与管理员可禁言
+        checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.ADMIN);
+        if (tokenUserInfoDto.getUserId().equals(userId)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2306);
+        }
+        // 目标用户必须是群成员（管理员不可禁言群主）
+        UserContact targetContact = checkGroupRole(userId, groupId, GroupMemberRoleEnum.MEMBER);
+        if (GroupMemberRoleEnum.OWNER.getRole().equals(targetContact.getRole())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2306);
+        }
+        // 管理员不可禁言其他管理员
+        if (GroupMemberRoleEnum.ADMIN.getRole().equals(targetContact.getRole())
+                && GroupMemberRoleEnum.ADMIN.getRole().equals(checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.ADMIN).getRole())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2305);
+        }
+        Date muteEndTime = (minutes == null || minutes <= 0) ? null
+                : new Date(System.currentTimeMillis() + minutes * 60 * 1000L);
+        userContactMapper.updateMuteEndTime(userId, groupId, muteEndTime);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void editGroupNotice(TokenUserInfoDto tokenUserInfoDto, String groupId, String notice) {
+        // 群主或管理员可编辑
+        checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.ADMIN);
+        GroupInfo groupInfo = groupInfoMapper.selectByGroupId(groupId);
+        if (groupInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2303);
+        }
+        GroupInfo updateInfo = new GroupInfo();
+        updateInfo.setGroupNotice(notice);
+        groupInfoMapper.updateByGroupId(updateInfo, groupId);
+    }
+
+    @Override
+    public PaginationResultVO<UserContact> getGroupMemberList(TokenUserInfoDto tokenUserInfoDto, String groupId) {
+        // 仅群成员可查看
+        checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.MEMBER);
+        UserContactQuery query = new UserContactQuery();
+        query.setContactId(groupId);
+        query.setContactType(UserContactTypeEnum.GROUP.getType());
+        query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+        query.setQueryUserInfo(true);
+        query.setOrderBy("role asc, create_time asc");
+        int count = userContactMapper.selectCount(query);
+        SimplePage page = new SimplePage(1, count, PageSize.SIZE50.getSize());
+        query.setSimplePage(page);
+        List<UserContact> list = userContactMapper.selectList(query);
+        return new PaginationResultVO<>(count, page.getPageSize(), page.getPageNo(), page.getPageTotal(), list);
+    }
+
+    @Override
+    public void checkMuted(String userId, String groupId) {
+        if (userId == null || groupId == null) {
+            return;
+        }
+        UserContact userContact = userContactMapper.selectByUserIdAndContactId(userId, groupId);
+        if (userContact == null || userContact.getMuteEndTime() == null) {
+            return;
+        }
+        if (userContact.getMuteEndTime().after(new Date())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2307);
         }
     }
 }

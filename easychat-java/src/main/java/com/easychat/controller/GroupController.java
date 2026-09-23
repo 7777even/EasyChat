@@ -2,6 +2,7 @@ package com.easychat.controller;
 
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.dto.TokenUserInfoDto;
+import com.easychat.entity.enums.GroupMemberRoleEnum;
 import com.easychat.entity.enums.GroupStatusEnum;
 import com.easychat.entity.enums.MessageTypeEnum;
 import com.easychat.entity.enums.UserContactStatusEnum;
@@ -10,6 +11,7 @@ import com.easychat.entity.po.UserContact;
 import com.easychat.entity.query.GroupInfoQuery;
 import com.easychat.entity.query.UserContactQuery;
 import com.easychat.entity.vo.GroupInfoVO;
+import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.entity.vo.ResponseVO;
 import com.easychat.exception.BusinessException;
 import com.easychat.service.GroupInfoService;
@@ -163,5 +165,65 @@ public class GroupController extends ABaseController {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.addOrRemoveGroupUser(tokenUserInfoDto, groupId, selectContacts, opType);
         return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 转让群主（仅群主可操作）
+     */
+    @RequestMapping(value = "/transferOwner")
+    @GlobalInterceptor
+    public ResponseVO transferOwner(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String newOwnerUserId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        groupInfoService.transferOwner(tokenUserInfoDto, groupId, newOwnerUserId);
+        return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 设置/取消管理员（仅群主可操作，role 0=取消管理员 1=设为管理员）
+     */
+    @RequestMapping(value = "/setAdmin")
+    @GlobalInterceptor
+    public ResponseVO setAdmin(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, @NotNull Integer role) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        GroupMemberRoleEnum roleEnum = GroupMemberRoleEnum.ADMIN.getRole().equals(role)
+                ? GroupMemberRoleEnum.ADMIN : GroupMemberRoleEnum.MEMBER;
+        groupInfoService.setAdmin(tokenUserInfoDto, groupId, userId, roleEnum);
+        return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 禁言/解除禁言（群主与管理员可操作，minutes=0 表示解除）
+     */
+    @RequestMapping(value = "/muteMember")
+    @GlobalInterceptor
+    public ResponseVO muteMember(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, Integer minutes) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        if (minutes == null) {
+            minutes = 0;
+        }
+        groupInfoService.muteMember(tokenUserInfoDto, groupId, userId, minutes);
+        return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 编辑群公告（群主与管理员可操作）
+     */
+    @RequestMapping(value = "/editNotice")
+    @GlobalInterceptor
+    public ResponseVO editNotice(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String notice) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        groupInfoService.editGroupNotice(tokenUserInfoDto, groupId, notice);
+        return getSuccessResponseVO(null);
+    }
+
+    /**
+     * 分页获取群成员列表
+     */
+    @RequestMapping(value = "/memberList")
+    @GlobalInterceptor
+    public ResponseVO memberList(HttpServletRequest request, @NotEmpty String groupId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        PaginationResultVO<UserContact> result = groupInfoService.getGroupMemberList(tokenUserInfoDto, groupId);
+        return getSuccessResponseVO(result);
     }
 }

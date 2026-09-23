@@ -221,6 +221,10 @@ public class UserContactServiceImpl implements UserContactService {
         userContact.setCreateTime(curDate);
         userContact.setLastUpdateTime(curDate);
         userContact.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+        // 群组新成员默认角色：成员（群主在 saveGroup 中设置）
+        if (UserContactTypeEnum.GROUP.getType().equals(contactType)) {
+            userContact.setRole(GroupMemberRoleEnum.MEMBER.getRole());
+        }
         contactList.add(userContact);
         //如果是申请好友 接收人添加申请人  群组不用添加对方为好友
         if (UserContactTypeEnum.USER.getType().equals(contactType)) {

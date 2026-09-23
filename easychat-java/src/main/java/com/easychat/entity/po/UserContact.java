@@ -43,6 +43,18 @@ public class UserContact implements Serializable {
     private Integer status;
 
     /**
+     * 群成员角色 0:群主 1:管理员 2:成员（仅群组contactType=1时有效）
+     */
+    private Integer role;
+
+    /**
+     * 禁言到期时间（仅群组有效，NULL表示未被禁言）
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date muteEndTime;
+
+    /**
      * 最后更新时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
@@ -115,6 +127,22 @@ public class UserContact implements Serializable {
 
     public void setSex(Integer sex) {
         this.sex = sex;
+    }
+
+    public Integer getRole() {
+        return role;
+    }
+
+    public void setRole(Integer role) {
+        this.role = role;
+    }
+
+    public Date getMuteEndTime() {
+        return muteEndTime;
+    }
+
+    public void setMuteEndTime(Date muteEndTime) {
+        this.muteEndTime = muteEndTime;
     }
 
     @Override
