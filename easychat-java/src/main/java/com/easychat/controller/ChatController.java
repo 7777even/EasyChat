@@ -8,18 +8,14 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.MessageTypeEnum;
 import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.po.ChatMessage;
-import com.easychat.entity.po.MessageReadRecord;
 import com.easychat.entity.vo.ResponseVO;
 import com.easychat.exception.BusinessException;
 import com.easychat.service.ChatMessageService;
 import com.easychat.service.ChatSessionUserService;
-import com.easychat.service.MessageReadService;
 import com.easychat.utils.StringTools;
 import org.apache.commons.lang3.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,8 +30,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.List;
-
 
 @RestController
 @RequestMapping("/chat")
@@ -51,9 +45,6 @@ public class ChatController extends ABaseController {
 
     @Resource
     private AppConfig appConfig;
-
-    @Resource
-    private MessageReadService messageReadService;
 
 
     @RequestMapping("/sendMessage")
@@ -190,32 +181,5 @@ public class ChatController extends ABaseController {
         query.setPageNo(pageNo);
         query.setPageSize(20);
         return getSuccessResponseVO(chatMessageService.searchMessage(query, keyword, sendUserId, messageType, startTime, endTime));
-    }
-
-    /**
-     * 标记消息已读
-     */
-    @PostMapping("/markRead")
-    @GlobalInterceptor
-    public ResponseVO markRead(HttpServletRequest request,
-                               @NotEmpty String contactId,
-                               @NotNull Integer contactType,
-                               @NotEmpty String messageIds) {
-        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        List<Long> messageIdList = StringTools.stringToLongList(messageIds);
-        messageReadService.markRead(tokenUserInfoDto.getUserId(), contactId, contactType, messageIdList);
-        return getSuccessResponseVO(null);
-    }
-
-    /**
-     * 批量查询消息已读/送达状态
-     */
-    @GetMapping("/batchGetAck")
-    @GlobalInterceptor
-    public ResponseVO batchGetAck(HttpServletRequest request,
-                                  @NotEmpty String messageIds) {
-        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        List<Long> messageIdList = StringTools.stringToLongList(messageIds);
-        return getSuccessResponseVO(messageReadService.batchGetAckType(messageIdList));
     }
 }

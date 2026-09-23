@@ -63,23 +63,6 @@ CREATE TABLE `chat_message`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 1775 CHARACTER SET = utf8mb4  COMMENT = '聊天消息表';
 
 -- ----------------------------
--- Table structure for message_read_record
--- ----------------------------
-DROP TABLE IF EXISTS `message_read_record`;
-CREATE TABLE `message_read_record`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-  `message_id` bigint(20) NOT NULL COMMENT '关联 chat_message.message_id',
-  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '确认已读/已送达的用户 ID',
-  `contact_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属会话联系人 ID（群 ID 或对方用户 ID）',
-  `contact_type` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0:单聊 1:群聊',
-  `ack_type` tinyint(1) NOT NULL DEFAULT 2 COMMENT '2:已送达 3:已读',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '确认时间',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `uk_message_user`(`message_id`, `user_id`) USING BTREE,
-  INDEX `idx_user_contact`(`user_id`, `contact_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '消息已读/送达确认记录';
-
--- ----------------------------
 -- Table structure for chat_session
 -- ----------------------------
 DROP TABLE IF EXISTS `chat_session`;

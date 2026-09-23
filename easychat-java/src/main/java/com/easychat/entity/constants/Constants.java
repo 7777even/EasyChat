@@ -94,14 +94,8 @@ public class Constants {
     // 客户端→服务端：同步（请求服务端补推 seq > lastSeq 的消息）
     public static final Integer WS_SYNC_MESSAGE_TYPE = -2;
 
-    // 客户端→服务端：回执（确认已收到某条消息，用于消息已读/送达功能）
-    public static final Integer WS_CLIENT_ACK_MESSAGE_TYPE = -3;
-
     // 客户端→服务端：心跳包标识
     public static final Integer WS_HEARTBEAT_MESSAGE_TYPE = -4;
-
-    // 服务端→客户端：告知发送方某消息已被对方已送达/已读（ackType 2/3）
-    public static final Integer WS_ACK_NOTIFY_MESSAGE_TYPE = -5;
 
     /**
      * 服务端→客户端：跨端会话同步。通知其他设备某会话的元数据已更新（最后消息、未读数等），需立即刷新。

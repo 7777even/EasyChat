@@ -1,7 +1,6 @@
 package com.easychat.websocket.netty;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
@@ -10,7 +9,6 @@ import com.easychat.entity.po.ChatMessage;
 import com.easychat.entity.query.ChatMessageQuery;
 import com.easychat.mappers.ChatMessageMapper;
 import com.easychat.redis.RedisComponet;
-import com.easychat.service.MessageReadService;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
 import io.netty.channel.Channel;
@@ -26,9 +24,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
-
-import java.util.ArrayList;
-import java.util.List;
 
 
 
@@ -49,9 +44,6 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
 
     @Resource
     private ChatMessageMapper<ChatMessage, ChatMessageQuery> chatMessageMapper;
-
-    @Resource
-    private MessageReadService messageReadService;
 
     /**
      * 当通道就绪后会调用此方法，通常我们会在这里做一些初始化操作
@@ -101,11 +93,8 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             if (messageType != null && Constants.WS_SYNC_MESSAGE_TYPE.equals(messageType)) {
                 // 客户端请求补推：按 sessionId 传 lastSeq，服务端查询 seq > lastSeq 的消息推回
                 handleSync(userId, json.getJSONObject("extendData"));
-            } else if (messageType != null && Constants.WS_CLIENT_ACK_MESSAGE_TYPE.equals(messageType)) {
-                // 客户端确认已收到（用于消息送达/已读，功能二占位）
-                handleClientAck(userId, json.getJSONObject("extendData"));
             } else {
-                // 心跳或其他未知类型：仅刷新心跳
+                // 心跳或其他未知类型（含旧客户端残留的 -3 回执帧）：仅刷新心跳，静默忽略
                 redisComponet.saveUserHeartBeat(userId);
             }
         } catch (Exception e) {
@@ -164,41 +153,6 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             }
         }
     }
-
-    /**
-     * 处理客户端 CLIENT_ACK 帧
-     * extendData 格式: { "ackType": 2|3, "messageIds": [id1, id2, ...] }
-     *   ackType=2 → 已送达；ackType=3 → 已读
-     */
-    private void handleClientAck(String userId, JSONObject extendData) {
-        redisComponet.saveUserHeartBeat(userId);
-        if (extendData == null) {
-            return;
-        }
-        Integer ackType = extendData.getInteger("ackType");
-        if (ackType == null || (ackType != 2 && ackType != 3)) {
-            return;
-        }
-        JSONArray idArray = extendData.getJSONArray("messageIds");
-        if (idArray == null || idArray.isEmpty()) {
-            return;
-        }
-        List<Long> messageIds = new ArrayList<>();
-        for (int i = 0; i < idArray.size(); i++) {
-            Long id = idArray.getLong(i);
-            if (id != null) {
-                messageIds.add(id);
-            }
-        }
-        if (messageIds.isEmpty()) {
-            return;
-        }
-        // 构建 TokenUserInfoDto（只需要 userId 字段即为最小上下文）
-        TokenUserInfoDto userInfoDto = new TokenUserInfoDto();
-        userInfoDto.setUserId(userId);
-        messageReadService.batchAck(userInfoDto, messageIds, ackType);
-    }
-
 
     //用于处理用户自定义的事件  当有用户事件触发时会调用此方法，例如连接超时，异常等。
     @Override

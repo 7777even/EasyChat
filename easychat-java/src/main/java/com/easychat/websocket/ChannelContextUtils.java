@@ -407,36 +407,6 @@ public class ChannelContextUtils {
         }
     }
 
-    /**
-     * 通知消息发送方：对方已送达 / 已读
-     *
-     * @param senderUserId 消息发送方 userId
-     * @param ackUserId    确认方的 userId
-     * @param messageId    消息 ID
-     * @param contactType  联系人类型
-     * @param ackType      2=已送达 3=已读
-     */
-    public void sendAckNotify(String senderUserId, String ackUserId, Long messageId,
-                              Integer contactType, Integer ackType) {
-        ChannelGroup userGroup = USER_CONTEXT_MAP.get(senderUserId);
-        if (userGroup == null || userGroup.isEmpty()) {
-            // 发送方全部离线，无需通知
-            return;
-        }
-        MessageSendDto notify = new MessageSendDto();
-        notify.setMessageType(Constants.WS_ACK_NOTIFY_MESSAGE_TYPE);
-        notify.setMessageId(messageId);
-        notify.setContactId(ackUserId);      // 对方 ID
-        notify.setContactName(ackUserId);
-        notify.setContactType(contactType);
-        notify.setSeq(0L);
-        // extendData 携带 ackType
-        notify.setExtendData(ackType);
-        userGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(notify)));
-        logger.info("ackNotify -> sender={}, ackUser={}, msgId={}, ackType={}",
-                senderUserId, ackUserId, messageId, ackType);
-    }
-
     private void add2Group(String groupId, Channel context) {
         ChannelGroup group = GROUP_CONTEXT_MAP.get(groupId);
         if (group == null) {

@@ -4,9 +4,7 @@ package com.easychat.entity.enums;
 public enum MessageStatusEnum {
 
     SENDING(0, "发送中"),
-    SENDED(1, "已发送"),
-    DELIVERED(2, "已送达"),
-    READ(3, "已读");
+    SENDED(1, "已发送");
 
 
     private Integer status;
