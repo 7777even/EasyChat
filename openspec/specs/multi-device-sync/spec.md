@@ -23,23 +23,6 @@
 
 ---
 
-## Requirement: 跨端已读状态广播
-
-任一设备标记已读后，其他设备应实时感知并更新会话未读计数和消息的已读/送达标记。
-
-### Scenario: A 端已读，B 端实时同步
-
-- **WHEN** 用户 U 在设备 A 打开某会话，触发 `markRead`
-- **THEN** 发送方通过 ACK_NOTIFY (-5) 收到已读通知
-- **AND** U 的设备 B 也收到 ACK_NOTIFY (-5)
-
-### Scenario: 未读数多端一致
-
-- **WHEN** 用户 U 在设备 A 查看会话 S 后清除未读
-- **THEN** SYNC_SESSION (-6) 帧通知 U 的其他设备更新会话 S 的 `noReadCount = 0`
-
----
-
 ## Requirement: 跨端会话状态同步
 
 会话元数据变更（最后一条消息、未读数、置顶等）应在多端实时同步。
@@ -49,6 +32,11 @@
 - **WHEN** 用户 U 在设备 A 发送一条聊天消息
 - **THEN** 服务端向 U 的其他在线设备广播 SYNC_SESSION (-6) 帧
 - **AND** 设备 B 收到后更新本地会话的 `lastMessage`、`lastReceiveTime` 并触发 UI 排序
+
+### Scenario: 未读数多端一致（迁入 Scenario，归属 -6 帧体系）
+
+- **WHEN** 用户 U 在设备 A 查看会话 S 后清除未读
+- **THEN** SYNC_SESSION (-6) 帧通知 U 的其他设备更新会话 S 的 `noReadCount = 0`
 
 ---
 
@@ -111,5 +99,5 @@
 ### Scenario: A 端已收到消息，B 端不再重复推送
 
 - **WHEN** 用户 U 在设备 A 在线并收到新消息，之后设备 B 重连
-- **THEN** 设备 B 通过 INIT + SYNC 获取消息时，已通过 `message_read_record` 去重
+- **THEN** 设备 B 通过 INIT + SYNC 按会话 `seq > lastSeq` 增量补推获取消息，已推送的消息不再重复落库
 - **AND** 设备 A 和 B 不会在同一会话中看到重复消息

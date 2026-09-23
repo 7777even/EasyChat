@@ -54,4 +54,4 @@
 
 - [x] DoD: QA 含范围 / 验收口径 / 实际命令与用例数 / 未运行项 / 结论，证据附件齐（2026-09-23 已写 `engineering/qa/2026-09-23-remove-read-receipt.md` + 同目录证据附件；UI 截图为明确未运行项）
 - [x] DoD: Retro 四段式（2026-09-23 已写 `engineering/retro/2026-09-23-remove-read-receipt.md`，做好/问题/原因/改进四段齐）
-- [ ] DoD: 归档完成且 hygiene --strict 通过
+- [x] DoD: 归档完成且 hygiene --strict 通过（2026-09-23：`git mv` 至 `archive/2026-09-23-remove-read-receipt`，归档后 hygiene --strict 实测 0/0/0）
