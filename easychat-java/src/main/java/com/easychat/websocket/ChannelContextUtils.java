@@ -205,11 +205,39 @@ public class ChannelContextUtils {
      */
     private void send2User(MessageSendDto messageSendDto) {
         String contactId = messageSendDto.getContactId();
+        // 撤回帧多端同步（C4）：必须在 sendMsg→applyContactConvert 改写 contactId 之前
+        // 取未转换副本投递给发送方自己的设备，保证副本 contactId 保持「会话对方」语义，
+        // 否则发送方会以 contactId=自己 新建脏会话（见 design ADR-001）。
+        if (MessageTypeEnum.RECALL_MESSAGE.getType().equals(messageSendDto.getMessageType())) {
+            sendRecallToSenderDevices(messageSendDto);
+        }
         sendMsg(messageSendDto, contactId);
         //强制下线
         if (MessageTypeEnum.FORCE_OFF_LINE.getType().equals(messageSendDto.getMessageType())) {
             closeContext(contactId);
         }
+    }
+
+    /**
+     * 撤回帧发送方副本投递：把未经联系人转换的撤回帧直投 sendUserId 自己的全部在线设备，
+     * 使发送方的其他设备实时看到撤回（spec: 跨端消息撤回同步）。
+     * <p>
+     * 仅单聊（USER 分支）需要：群聊中发送者本就是群成员，经 sendMsg2Group 已天然收到。
+     * 发送方无在线设备时判空跳过、不入离线缓冲（由 DB 已改写的撤回内容在拉取历史时兜底）。
+     */
+    private void sendRecallToSenderDevices(MessageSendDto messageSendDto) {
+        String sendUserId = messageSendDto.getSendUserId();
+        // contactId 尚未转换；若与 sendUserId 相同说明本就是投给自己的脏数据帧，不再重复投递
+        if (sendUserId == null || sendUserId.equals(messageSendDto.getContactId())) {
+            return;
+        }
+        ChannelGroup senderGroup = USER_CONTEXT_MAP.get(sendUserId);
+        if (senderGroup == null || senderGroup.isEmpty()) {
+            logger.debug("撤回帧发送方副本跳过：sendUserId={} 无在线设备", sendUserId);
+            return;
+        }
+        senderGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
+        logger.info("撤回帧发送方副本已投递 sendUserId={}, devices={}", sendUserId, senderGroup.size());
     }
 
     /**
