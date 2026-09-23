@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
 const NODE_ENV = process.env.NODE_ENV
-import { saveMessage, saveMessageBatch, updateMessage } from "./db/ChatMessageModel"
+import { saveMessage, saveMessageBatch, updateMessage, existsMessage } from "./db/ChatMessageModel"
 import {
     saveOrUpdateChatSessionBatch4Init, saveOrUpdate4Message,
     updateGroupName, delChatSession, selectUserSessionByContactId,
@@ -228,13 +228,19 @@ const createWs = () => {
                 }
                 console.log("sessionInfo", sessionInfo);
                 await saveOrUpdate4Message(store.getUserData("currentSessionId"), sessionInfo);
-                //撤回消息更新本地消息，不新增消息
+                //撤回消息：本地已有则更新；本地缺行（离线期间被撤回、SYNC补推首达撤回帧）则补插入历史，避免撤回消息丢失
                 if (messageType == 14) {
-                    updateMessage({ 
+                    const recallInfo = { 
                         messageType: 14, 
                         messageContent: message.messageContent || '该消息已撤回',
                         status: 1  // 确保消息状态为已发送
-                    }, { messageId: message.messageId });
+                    };
+                    const exists = await existsMessage(message.messageId);
+                    if (exists != null && exists.messageId != null) {
+                        await updateMessage(recallInfo, { messageId: message.messageId });
+                    } else {
+                        await saveMessage(Object.assign({}, message, recallInfo));
+                    }
                 } else {
                     //写入本地消息
                     await saveMessage(message);

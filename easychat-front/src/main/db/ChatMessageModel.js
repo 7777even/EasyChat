@@ -51,6 +51,11 @@ const updateMessage = (data, paramData) => {
     return update("chat_message", data, paramData);
 }
 
+//查询本地消息是否已存在（撤回帧补落历史：本地缺行时需插入而非仅更新）
+const existsMessage = (messageId) => {
+    return queryOne("select message_id from chat_message where user_id = ? and message_id = ?", [store.getUserId(), messageId]);
+}
+
 const saveMessageBatch = (chatMessageList) => {
     return new Promise(async (resolve, reject) => {
         //插入聊天数据
@@ -158,6 +163,7 @@ const searchMessages = (query) => {
 export {
     saveMessage,
     updateMessage,
+    existsMessage,
     selectMessageList,
     saveMessageBatch,
     selectByMessageId,
