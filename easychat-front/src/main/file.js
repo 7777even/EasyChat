@@ -291,33 +291,59 @@ const downloadFile = (fileId, showCover, savePath, partType) => {
     showCover = Boolean(showCover);
     let url = `${getDomain()}/api/chat/downloadFile`;
     const token = store.getUserData("token");
-    return new Promise(async (resolve, reject) => {
-        const config = { responseType: 'stream', headers: { 'Content-Type': 'multipart/form-data', "token": token } };
+    return new Promise((resolve, reject) => {
+        // validateStatus 允许 4xx/5xx 也进入响应处理，避免 README 400 JSON 响应被当作网络错误
+        const config = {
+            responseType: 'stream',
+            headers: { 'Content-Type': 'multipart/form-data', "token": token },
+            validateStatus: () => true
+        };
         // 发送POST请求
-        let response = await axios.post(url, {
+        axios.post(url, {
             fileId,
             showCover,
             partType
-        }, config);
-        const folder = savePath.substring(0, savePath.lastIndexOf("/"));
-        mkdirs(folder);
-        const stream = fs.createWriteStream(savePath);
-        if (response.headers["content-type"] && response.headers["content-type"].includes("application/json")) {
-            //console.log("获取图片失败", url);
-            let resourcesPath = path.join(app.getAppPath(), '/');
-            if (NODE_ENV !== 'development') {
-                resourcesPath = path.join(path.dirname(app.getPath('exe')), '/resources/');
-            }
-            if (partType == "avatar") {
-                fs.createReadStream(resourcesPath + "assets/user.png").pipe(stream);
+        }, config).then((response) => {
+            const folder = savePath.substring(0, savePath.lastIndexOf("/"));
+            mkdirs(folder);
+            const stream = fs.createWriteStream(savePath);
+            if (response.headers["content-type"] && response.headers["content-type"].includes("application/json")) {
+                // 后端返回了 JSON（文件不存在等业务错误），使用兜底图片
+                let resourcesPath = path.join(app.getAppPath(), '/');
+                if (NODE_ENV !== 'development') {
+                    resourcesPath = path.join(path.dirname(app.getPath('exe')), '/resources/');
+                }
+                if (partType == "avatar") {
+                    fs.createReadStream(resourcesPath + "assets/user.png").pipe(stream);
+                } else {
+                    fs.createReadStream(resourcesPath + "assets/404.png").pipe(stream);
+                }
             } else {
-                fs.createReadStream(resourcesPath + "assets/404.png").pipe(stream);
+                response.data.pipe(stream);
             }
-        } else {
-            response.data.pipe(stream);
-        }
-        stream.on('finish', () => {
-            stream.close();
+            stream.on('finish', () => {
+                stream.close();
+                resolve();
+            });
+            stream.on('error', (err) => {
+                console.error('写入文件失败', savePath, err);
+                reject(err);
+            });
+        }).catch(async (err) => {
+            console.error('下载文件失败', url, fileId, err);
+            // 网络异常等无法拿到响应时，也写入兜底图片，避免后续读取本地文件报错
+            try {
+                const folder = savePath.substring(0, savePath.lastIndexOf("/"));
+                mkdirs(folder);
+                let resourcesPath = path.join(app.getAppPath(), '/');
+                if (NODE_ENV !== 'development') {
+                    resourcesPath = path.join(path.dirname(app.getPath('exe')), '/resources/');
+                }
+                const defaultImage = partType == "avatar" ? "assets/user.png" : "assets/404.png";
+                fs.copyFileSync(resourcesPath + defaultImage, savePath);
+            } catch (copyErr) {
+                console.error('写入兜底图片失败', savePath, copyErr);
+            }
             resolve();
         });
     });
