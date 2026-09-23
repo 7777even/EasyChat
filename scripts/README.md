@@ -9,7 +9,7 @@
 | `commit-msg-lint.mjs` | git hook `commit-msg` | 提交格式 `type(scope): 描述`、type / scope 枚举、描述含中文、禁止 body |
 | `pre-commit-guard.mjs` | git hook `pre-commit` | 暂存区黑名单（构建产物、日志、临时文件）；QA 证据附件除外 |
 | `check-api-contract.mjs` | 本地手动 / CI | 后端 Controller 路由 vs 前端 `Api.js` 调用，找出孤儿路由 / 潜在漂移 |
-| `check-openspec-hygiene.mjs` | git hook `pre-push` | 进行中的 Change 是否四件套齐全、tasks.md 全勾但未归档阻断推送 |
+| `check-openspec-hygiene.mjs` | git hook `pre-push` | 进行中的 Change 是否四件套齐全、tasks.md 全勾但未归档阻断推送、archive 内 tasks.md 存在未勾选任务阻断推送 |
 | `setup-git-hooks.mjs` | 一键安装脚本 | 把上述脚本注册到 `.git/hooks/` |
 
 ## 安装
@@ -20,7 +20,7 @@ node scripts/setup-git-hooks.mjs
 
 安装后：
 - `git commit` → 自动触发 commit-msg-lint + pre-commit-guard
-- `git push`  → 自动触发 check-openspec-hygiene（全勾未归档则拒绝推送）
+- `git push`  → 自动触发 check-openspec-hygiene（全勾未归档、或已归档但未全勾，均拒绝推送）
 
 ## 跳过（慎用）
 

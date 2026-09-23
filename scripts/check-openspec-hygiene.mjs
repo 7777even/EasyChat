@@ -6,6 +6,8 @@
  *   1. changes/ 下的 Change 是否四件套齐全
  *   2. tasks.md 全部勾选但未归档（视为「未归档」）
  *   3. archive/ 下的归档目录命名是否符合 YYYY-MM-DD-<name> 前缀
+ *   4. archive/ 下的归档 tasks.md 是否存在未勾选任务（全勾是归档前置条件，
+ *      已归档却未全勾 = 违反 AGENTS §7.1，阻断推送）
  * 
  * 用法：node scripts/check-openspec-hygiene.mjs [--strict]
  *   --strict 时 WARN 升级为阻塞 exit 1
@@ -74,6 +76,22 @@ if (archiveEntries !== null) {
   for (const d of dirs) {
     if (!datePrefix.test(d.name)) {
       warnings.push(`archive/${d.name} 缺少 YYYY-MM-DD- 日期前缀`);
+    }
+
+    // 归档完整性：tasks.md 全勾是归档前置条件（AGENTS §7.1），反向情况同样阻断
+    const tasksPath = join(ARCHIVE, d.name, 'tasks.md');
+    if (existsSync(tasksPath)) {
+      const content = readFileSync(tasksPath, 'utf-8');
+      const allChecks = [...content.matchAll(/- \[[ x]\]/g)];
+      const unchecked = [...content.matchAll(/- \[ \]/g)];
+      if (unchecked.length > 0) {
+        errors.push(
+          `archive/${d.name} tasks.md 存在 ${unchecked.length}/${allChecks.length} 个未勾选任务` +
+          `（已归档但未全勾，违反 AGENTS §7.1「全勾必归档」；补勾并对账，或移回 changes/ 继续执行）`
+        );
+      }
+    } else {
+      warnings.push(`archive/${d.name} 缺 tasks.md（无法核验归档前置条件）`);
     }
   }
 }
