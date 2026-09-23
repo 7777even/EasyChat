@@ -117,6 +117,21 @@ public class RedisUtils<V> {
         }
     }
 
+    /**
+     * Redis INCR：原子递增，用于产生会话内单调序号 seq
+     *
+     * @param key 序列号 key
+     * @return 递增后的值；失败返回 -1
+     */
+    public Long incr(String key) {
+        try {
+            return redisTemplate.opsForValue().increment(key);
+        } catch (Exception e) {
+            logger.error("incr key:{} 失败", key, e);
+            return -1L;
+        }
+    }
+
     public boolean lpushAll(String key, List<V> values, long time) {
         try {
             redisTemplate.opsForList().leftPushAll(key, values);

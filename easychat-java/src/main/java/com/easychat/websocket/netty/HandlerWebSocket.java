@@ -1,7 +1,16 @@
 package com.easychat.websocket.netty;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.easychat.entity.constants.Constants;
+import com.easychat.entity.dto.MessageSendDto;
 import com.easychat.entity.dto.TokenUserInfoDto;
+import com.easychat.entity.po.ChatMessage;
+import com.easychat.entity.query.ChatMessageQuery;
+import com.easychat.mappers.ChatMessageMapper;
 import com.easychat.redis.RedisComponet;
+import com.easychat.service.MessageReadService;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
 import io.netty.channel.Channel;
@@ -17,6 +26,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+
+import java.util.ArrayList;
+import java.util.List;
 
 
 
@@ -34,6 +46,12 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
 
     @Resource
     private RedisComponet redisComponet;
+
+    @Resource
+    private ChatMessageMapper<ChatMessage, ChatMessageQuery> chatMessageMapper;
+
+    @Resource
+    private MessageReadService messageReadService;
 
     /**
      * 当通道就绪后会调用此方法，通常我们会在这里做一些初始化操作
@@ -68,11 +86,117 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
      */
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame textWebSocketFrame) throws Exception {
-        //接收心跳
         Channel channel = ctx.channel();
         Attribute<String> attribute = channel.attr(AttributeKey.valueOf(channel.id().toString()));
         String userId = attribute.get();
+        if (StringTools.isEmpty(userId)) {
+            return;
+        }
+
+        String text = textWebSocketFrame.text();
+        // 解析 JSON 帧，按 messageType 分发
+        try {
+            JSONObject json = JSON.parseObject(text);
+            Integer messageType = json.getInteger("messageType");
+            if (messageType != null && Constants.WS_SYNC_MESSAGE_TYPE.equals(messageType)) {
+                // 客户端请求补推：按 sessionId 传 lastSeq，服务端查询 seq > lastSeq 的消息推回
+                handleSync(userId, json.getJSONObject("extendData"));
+            } else if (messageType != null && Constants.WS_CLIENT_ACK_MESSAGE_TYPE.equals(messageType)) {
+                // 客户端确认已收到（用于消息送达/已读，功能二占位）
+                handleClientAck(userId, json.getJSONObject("extendData"));
+            } else {
+                // 心跳或其他未知类型：仅刷新心跳
+                redisComponet.saveUserHeartBeat(userId);
+            }
+        } catch (Exception e) {
+            // 非 JSON 文本 → 视为心跳
+            redisComponet.saveUserHeartBeat(userId);
+        }
+    }
+
+    /**
+     * 处理客户端 SYNC 帧：按 sessionId 下发 seq > lastSeq 的消息
+     * extendData 格式: { "sync": { "sessionId1": lastSeq1, "sessionId2": lastSeq2 } }
+     */
+    private void handleSync(String userId, JSONObject extendData) {
         redisComponet.saveUserHeartBeat(userId);
+        if (extendData == null) {
+            return;
+        }
+        JSONObject syncObj = extendData.getJSONObject("sync");
+        if (syncObj == null || syncObj.isEmpty()) {
+            return;
+        }
+        for (String sessionId : syncObj.keySet()) {
+            Long lastSeq = syncObj.getLong(sessionId);
+            if (lastSeq == null) {
+                continue;
+            }
+            ChatMessageQuery query = new ChatMessageQuery();
+            query.setSessionId(sessionId);
+            query.setSeqStart(lastSeq);
+            query.setSeqNotNull(true);
+            query.setOrderBy("seq ASC");
+            java.util.List<ChatMessage> missingList = chatMessageMapper.selectList(query);
+            if (missingList == null || missingList.isEmpty()) {
+                continue;
+            }
+            logger.info("SYNC 补推: userId={}, sessionId={}, lastSeq={}, 补推{}条",
+                    userId, sessionId, lastSeq, missingList.size());
+            for (ChatMessage msg : missingList) {
+                MessageSendDto sendDto = new MessageSendDto();
+                sendDto.setMessageId(msg.getMessageId());
+                sendDto.setSessionId(msg.getSessionId());
+                sendDto.setMessageType(msg.getMessageType());
+                sendDto.setMessageContent(msg.getMessageContent());
+                sendDto.setSendUserId(msg.getSendUserId());
+                sendDto.setSendUserNickName(msg.getSendUserNickName());
+                sendDto.setSendTime(msg.getSendTime());
+                sendDto.setContactId(msg.getContactId());
+                sendDto.setContactType(msg.getContactType());
+                sendDto.setSeq(msg.getSeq());
+                sendDto.setStatus(msg.getStatus());
+                sendDto.setFileSize(msg.getFileSize());
+                sendDto.setFileName(msg.getFileName());
+                sendDto.setFileType(msg.getFileType());
+                sendDto.setContactName(msg.getSendUserNickName());
+                channelContextUtils.sendMessage(sendDto);
+            }
+        }
+    }
+
+    /**
+     * 处理客户端 CLIENT_ACK 帧
+     * extendData 格式: { "ackType": 2|3, "messageIds": [id1, id2, ...] }
+     *   ackType=2 → 已送达；ackType=3 → 已读
+     */
+    private void handleClientAck(String userId, JSONObject extendData) {
+        redisComponet.saveUserHeartBeat(userId);
+        if (extendData == null) {
+            return;
+        }
+        Integer ackType = extendData.getInteger("ackType");
+        if (ackType == null || (ackType != 2 && ackType != 3)) {
+            return;
+        }
+        JSONArray idArray = extendData.getJSONArray("messageIds");
+        if (idArray == null || idArray.isEmpty()) {
+            return;
+        }
+        List<Long> messageIds = new ArrayList<>();
+        for (int i = 0; i < idArray.size(); i++) {
+            Long id = idArray.getLong(i);
+            if (id != null) {
+                messageIds.add(id);
+            }
+        }
+        if (messageIds.isEmpty()) {
+            return;
+        }
+        // 构建 TokenUserInfoDto（只需要 userId 字段即为最小上下文）
+        TokenUserInfoDto userInfoDto = new TokenUserInfoDto();
+        userInfoDto.setUserId(userId);
+        messageReadService.batchAck(userInfoDto, messageIds, ackType);
     }
 
 

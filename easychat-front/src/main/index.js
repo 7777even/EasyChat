@@ -9,8 +9,8 @@ import {
   onOpenNewWindow, openWindow, onSetSessionSelect, onLoadContactApply, onUpdateContactNoReadCount,
   onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
-  onTopChatSession, onReloadChatSession
-} from "./ipc"
+  onTopChatSession, onReloadChatSession, onRegisterPendingAck, onSendClientAck
+} from "ipc"
 import { saveWindow } from './windowProxy'
 
 const login_width = 300;
@@ -212,6 +212,12 @@ function createWindow() {
 
   //增加本地消息
   onAddLocalMessage();
+
+  //注册待 ACK 消息
+  onRegisterPendingAck();
+
+  //发送 CLIENT_ACK 帧
+  onSendClientAck();
 
   //更新本地消息（撤回消息）
   onUpdateLocalMessage();

@@ -31,6 +31,13 @@
       </template>
     </div>
     <Avatar :width="35" :userId="userInfoStore.getInfo().userId"> </Avatar>
+    <!-- 单聊发送方：显示已读/送达状态 -->
+    <div
+      v-if="data.contactType == 0 && (data.messageType == 2 || data.messageType == 5) && data.status == 1"
+      class="read-status-tip"
+    >
+      {{ data.ackType == 3 ? '已读' : (data.ackType == 2 ? '已送达' : '') }}
+    </div>
   </div>
   <div 
     class="message-content-other" 
@@ -196,6 +203,16 @@ const onContextMenu = (e) => {
     border-radius: 2px;
     top: 13px;
   }
+}
+
+.read-status-tip {
+  clear: both;
+  float: right;
+  font-size: 11px;
+  color: #999;
+  margin-right: 40px;
+  margin-top: -8px;
+  padding: 2px 0;
 }
 
 .content-panel-media {

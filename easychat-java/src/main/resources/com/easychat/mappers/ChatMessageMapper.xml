@@ -31,6 +31,10 @@
         <result column="file_type" property="fileType"/>
         <!--状态 0:正在发送 1:已发送-->
         <result column="status" property="status"/>
+        <!--会话内单调序号-->
+        <result column="seq" property="seq"/>
+        <!--客户端去重键-->
+        <result column="client_id" property="clientId"/>
     </resultMap>
 
 
@@ -39,7 +43,7 @@
         message_id
         ,session_id,message_type,message_content,send_user_id,
 		 send_user_nick_name,send_time,contact_id,contact_type,file_size,
-		 file_name,file_type,status
+		 file_name,file_type,status,seq,client_id
     </sql>
 
     <sql id="base_condition_filed">
@@ -81,6 +85,15 @@
         </if>
         <if test="query.status != null">
             and status = #{query.status}
+        </if>
+        <if test="query.seqStart != null">
+            and seq > #{query.seqStart}
+        </if>
+        <if test="query.seqNotNull != null and query.seqNotNull == true">
+            and seq is not null
+        </if>
+        <if test="query.messageIdLongList != null and query.messageIdLongList.size()>0">
+            and message_id in(<foreach collection="query.messageIdLongList" separator="," item="item">#{item}</foreach>)
         </if>
     </sql>
     <!-- 通用条件列-->
@@ -194,6 +207,12 @@
             <if test="bean.status != null">
                 status,
             </if>
+            <if test="bean.seq != null">
+                seq,
+            </if>
+            <if test="bean.clientId != null">
+                client_id,
+            </if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="bean.sessionId!=null">
@@ -231,6 +250,12 @@
             </if>
             <if test="bean.status!=null">
                 #{bean.status},
+            </if>
+            <if test="bean.seq!=null">
+                #{bean.seq},
+            </if>
+            <if test="bean.clientId!=null">
+                #{bean.clientId},
             </if>
         </trim>
     </insert>
@@ -278,6 +303,12 @@
             <if test="bean.status != null">
                 status,
             </if>
+            <if test="bean.seq != null">
+                seq,
+            </if>
+            <if test="bean.clientId != null">
+                client_id,
+            </if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="bean.messageId!=null">
@@ -319,6 +350,12 @@
             <if test="bean.status!=null">
                 #{bean.status},
             </if>
+            <if test="bean.seq!=null">
+                #{bean.seq},
+            </if>
+            <if test="bean.clientId!=null">
+                #{bean.clientId},
+            </if>
         </trim>
         on DUPLICATE key update
         <trim prefix="" suffix="" suffixOverrides=",">
@@ -357,6 +394,12 @@
             </if>
             <if test="bean.status!=null">
                 status = VALUES(status),
+            </if>
+            <if test="bean.seq!=null">
+                seq = VALUES(seq),
+            </if>
+            <if test="bean.clientId!=null">
+                client_id = VALUES(client_id),
             </if>
         </trim>
     </insert>
@@ -483,6 +526,12 @@
             <if test="bean.status != null">
                 status = #{bean.status},
             </if>
+            <if test="bean.seq != null">
+                seq = #{bean.seq},
+            </if>
+            <if test="bean.clientId != null">
+                client_id = #{bean.clientId},
+            </if>
         </set>
         <include refid="query_condition"/>
     </update>
@@ -532,6 +581,12 @@
             </if>
             <if test="bean.status != null">
                 status = #{bean.status},
+            </if>
+            <if test="bean.seq != null">
+                seq = #{bean.seq},
+            </if>
+            <if test="bean.clientId != null">
+                client_id = #{bean.clientId},
             </if>
         </set>
         where message_id=#{messageId}

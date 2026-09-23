@@ -187,6 +187,13 @@ const sendMessageDo = async (
   messageObj.sessionId = props.currentChatSession.sessionId
   messageObj.sendUserId = userInfoStore.getInfo().userId
 
+  // ===== 消息可靠性：生成客户端唯一 ID，用于去重 + ACK 匹配 =====
+  // 仅对需要可靠投递的消息类型生成 clientId（排除群创建系统消息）
+  const needReliable = [2, 5].includes(messageObj.messageType)
+  if (needReliable && !messageObj.clientId) {
+    messageObj.clientId = crypto.randomUUID()
+  }
+
   //请求服务器发送消息
   let result = await proxy.Request({
     url: proxy.Api.sendMessage,
@@ -197,7 +204,8 @@ const sendMessageDo = async (
       messageType: messageObj.messageType,
       fileSize: messageObj.fileSize,
       fileName: messageObj.fileName,
-      fileType: messageObj.fileType
+      fileType: messageObj.fileType,
+      clientId: messageObj.clientId || null
     },
     showError: false,
     errorCallback: (responseData) => {
@@ -222,7 +230,15 @@ const sendMessageDo = async (
   emit('sendMessage4Local', messageObj)
   //保存消息到本地
   window.ipcRenderer.send('addLocalMessage', messageObj)
-  
+
+  //注册待 ACK 消息
+  if (messageObj.clientId) {
+    window.ipcRenderer.send('registerPendingAck', {
+      clientId: messageObj.clientId,
+      messageObj
+    })
+  }
+
   // 返回 messageId 用于文件上传
   return result.data
 }

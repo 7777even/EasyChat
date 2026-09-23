@@ -101,8 +101,23 @@ public class ChatMessageQuery extends BaseParam {
      */
     private Integer status;
 
+    /**
+     * 会话内序列号起始（查 seq > seqStart 的消息，用于 SYNC 补推）
+     */
+    private Long seqStart;
+
+    /**
+     * 是否只查 seq 不为 NULL 的消息
+     */
+    private Boolean seqNotNull;
+
 
     private List<String> contactIdList;
+
+    /**
+     * 消息ID Long 列表（用于按 messageId 批量查询）
+     */
+    private List<Long> messageIdLongList;
 
     private Long lastReceiveTime;
 
@@ -282,6 +297,22 @@ public class ChatMessageQuery extends BaseParam {
         return this.status;
     }
 
+    public Long getSeqStart() {
+        return seqStart;
+    }
+
+    public void setSeqStart(Long seqStart) {
+        this.seqStart = seqStart;
+    }
+
+    public Boolean getSeqNotNull() {
+        return seqNotNull;
+    }
+
+    public void setSeqNotNull(Boolean seqNotNull) {
+        this.seqNotNull = seqNotNull;
+    }
+
     public List<String> getContactIdList() {
         return contactIdList;
     }
@@ -296,5 +327,13 @@ public class ChatMessageQuery extends BaseParam {
 
     public void setLastReceiveTime(Long lastReceiveTime) {
         this.lastReceiveTime = lastReceiveTime;
+    }
+
+    public List<Long> getMessageIdLongList() {
+        return messageIdLongList;
+    }
+
+    public void setMessageIdLongList(List<Long> messageIdLongList) {
+        this.messageIdLongList = messageIdLongList;
     }
 }

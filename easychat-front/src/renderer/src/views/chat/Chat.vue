@@ -199,6 +199,38 @@ const chatSessionClickHandler = (item) => {
   setSessionSelect({contactId: item.contactId, sessionId: item.sessionId})
   //清空输入框中的消息
   messageSendRef.value.cleanMessage()
+  // 进入会话时，对本会话中所有非本人发送的消息发送已读 ACK
+  sendReadAckForSession(item)
+}
+
+// 收集指定会话中所有非本人发送、且未标记已读的消息 ID，发送已读 ACK
+const sendReadAckForSession = (sessionItem) => {
+  if (!sessionItem || !messageList.value || messageList.value.length === 0) {
+    return
+  }
+  const currentUserId = userInfoStore.getInfo().userId
+  const readMessageIds = []
+  const readMessageLocalIds = []
+  messageList.value.forEach((msg) => {
+    if (
+      msg.sendUserId !== currentUserId &&
+      (msg.messageType === 2 || msg.messageType === 5) &&
+      msg.ackType == null
+    ) {
+      readMessageIds.push(String(msg.messageId))
+      readMessageLocalIds.push(msg.messageId)
+    }
+  })
+  if (readMessageIds.length > 0) {
+    window.ipcRenderer.send('sendClientAck', { ackType: 3, messageIds: readMessageIds })
+    // 本地乐观更新：直接将消息标记为已读（避免等服务端通知才刷新）
+    readMessageLocalIds.forEach((mid) => {
+      const found = messageList.value.find((m) => m.messageId === mid)
+      if (found) {
+        found.ackType = 3
+      }
+    })
+  }
 }
 
 const setSessionSelect = ({contactId, sessionId}) => {
@@ -297,6 +329,19 @@ const onReciveMessage = () => {
       })
       return
     }
+    // 收到聊天消息且当前正在查看发送方的会话，立即回复已读 ACK
+    if (
+      (message.messageType === 2 || message.messageType === 5) &&
+      message.sendUserId !== userInfoStore.getInfo().userId &&
+      message.sessionId === currentChatSession.value.sessionId
+    ) {
+      window.ipcRenderer.send('sendClientAck', {
+        ackType: 3,
+        messageIds: [String(message.messageId)]
+      })
+      message.ackType = 3
+    }
+
     //添加好友、创建群、加入群
     //刷新我的联系人列表，如果当前页面正在联系人列表页面，加入群组申请通过后需要刷新列表
     if (message.messageType == 9 && message.extendData.userId == userInfoStore.getInfo().userId) {
@@ -389,6 +434,42 @@ const onAddLocalMessage = () => {
   })
 }
 
+// 监听服务端 ACK_NOTIFY：对方已送达/已读本端发送的消息
+const onAckNotify = () => {
+  window.ipcRenderer.on('ackNotify', (e, { messageId, ackUserId, ackType }) => {
+    if (messageId == null || ackType == null) return
+    const msg = messageList.value.find((m) => String(m.messageId) === String(messageId))
+    if (msg) {
+      // 升级 ackType（2=已送达 → 3=已读，只升不降）
+      if (msg.ackType == null || ackType > msg.ackType) {
+        msg.ackType = ackType
+        // 记录有谁读了（仅单聊展示）
+        if (msg.contactType === 0 && ackUserId && !msg.readBy) {
+          msg.readBy = ackUserId
+        }
+      }
+    }
+  })
+}
+
+// 监听跨端会话同步（SYNC_SESSION），更新本地会话列表
+const onSyncSession = () => {
+  window.ipcRenderer.on('syncSession', (e, sessionData) => {
+    if (!sessionData || !sessionData.sessionId) return
+    const session = chatSessionList.value.find((s) => s.sessionId === sessionData.sessionId)
+    if (session) {
+      if (sessionData.lastMessage !== undefined) {
+        session.lastMessage = sessionData.lastMessage
+      }
+      if (sessionData.lastReceiveTime !== undefined) {
+        session.lastReceiveTime = sessionData.lastReceiveTime
+      }
+      // 重新排序会话列表
+      sortChatSessionList(chatSessionList.value)
+    }
+  })
+}
+
 //发送本地消息
 const sendMessage4LocalHandler = (messageObj) => {
   messageList.value.push(messageObj)
@@ -458,6 +539,12 @@ onMounted(() => {
 
   onAddLocalMessage()
 
+  //监听服务端 ACK_NOTIFY 通知
+  onAckNotify()
+
+  // 监听跨端会话同步
+  onSyncSession()
+
   //重新加载已删除的会话
   onReloadChatSession()
 
@@ -483,6 +570,8 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('loadChatMessage')
   window.ipcRenderer.removeAllListeners('loadContactApply')
   window.ipcRenderer.removeAllListeners('addLocalCallback')
+  window.ipcRenderer.removeAllListeners('ackNotify')
+  window.ipcRenderer.removeAllListeners('syncSession')
   window.ipcRenderer.removeAllListeners('reloadChatSessionCallback')
 })
 

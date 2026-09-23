@@ -130,5 +130,21 @@ public class StringTools {
     public static final String getChatSessionId4Group(String groupId) {
         return encodeByMD5(groupId);
     }
+
+    public static java.util.List<Long> stringToLongList(String str) {
+        java.util.List<Long> list = new java.util.ArrayList<>();
+        if (isEmpty(str)) {
+            return list;
+        }
+        String[] arr = str.split(",");
+        for (String s : arr) {
+            try {
+                list.add(Long.parseLong(s.trim()));
+            } catch (NumberFormatException e) {
+                // skip invalid
+            }
+        }
+        return list;
+    }
 }
 

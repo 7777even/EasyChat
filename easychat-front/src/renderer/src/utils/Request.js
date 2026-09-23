@@ -90,6 +90,22 @@ instance.interceptors.response.use(
         if (error.config && error.config.showLoading && loading) {
             loading.close();
         }
+        // HTTP 非 2xx 但后端返回了 Result 结构（如 400/401/403 + {code, message}）：
+        // 按业务错误处理，避免把真实错误信息误报为网络异常
+        const responseData = error.response && error.response.data;
+        if (responseData && responseData.code !== undefined) {
+            if (responseData.code == ErrorCode.TOKEN_EXPIRED || responseData.code == ErrorCode.LEGACY_TOKEN_EXPIRED) {
+                setTimeout(() => {
+                    window.ipcRenderer.send('reLogin')
+                }, 2000);
+                return Promise.reject({ showError: true, msg: "登录超时" });
+            }
+            const showError = error.config ? error.config.showError !== false : true;
+            if (error.config && error.config.errorCallback) {
+                error.config.errorCallback(responseData);
+            }
+            return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
+        }
         // 开发环境打印详细错误
         if (error && error.config) {
             const { url, data, params } = error.config;

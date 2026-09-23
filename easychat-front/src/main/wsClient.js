@@ -3,7 +3,8 @@ const NODE_ENV = process.env.NODE_ENV
 import { saveMessage, saveMessageBatch, updateMessage } from "./db/ChatMessageModel"
 import {
     saveOrUpdateChatSessionBatch4Init, saveOrUpdate4Message,
-    updateGroupName, delChatSession, selectUserSessionByContactId
+    updateGroupName, delChatSession, selectUserSessionByContactId,
+    updateSessionBySessionId
 } from "./db/ChatSessionUserModel"
 import { updateContactNoReadCount } from "./db/UserSetting"
 import { getWindow } from "./windowProxy";
@@ -12,6 +13,14 @@ import store from "./store"
 let ws = null
 //重连次数
 let maxReConnectTimes = null;
+
+// ===== 消息可靠性协议状态 =====
+// 每个 sessionId 当前已收到的最大 seq（用于 SYNC 补推）
+const lastSeqMap = new Map();
+// 待确认消息：key = clientId, value = { messageId, timer, messageObj }
+const pendingMap = new Map();
+// ACK 超时 30 秒
+const ACK_TIMEOUT = 30000;
 //避免onclose onerror都重连相当于加个锁
 let lockReconnect = false;
 
@@ -40,8 +49,10 @@ const createWs = () => {
     ws = new WebSocket(wsUrl)
     ws.onopen = function (params) {
         console.log('客户端连接成功')
-        ws.send('heart beat')
+        sendHeartbeat()
         maxReConnectTimes = 5
+        // 连接后立即发送 SYNC 帧，请求补推本地离线期间错过的消息
+        sendSyncFrame()
     }
 
     // 从服务器接受到信息时的回调函数
@@ -85,15 +96,72 @@ const createWs = () => {
             case 1: //添加好友成功
             case 3://群创建成功
             case 9://好友加入群组
+            case -1: { // ACK：服务端确认已接收消息（更新本地 pending 状态为已发送）
+                const ack = message;
+                const ackClientId = ack.clientId;
+                const ackMessageId = ack.messageId;
+                const ackSeq = ack.seq;
+                if (ackClientId && pendingMap.has(ackClientId)) {
+                    const pending = pendingMap.get(ackClientId);
+                    clearTimeout(pending.timer);
+                    pendingMap.delete(ackClientId);
+                    // 更新本地消息状态：messageId + status
+                    if (ackMessageId != null) {
+                        updateMessage(
+                            { messageId: ackMessageId, status: 1, extendData: null },
+                            { messageId: ackMessageId }
+                        );
+                        sender.send('addLocalCallback', { messageId: ackMessageId, status: 1 });
+                    }
+                    console.log('ACK 收到, clientId=' + ackClientId + ', seq=' + ackSeq);
+                }
+                // ACK 不需要渲染器展示，仅作状态更新
+                break;
+            }
+            case -5: { // ACK_NOTIFY：服务端通知发送方，对方已送达/已读
+                // 通知渲染层更新消息的已读/送达状态
+                // 注意：ackUserId 由服务端放在 contactId 字段中传递
+                sender.send('ackNotify', {
+                    messageId: message.messageId,
+                    ackUserId: message.contactId,    // 执行 ack 的用户 ID
+                    contactType: message.contactType,
+                    ackType: message.extendData     // 2=已送达, 3=已读
+                });
+                break;
+            }
+            case -6: { // SYNC_SESSION：跨端会话同步——更新本地会话元数据并通知渲染层
+                const sessionData = message.extendData;
+                if (sessionData && sessionData.sessionId) {
+                    // 更新本地 SQLite 会话信息
+                    const dbSessionUpdate = {
+                        lastMessage: sessionData.lastMessage || '',
+                        lastReceiveTime: sessionData.lastReceiveTime || Date.now(),
+                        contactType: sessionData.contactType
+                    };
+                    await updateSessionBySessionId(dbSessionUpdate, sessionData.sessionId);
+
+                    // 通知渲染层同步刷新会话列表
+                    sender.send('syncSession', sessionData);
+                    console.log('SYNC_SESSION 收到, sessionId=' + sessionData.sessionId);
+                }
+                break;
+            }
             case 2://聊条消息
             case 5://图片，视频消息
             case 8://解散群聊
             case 11://退出群聊
             case 12://提出群聊
             case 14://撤回消息
-                //如果是群聊消息，那么这个群里的所有人都会收到聊天消息，发送人和接收人是同一个人不做处理 
+                //如果是群聊消息，那么这个群里的所有人都会收到聊天消息，发送人和接收人是同一个人不做处理
                 if (message.sendUserId === store.getUserId() && message.contactType == 1 && messageType != 14) {
                     break;
+                }
+                // 维护 lastSeq（有 seq 的消息）
+                if (message.seq != null && message.sessionId) {
+                    const cur = lastSeqMap.get(message.sessionId) || 0;
+                    if (message.seq > cur) {
+                        lastSeqMap.set(message.sessionId, message.seq);
+                    }
                 }
                 //收到ws消息更新会话信息
                 const sessionInfo = {};
@@ -148,6 +216,54 @@ const createWs = () => {
         reconnect('onerror')
     }
 
+    // ===== 心跳 / SYNC / ACK 等辅助方法 =====
+    const sendHeartbeat = () => {
+        if (ws != null && ws.readyState === 1) {
+            const hb = JSON.stringify({ messageType: -4 });
+            ws.send(hb);
+        }
+    }
+
+    const sendSyncFrame = () => {
+        if (ws != null && ws.readyState === 1 && lastSeqMap.size > 0) {
+            const sync = {};
+            for (const [sid, seq] of lastSeqMap.entries()) {
+                sync[sid] = seq;
+            }
+            ws.send(JSON.stringify({ messageType: -2, extendData: { sync } }));
+            console.log('SYNC 补推请求, sessions=' + lastSeqMap.size);
+        }
+    }
+
+    /**
+     * 注册待 ACK 消息，超时后在 local DB 标记发送失败
+     * @param {string} clientId 客户端生成的消息 ID
+     * @param {object} messageObj 渲染层已本地写入的消息对象
+     */
+    /**
+     * 发送 CLIENT_ACK 帧到服务端，告知消息已送达/已读
+     * @param {number} ackType 2=已送达, 3=已读
+     * @param {string[]} messageIds 消息 ID 列表（字符串）
+     */
+    const sendClientAck = (ackType, messageIds) => {
+        if (ws != null && ws.readyState === 1 && messageIds && messageIds.length > 0) {
+            ws.send(JSON.stringify({ messageType: -3, extendData: { ackType, messageIds } }));
+        }
+    }
+
+    const registerPendingAck = (clientId, messageObj) => {
+        // 已有则先清理
+        if (pendingMap.has(clientId)) {
+            clearTimeout(pendingMap.get(clientId).timer);
+        }
+        const timer = setTimeout(() => {
+            pendingMap.delete(clientId);
+            console.warn('ACK 超时, clientId=' + clientId);
+            sender.send('addLocalCallback', { clientId, status: 0, timeout: true });
+        }, ACK_TIMEOUT);
+        pendingMap.set(clientId, { timer, messageObj });
+    }
+
     const reconnect = (type) => {
         if (!needReconnect) {
             console.log("链接断开无须重连");
@@ -174,15 +290,18 @@ const createWs = () => {
         }
     }
 
-    //发送心跳
+    // 发送心跳（改用 JSON 格式，服务器识别为 -4 心跳类型）
     setInterval(() => {
         if (ws != null && ws.readyState == 1) {
-            ws.send('heart beat')
+            sendHeartbeat()
         }
     }, 1000 * 5);
 }
 
 export {
     initWs,
-    closeWs
+    closeWs,
+    registerPendingAck,
+    sendSyncFrame,
+    sendClientAck
 }

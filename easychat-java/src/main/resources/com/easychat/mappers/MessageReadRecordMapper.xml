@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MessageReadRecordMapper">
+
+    <!--实体映射-->
+    <resultMap id="base_result_map" type="com.easychat.entity.po.MessageReadRecord">
+        <id column="id" property="id"/>
+        <result column="message_id" property="messageId"/>
+        <result column="user_id" property="userId"/>
+        <result column="contact_id" property="contactId"/>
+        <result column="contact_type" property="contactType"/>
+        <result column="ack_type" property="ackType"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 通用查询结果列-->
+    <sql id="base_column_list">
+        id,message_id,user_id,contact_id,contact_type,ack_type,create_time
+    </sql>
+
+    <sql id="base_condition_filed">
+        <if test="query.id != null">
+            and id = #{query.id}
+        </if>
+        <if test="query.messageId != null">
+            and message_id = #{query.messageId}
+        </if>
+        <if test="query.messageIdList != null and query.messageIdList.size()>0">
+            and message_id in (<foreach collection="query.messageIdList" separator="," item="item">#{item}</foreach>)
+        </if>
+        <if test="query.userId != null and query.userId!=''">
+            and user_id = #{query.userId}
+        </if>
+        <if test="query.contactId != null and query.contactId!=''">
+            and contact_id = #{query.contactId}
+        </if>
+        <if test="query.contactType != null">
+            and contact_type = #{query.contactType}
+        </if>
+        <if test="query.ackType != null">
+            and ack_type = #{query.ackType}
+        </if>
+        <if test="query.ackTypeList != null and query.ackTypeList.size()>0">
+            and ack_type in (<foreach collection="query.ackTypeList" separator="," item="item">#{item}</foreach>)
+        </if>
+    </sql>
+
+    <sql id="base_condition">
+        <where>
+            <include refid="base_condition_filed"/>
+        </where>
+    </sql>
+
+    <sql id="query_condition">
+        <where>
+            <include refid="base_condition_filed"/>
+        </where>
+    </sql>
+
+    <!-- 查询集合-->
+    <select id="selectList" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM message_read_record
+        <include refid="query_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <!-- 查询数量-->
+    <select id="selectCount" resultType="java.lang.Integer">
+        SELECT count(1) FROM message_read_record
+        <include refid="query_condition"/>
+    </select>
+
+    <!-- 插入 （匹配有值的字段）-->
+    <insert id="insert" parameterType="com.easychat.entity.po.MessageReadRecord">
+        <selectKey keyProperty="bean.id" resultType="Long" order="AFTER">
+            SELECT LAST_INSERT_ID()
+        </selectKey>
+        INSERT INTO message_read_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">message_id,</if>
+            <if test="bean.userId != null">user_id,</if>
+            <if test="bean.contactId != null">contact_id,</if>
+            <if test="bean.contactType != null">contact_type,</if>
+            <if test="bean.ackType != null">ack_type,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">#{bean.messageId},</if>
+            <if test="bean.userId != null">#{bean.userId},</if>
+            <if test="bean.contactId != null">#{bean.contactId},</if>
+            <if test="bean.contactType != null">#{bean.contactType},</if>
+            <if test="bean.ackType != null">#{bean.ackType},</if>
+        </trim>
+    </insert>
+
+    <!-- 插入或更新（幂等）-->
+    <insert id="insertOrUpdate" parameterType="com.easychat.entity.po.MessageReadRecord">
+        INSERT INTO message_read_record (message_id, user_id, contact_id, contact_type, ack_type)
+        VALUES (#{bean.messageId}, #{bean.userId}, #{bean.contactId}, #{bean.contactType}, #{bean.ackType})
+        ON DUPLICATE KEY UPDATE
+            ack_type = GREATEST(ack_type, VALUES(ack_type)),
+            create_time = IF(ack_type != GREATEST(ack_type, VALUES(ack_type)), CURRENT_TIMESTAMP, create_time)
+    </insert>
+
+    <!-- 批量插入或更新（幂等）-->
+    <insert id="insertOrUpdateBatch" parameterType="com.easychat.entity.po.MessageReadRecord">
+        INSERT INTO message_read_record (message_id, user_id, contact_id, contact_type, ack_type)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.messageId}, #{item.userId}, #{item.contactId}, #{item.contactType}, #{item.ackType})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            ack_type = GREATEST(ack_type, VALUES(ack_type)),
+            create_time = IF(ack_type != GREATEST(ack_type, VALUES(ack_type)), CURRENT_TIMESTAMP, create_time)
+    </insert>
+
+    <!-- 多条件修改-->
+    <update id="updateByParam" parameterType="com.easychat.entity.query.MessageReadRecordQuery">
+        UPDATE message_read_record
+        <set>
+            <if test="bean.ackType != null">
+                ack_type = #{bean.ackType},
+            </if>
+            <if test="bean.contactType != null">
+                contact_type = #{bean.contactType},
+            </if>
+            <if test="bean.contactId != null">
+                contact_id = #{bean.contactId},
+            </if>
+        </set>
+        <include refid="query_condition"/>
+    </update>
+
+    <!-- 多条件删除-->
+    <delete id="deleteByParam">
+        delete from message_read_record
+        <include refid="query_condition"/>
+    </delete>
+
+</mapper>

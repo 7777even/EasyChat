@@ -123,4 +123,50 @@ public class RedisComponet {
         sysSettingDto = sysSettingDto == null ? new SysSettingDto() : sysSettingDto;
         return sysSettingDto;
     }
+
+    /* ===================== 消息可靠性：SEQ 发号 + 离线缓冲 ===================== */
+
+    /**
+     * 获取 sessionId 下的下一个原子序号（Redis INCR）
+     *
+     * @param sessionId 会话 ID
+     * @return 单调递增 seq；失败返回 null
+     */
+    public Long nextMessageSeq(String sessionId) {
+        return redisUtils.incr(Constants.REDIS_KEY_MSG_SEQ + sessionId);
+    }
+
+    /**
+     * 向指定用户的离线缓冲队列头部压入消息（JSON 序列化后的 MessageSendDto）
+     *
+     * @param userId 接收方用户 ID
+     * @param messageJson 消息 JSON
+     */
+    public void pushOfflineMessage(String userId, String messageJson) {
+        redisUtils.lpush(Constants.REDIS_KEY_WS_OFFLINE_MSG + userId, messageJson, Constants.REDIS_KEY_TOKEN_EXPIRES);
+    }
+
+    /**
+     * 取出并清空指定用户的离线消息列表（按时间正序返回）
+     *
+     * @param userId 用户 ID
+     * @return 正序的消息 JSON 列表
+     */
+    public List<String> popOfflineMessages(String userId) {
+        List<String> list = redisUtils.getQueueList(Constants.REDIS_KEY_WS_OFFLINE_MSG + userId);
+        redisUtils.delete(Constants.REDIS_KEY_WS_OFFLINE_MSG + userId);
+        // LPUSH 导致 list 是倒序，反转为时间正序
+        if (list != null && list.size() > 1) {
+            java.util.Collections.reverse(list);
+        }
+        return list;
+    }
+
+    /**
+     * 判断用户是否有待下发的离线消息
+     */
+    public Boolean hasOfflineMessage(String userId) {
+        List<String> list = redisUtils.getQueueList(Constants.REDIS_KEY_WS_OFFLINE_MSG + userId);
+        return list != null && !list.isEmpty();
+    }
 }

@@ -82,6 +82,32 @@ public class Constants {
     //系统设置
     public static final String REDIS_KEY_SYS_SETTING = "easychat:syssetting:";
 
+    // 消息会话内序列号计数器（INCR 产生单调 seq）
+    public static final String REDIS_KEY_MSG_SEQ = "easychat:msg:seq:";
+
+    // 离线消息缓冲队列（LPUSH，消费后删除）
+    public static final String REDIS_KEY_WS_OFFLINE_MSG = "easychat:ws:offline:";
+
+    // 消息可靠性 ACK 帧类型标识（在 WS 推送 extendData.messageType 中使用 -1）
+    public static final Integer WS_ACK_MESSAGE_TYPE = -1;
+
+    // 客户端→服务端：同步（请求服务端补推 seq > lastSeq 的消息）
+    public static final Integer WS_SYNC_MESSAGE_TYPE = -2;
+
+    // 客户端→服务端：回执（确认已收到某条消息，用于消息已读/送达功能）
+    public static final Integer WS_CLIENT_ACK_MESSAGE_TYPE = -3;
+
+    // 客户端→服务端：心跳包标识
+    public static final Integer WS_HEARTBEAT_MESSAGE_TYPE = -4;
+
+    // 服务端→客户端：告知发送方某消息已被对方已送达/已读（ackType 2/3）
+    public static final Integer WS_ACK_NOTIFY_MESSAGE_TYPE = -5;
+
+    /**
+     * 服务端→客户端：跨端会话同步。通知其他设备某会话的元数据已更新（最后消息、未读数等），需立即刷新。
+     */
+    public static final Integer WS_SYNC_SESSION_MESSAGE_TYPE = -6;
+
     public static final String APP_UPDATE_FOLDER = "/app/";
 
     public static final String APP_NAME = "EasyChatSetup.";

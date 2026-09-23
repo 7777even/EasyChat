@@ -66,6 +66,32 @@ const readAll = (contactId) => {
     return run(sql, [store.getUserId(), contactId]);
 }
 
+//根据 sessionId 更新会话元数据（用于跨端 SYNC_SESSION 同步）
+const updateSessionBySessionId = (updateInfo, sessionId) => {
+    let sql = "update chat_session_user set ";
+    const params = [];
+    const setClauses = [];
+    if (updateInfo.lastMessage !== undefined) {
+        setClauses.push("last_message = ?");
+        params.push(updateInfo.lastMessage);
+    }
+    if (updateInfo.lastReceiveTime !== undefined) {
+        setClauses.push("last_receive_time = ?");
+        params.push(updateInfo.lastReceiveTime);
+    }
+    if (updateInfo.noReadCount !== undefined) {
+        setClauses.push("no_read_count = ?");
+        params.push(updateInfo.noReadCount);
+    }
+    if (setClauses.length === 0) {
+        return Promise.resolve();
+    }
+    sql += setClauses.join(", ");
+    sql += " where user_id = ? and session_id = ?";
+    params.push(store.getUserId(), sessionId);
+    return run(sql, params);
+}
+
 
 //收到消息新增或者更新会话
 const saveOrUpdate4Message = (currentSessionId, sessionInfo) => {
@@ -159,6 +185,7 @@ export {
     selectUserSessionByContactId,
     updateNoReadCount,
     readAll,
+    updateSessionBySessionId,
     delChatSession,
     updateGroupName,
     topChatSession,

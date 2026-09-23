@@ -74,6 +74,16 @@ public class ChatMessage implements Serializable {
      */
     private Integer status;
 
+    /**
+     * 会话内单调序号（同 session_id 下严格递增，由 Redis INCR 产生）
+     */
+    private Long seq;
+
+    /**
+     * 客户端生成的消息去重键（send_user_id + client_id 唯一，防重发）
+     */
+    private String clientId;
+
 
     public void setMessageId(Long messageId) {
         this.messageId = messageId;
@@ -179,8 +189,24 @@ public class ChatMessage implements Serializable {
         return this.status;
     }
 
+    public void setSeq(Long seq) {
+        this.seq = seq;
+    }
+
+    public Long getSeq() {
+        return this.seq;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
+    }
+
+    public String getClientId() {
+        return this.clientId;
+    }
+
     @Override
     public String toString() {
-        return "消息自增ID:" + (messageId == null ? "空" : messageId) + "，会话ID:" + (sessionId == null ? "空" : sessionId) + "，消息类型:" + (messageType == null ? "空" : messageType) + "，消息内容:" + (messageContent == null ? "空" : messageContent) + "，发送人ID:" + (sendUserId == null ? "空" : sendUserId) + "，发送人昵称:" + (sendUserNickName == null ? "空" : sendUserNickName) + "，发送时间:" + (sendTime == null ? "空" : sendTime) + "，接收联系人ID:" + (contactId == null ? "空" : contactId) + "，联系人类型 0:单聊 1:群聊:" + (contactType == null ? "空" : contactType) + "，文件大小:" + (fileSize == null ? "空" : fileSize) + "，文件名:" + (fileName == null ? "空" : fileName) + "，文件类型:" + (fileType == null ? "空" : fileType) + "，状态 0:正在发送 1:已发送:" + (status == null ? "空" : status);
+        return "消息自增ID:" + (messageId == null ? "空" : messageId) + "，会话ID:" + (sessionId == null ? "空" : sessionId) + "，消息类型:" + (messageType == null ? "空" : messageType) + "，消息内容:" + (messageContent == null ? "空" : messageContent) + "，发送人ID:" + (sendUserId == null ? "空" : sendUserId) + "，发送人昵称:" + (sendUserNickName == null ? "空" : sendUserNickName) + "，发送时间:" + (sendTime == null ? "空" : sendTime) + "，接收联系人ID:" + (contactId == null ? "空" : contactId) + "，联系人类型 0:单聊 1:群聊:" + (contactType == null ? "空" : contactType) + "，文件大小:" + (fileSize == null ? "空" : fileSize) + "，文件名:" + (fileName == null ? "空" : fileName) + "，文件类型:" + (fileType == null ? "空" : fileType) + "，状态 0:正在发送 1:已发送:" + (status == null ? "空" : status) + "，seq:" + (seq == null ? "空" : seq) + "，clientId:" + (clientId == null ? "空" : clientId);
     }
 }

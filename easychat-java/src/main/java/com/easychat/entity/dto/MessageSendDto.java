@@ -44,6 +44,12 @@ public class MessageSendDto<T> implements Serializable {
     //群员
     private Integer memberCount;
 
+    // ===== 消息可靠性协议字段 =====
+    // 客户端生成去重键（send_user_id + client_id 唯一）
+    private String clientId;
+    // 会话内单调序号（同 session_id 下严格递增，由 Redis INCR 产生）
+    private Long seq;
+
     public Integer getStatus() {
         return status;
     }
@@ -181,5 +187,21 @@ public class MessageSendDto<T> implements Serializable {
 
     public void setMemberCount(Integer memberCount) {
         this.memberCount = memberCount;
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
+    }
+
+    public Long getSeq() {
+        return seq;
+    }
+
+    public void setSeq(Long seq) {
+        this.seq = seq;
     }
 }

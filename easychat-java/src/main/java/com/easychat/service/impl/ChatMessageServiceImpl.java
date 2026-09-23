@@ -23,6 +23,7 @@ import com.easychat.service.ChatMessageService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.DateUtil;
 import com.easychat.utils.StringTools;
+import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
 import jodd.util.ArraysUtil;
 import org.slf4j.Logger;
@@ -61,6 +62,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Resource
     private RedisComponet redisComponet;
+
+    @Resource
+    private ChannelContextUtils channelContextUtils;
 
     /**
      * 根据条件查询列表
@@ -190,6 +194,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         String messageContent = StringTools.resetMessageContent(chatMessage.getMessageContent());
         chatMessage.setMessageContent(messageContent);
         Integer status = MessageTypeEnum.MEDIA_CHAT == messageTypeEnum ? MessageStatusEnum.SENDING.getStatus() : MessageStatusEnum.SENDED.getStatus();
+        // ===== 消息可靠性：提前声明 clientId，供 insert 回写 + ACK 使用 =====
+        String clientId = chatMessage.getClientId();
         if (ArraysUtil.contains(new Integer[]{
                 MessageTypeEnum.CHAT.getType(),
                 MessageTypeEnum.GROUP_CREATE.getType(),
@@ -218,9 +224,19 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             chatMessage.setSendTime(curTime);
             chatMessage.setContactType(contactTypeEnum.getType());
             chatMessage.setStatus(status);
+            // ===== 消息可靠性：INCR seq + 填充 clientId =====
+            if (clientId != null && !clientId.isEmpty()) {
+                Long seq = redisComponet.nextMessageSeq(sessionId);
+                if (seq != null && seq > 0) {
+                    chatMessage.setSeq(seq);
+                }
+            }
             chatMessageMapper.insert(chatMessage);
         }
         MessageSendDto messageSend = CopyTools.copy(chatMessage, MessageSendDto.class);
+        // 把 seq 与 clientId 同步到 WS 推送体，客户端按 seq 排序/去重
+        messageSend.setSeq(chatMessage.getSeq());
+        messageSend.setClientId(chatMessage.getClientId());
         if (Constants.ROBOT_UID.equals(contactId)) {
             SysSettingDto sysSettingDto = redisComponet.getSysSetting();
             TokenUserInfoDto robot = new TokenUserInfoDto();
@@ -234,6 +250,25 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             saveMessage(robotChatMessage, robot);
         } else {
             messageHandler.sendMessage(messageSend);
+            // ===== 消息可靠性：推 ACK 回执给发送方 =====
+            if (clientId != null && !clientId.isEmpty() && chatMessage.getSeq() != null && chatMessage.getMessageId() != null) {
+                MessageSendDto ackDto = new MessageSendDto();
+                ackDto.setMessageId(chatMessage.getMessageId());
+                ackDto.setClientId(clientId);
+                ackDto.setSeq(chatMessage.getSeq());
+                ackDto.setSessionId(sessionId);
+                ackDto.setContactId(chatMessage.getContactId());
+                ackDto.setContactType(chatMessage.getContactType());
+                channelContextUtils.sendAck(ackDto, sendUserId);
+            }
+            // ===== 多端漫游：广播 SYNC_SESSION 给发送方的所有在线设备 =====
+            // 其他设备收到后更新本地会话列表（最后一条消息等）
+            java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
+            sessionData.put("sessionId", sessionId);
+            sessionData.put("lastMessage", lastMessage);
+            sessionData.put("lastReceiveTime", curTime);
+            sessionData.put("contactType", contactTypeEnum.getType());
+            channelContextUtils.broadcastSyncSession(sendUserId, sessionData);
         }
         return messageSend;
     }
