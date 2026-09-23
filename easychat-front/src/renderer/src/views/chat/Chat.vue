@@ -122,7 +122,7 @@ import ChatMessage from './ChatMessage.vue'
 import ChatMessageTime from './ChatMessageTime.vue'
 import ChatMessageSys from './ChatMessageSys.vue'
 import MessageSend from './MessageSend.vue'
-import {ref, reactive, getCurrentInstance, nextTick, onMounted, watch, onUnmounted} from 'vue'
+import {ref, reactive, getCurrentInstance, nextTick, onMounted, onActivated, watch, onUnmounted} from 'vue'
 import {useRoute} from 'vue-router'
 
 import {useUserInfoStore} from '@/stores/UserInfoStore'
@@ -260,6 +260,7 @@ const onReciveMessage = () => {
     console.log('收到消息', message)
     if (message.messageType == 1) {
       contactStateStore.setContactReload(message.contactType == 0 ? 'USER' : 'GROUP')
+      loadChatSession()
     }
     if (message.messageType == 0) {
       if (chatSessionList.value.length == 0) {
@@ -562,6 +563,10 @@ onMounted(() => {
   })
   //设置选中session为空
   setSessionSelect({})
+})
+
+onActivated(() => {
+  loadChatSession()
 })
 
 onUnmounted(() => {

@@ -73,15 +73,28 @@ const submit = () => {
     if (!valid) {
       return
     }
-    let params = {}
-    Object.assign(params, formData.value)
     contactStateStore.setContactReload(null)
-    if (params.groupId) {
-      avatarInfoStore.setFoceReload(params.groupId, false)
+    if (formData.value.groupId) {
+      avatarInfoStore.setFoceReload(formData.value.groupId, false)
+    }
+    const submitFormData = new FormData()
+    submitFormData.append('groupName', formData.value.groupName)
+    submitFormData.append('joinType', formData.value.joinType)
+    if (formData.value.groupId) {
+      submitFormData.append('groupId', formData.value.groupId)
+    }
+    if (formData.value.groupNotice) {
+      submitFormData.append('groupNotice', formData.value.groupNotice)
+    }
+    if (formData.value.avatarFile instanceof File) {
+      submitFormData.append('avatarFile', formData.value.avatarFile)
+    }
+    if (formData.value.avatarCover instanceof File) {
+      submitFormData.append('avatarCover', formData.value.avatarCover)
     }
     let result = await proxy.Request({
       url: proxy.Api.saveGroup,
-      params
+      params: submitFormData
     })
     if (!result) {
       return
