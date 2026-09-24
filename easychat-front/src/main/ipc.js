@@ -3,9 +3,10 @@ const NODE_ENV = process.env.NODE_ENV
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { initWs, closeWs, registerPendingAck } from './wsClient';
+import { initNotifySwitch, setNotifySwitch } from './notification';
 import { selectMessageList, saveMessage, updateMessage } from "./db/ChatMessageModel";
 import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSession, topChatSession, updateStatus } from "./db/ChatSessionUserModel";
-import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser } from "./db/UserSetting";
+import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser, updateSysSetting } from "./db/UserSetting";
 import {
     saveFile2Local, checkFile, createCover, saveAs, changeLocalFolder, openLocalFolder,
     downloadUpdate, closeLocalServer, saveClipBoardFile
@@ -28,6 +29,8 @@ const onLoginSuccess = (callback) => {
         store.initUserId(config.userId);
         store.setUserData("token", config.token);
         addUserSetting(config.userId, config.email);
+        //初始化新消息提醒开关内存缓存（读 user_setting.sysSetting.notifySwitch，缺省 true）
+        initNotifySwitch();
         callback(config);
         initWs(config, e.sender);
     })
@@ -175,6 +178,37 @@ const onGetSettingInfo = () => {
         let result = await selectSettingInfo(userId);
         let sysSetting = result.sysSetting;
         e.sender.send("getSysSettingCallback", sysSetting);
+    });
+}
+
+//更新系统设置（整份 JSON 读-改-写 + 键白名单合入，按当前登录用户定位行；成功后刷新提醒开关内存缓存）
+const onUpdateSysSetting = () => {
+    ipcMain.on("updateSysSetting", async (e, patch) => {
+        try {
+            const userId = store.getUserId();
+            const result = await selectSettingInfo(userId);
+            let sysSetting = {};
+            if (result && result.sysSetting) {
+                try {
+                    sysSetting = JSON.parse(result.sysSetting);
+                } catch (parseError) {
+                    sysSetting = {};
+                }
+            }
+            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch）
+            if (patch && typeof patch === "object") {
+                if ("notifySwitch" in patch) {
+                    sysSetting.notifySwitch = Boolean(patch.notifySwitch);
+                }
+            }
+            await updateSysSetting(JSON.stringify(sysSetting));
+            //刷新主进程提醒开关内存缓存
+            setNotifySwitch(sysSetting.notifySwitch);
+            e.sender.send("updateSysSettingCallback", { status: 1, sysSetting: JSON.stringify(sysSetting) });
+        } catch (error) {
+            console.warn("更新系统设置失败", error);
+            e.sender.send("updateSysSettingCallback", { status: 0 });
+        }
     });
 }
 
@@ -331,6 +365,7 @@ export {
     onCreateCover,
     onSaveAs,
     onGetSettingInfo,
+    onUpdateSysSetting,
     onChangeLocalFolder,
     onOpenLocalFolder,
     onDownloadUpdate,
