@@ -14,7 +14,7 @@
 
 ## 实际执行命令与结果
 
-- `npm run build`（easychat-front，收尾重跑）：main/preload/renderer 三段 built，**0 error** — 日志见同目录 `2026-09-24-desktop-notification-build.log`（历史共执行 3 次，均通过）。
+- `npm run build`（easychat-front，收尾重跑）：main/preload/renderer 三段 built，**0 error** — 日志见同目录 `2026-09-24-desktop-notification-build.evidence.txt`（历史共执行 3 次，均通过）。
 - 静态走查（grep 全仓）：`new Notification` / `notificationClicked` / `notifyNewMessage` 残留 **0 处**；`flashFrame` 仅存在于 `notification.js` 门禁（1 处触发 + 停闪清理）与 `index.js` 既有获焦停闪。
 - 导入对齐核查：`stopBlink` 调用方（`index.js`）与导入一致；`ipc.js` 无用导入已移除——修复了会话中断点遗留的错位（若不修复，获焦时将抛 `stopBlink is not defined`；bundler 对未导入标识符不报错，build 无法暴露）。
 - `git diff Chat.vue` = 0（零改动确认）。
@@ -27,7 +27,7 @@
 
 ## 证据附件
 
-- `2026-09-24-desktop-notification-build.log` — build 通过日志（本目录）。
+- `2026-09-24-desktop-notification-build.evidence.txt` — build 通过日志（本目录；`*.log` 被 .gitignore 排除，按 `*.evidence.txt` 惯例入库）。
 - 本报告「实际执行命令与结果」中的 grep 走查结论。
 - 截图证据：**缺失**（见未运行项）。
 
