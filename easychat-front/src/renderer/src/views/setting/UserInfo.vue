@@ -27,6 +27,13 @@
         <div class="part-title">个性签名</div>
         <div class="part-content">{{ userInfo.personalSignature || '-' }}</div>
       </div>
+      <div class="part-item">
+        <div class="part-title">新消息通知</div>
+        <div class="part-content notify-row">
+          <el-switch v-model="notifySwitch" @change="notifySwitchChange" />
+          <div class="tips">关闭后收到新消息将不再闪烁任务栏图标</div>
+        </div>
+      </div>
       <div class="logout">
         <el-button @click="logout">退出登录</el-button>
       </div>
@@ -43,7 +50,7 @@
 <script setup>
 import UserInfoEdit from './UserInfoEdit.vue'
 import UserPassword from './UserInfoPassword.vue'
-import { ref, reactive, getCurrentInstance, nextTick, watch, computed } from 'vue'
+import { ref, reactive, getCurrentInstance, nextTick, watch, computed, onMounted, onUnmounted } from 'vue'
 const { proxy } = getCurrentInstance()
 import { useRoute } from 'vue-router'
 const route = useRoute()
@@ -62,6 +69,41 @@ const getUserInfo = async () => {
 getUserInfo()
 
 const showType = ref(0)
+
+// ===== 新消息提醒开关：任务栏闪烁（openspec/changes/2026-09-24-desktop-notification C2） =====
+// 默认开；挂载时经主进程 getSysSetting 读 user_setting.sysSetting.notifySwitch（缺失视为开）
+const notifySwitch = ref(true)
+
+const notifySwitchChange = (value) => {
+  window.ipcRenderer.send('updateSysSetting', { notifySwitch: value })
+}
+
+onMounted(() => {
+  window.ipcRenderer.send('getSysSetting')
+  window.ipcRenderer.on('getSysSettingCallback', (e, sysSetting) => {
+    if (!sysSetting) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(sysSetting)
+      notifySwitch.value = parsed.notifySwitch === undefined ? true : Boolean(parsed.notifySwitch)
+    } catch (error) {
+      notifySwitch.value = true
+    }
+  })
+  //保存失败回弹原值
+  window.ipcRenderer.on('updateSysSettingCallback', (e, result) => {
+    if (!result || result.status !== 1) {
+      notifySwitch.value = !notifySwitch.value
+      proxy.$message ? proxy.$message.error('提醒设置保存失败') : null
+    }
+  })
+})
+
+onUnmounted(() => {
+  window.ipcRenderer.removeAllListeners('getSysSettingCallback')
+  window.ipcRenderer.removeAllListeners('updateSysSettingCallback')
+})
 
 const changePart = (part) => {
   showType.value = part
@@ -122,6 +164,16 @@ const logout = () => {
   .logout {
     text-align: center;
     margin-top: 20px;
+  }
+  .notify-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    .tips {
+      font-size: 12px;
+      color: #888888;
+    }
   }
 }
 </style>
