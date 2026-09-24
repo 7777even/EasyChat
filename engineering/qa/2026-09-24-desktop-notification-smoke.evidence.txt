@@ -1,0 +1,90 @@
+# Smoke Evidence — desktop notification blink (runtime, 2026-09-24 PM)
+# Companion to: engineering/qa/2026-09-24-desktop-notification.md
+# Visual: engineering/qa/2026-09-24-blink-evidence.png (A blink OFF / B blink ON / C static highlight)
+
+== Environment ==
+- backend: existing instance, 127.0.0.1:5050 + ws:5051 (untouched during smoke)
+- front: fresh `npm run dev` (easychat-front), main PID=33640, inspector :5858, loads src/ (rev2 code)
+- login bypass: CDP Runtime.evaluate on main inspector -> ipcMain.emit('openChat', {sender: webContents}, config)
+  with valid token from config.json (U04259455805 = test)
+- WS up: backend log "客户端连接成功" + type-0 init frame for U04259455805
+- probe: win.flashFrame wrapped via CDP (records Date.now()+':'+(flag?1:0), delegates to original)
+- capture: PowerShell CopyFromScreen 1920x1080 PNG; diff region x=400..1650, y=H-56..H-4 (taskbar buttons,
+  tray x>1650 and widgets x<400 excluded), per-channel threshold >12, function name Get-ColDiff
+- receiver state driven via CDP win.restore()/win.minimize() (authentic path; see methodology note M1)
+
+== Case 1: rule-2 focused suppression (visible + focused) ==
+- state: minimized=false focused=true
+- SEND 7710->test messageId=1844 code=0 (content "focused-no-blink 12:48:46.992")
+- client stdout (sh_0d1a5774b001P30SH3K1292xf5.out): frame ARRIVED -> lastMessage/messageId 1844
+  + local sqlite "insert or replace into chat_message"
+- flashFrame calls: total 210 -> 210 (NONE) => suppressed while focused [PASS]
+- repeat: messageId=1845 (same state) -> calls 210 -> 210 [PASS]
+
+== Case 2: minimized + unfocused -> 600ms alternating blink loop (tasks 4.2 item 7) ==
+- state before send: minimized=true focused=false (CDP win.minimize(), authentic deactivate)
+- SEND 7710->test messageId=1843
+- probe call log (subset):
+  1790225197633:1, 1790225198247:0, 1790225198853:1, 1790225199463:0, 1790225200070:1 ...
+  last: 1790225324310:1, 1790225324731:0
+  intervals: 614/606/610/607 ms (BLINK_INTERVAL_MS=600), total ~210 calls over ~127s until focus
+- pixel diffs (taskbar, button region x=1405-1444):
+  base1 vs base2 (pre-msg): changed=0 [clean baseline]
+  f1 vs f2: changed=40 ; f2 vs f3: 40 ; f3 vs f4: 40 ; f4 vs f5: 40 ;
+  f5 vs f6: 0 (same phase) ; f6 vs f7: 40 ; f7 vs f8: 0 (same phase)
+  -> alternating on/off across adjacent frames, same-phase zero pairs = 600ms period sampling signature
+- visual: blink-evidence.png rows A (OFF, f1) vs B (ON, f2) [PASS]
+
+== Case 3: focus stops blink (tasks 4.2 item 7 second half) ==
+- CDP win.restore()+focus() -> probe final entries: ...5324310:1, 5324731:0
+  last call = flashFrame(0) = stopBlink cleanup (explicit clear in loop path)
+- read-calls arrays captured 1.6s apart identical (no further calls)
+- pixel: focused idle h1 vs h2 = no-change [PASS]
+- note: g1 vs g2 =40 cols happened with ZERO flashFrame calls in same window -> taskbar button
+  state transition after restore, not blink
+
+== Case 4: non-minimized unfocused -> single static flashFrame (tasks 4.2 item 1, rev2) ==
+- state: minimized=false focused=false (ALT-key trick SetForegroundWindow -> notepad; probe confirms)
+- SEND 7710->test messageId=1846
+- probe: total 210 -> 211, NEW ENTRY ALONE: 1790225648510:1 (no loop, no trailing :0) [single call]
+- pixel: base2 vs n1 = changed@1405-1444 (highlight ON vs baseline)
+- dense sampling p1..p6 @150ms: ALL pairs no-change => steady STATIC highlight (not flickering)
+- focus again: p6 vs q1 = changed@1405-1444 (highlight cleared); calls remain 211
+  (single-flash path clears via OS foreground semantics; loop path clears via explicit :0)
+- visual: blink-evidence.png row C [PASS]
+
+== Case 5: self-send does not blink (tasks 4.3 regression) ==
+- sender = test (own token) -> contactId=U29953535216, messageId=1847, state minimized+unfocused
+- client stdout: ONLY session-sync broadcast (extendData.lastMessage="self-echo-check ...",
+  chat_session_user update); NO case-2 chat frame pushed to the single-device sender
+- flashFrame calls: 211 -> 211 (NONE) => no blink on own send [PASS]
+
+== Case 6: system/protocol frames (tasks 4.3 regression, runtime support) ==
+- throughout the whole capture window (minutes), heartbeats (-4) / ACKs / session syncs were flowing;
+  probe recorded calls ONLY after whitelisted sends (1843/1846) and none otherwise
+- static: only wsClient case 4 (L112) and case 2/5 (L240) call flashOnNewMessage;
+  whitelist NOTIFY_TYPE_WHITELIST=[2,5,4]; stale >5min and self-echo gates inside flashOnNewMessage
+- conclusion: runtime-consistent with "system frames do not blink" [PASS, static primary]
+
+== Not executed (honest gaps) ==
+- tasks 4.2 ⑤ friend-apply (type4) runtime: third-account tokens expired (HTTP 400 body code=901
+  "登录超时"); remaining valid accounts are mutual friends -> cannot produce type-4 push.
+  Static: case4 L112 calls same flashOnNewMessage entry; frame carries message.messageType
+  (wsClient L106/L110); whitelist includes 4.
+- tasks 4.2 ② group chat / ③ media (type5): same case2/5 call path as verified type2 (static).
+- tasks 4.2 ⑥ toggle switch UI on/off + settings-page screenshot: requires renderer login
+  (password + captcha unavailable to automation); notifySwitch default-open verified earlier via
+  ~/.easychatdev/local.db (no key => default true).
+- tasks 4.3 localFileFolder key preservation (runtime write path via updateSysSetting): static only.
+- tasks 4.3 >5min reconnect resync suppression: static only (gate in flashOnNewMessage).
+- tasks 4.2 ⑧ tray hide() state: known boundary (no taskbar button to flash), not exercised.
+
+== Methodology notes ==
+- M1: external ShowWindow(SW_MINIMIZE) left win.isFocused() stuck true (minimized window kept
+  activation in this harness); message 1842 was correctly suppressed under that stuck-focus state
+  (frame arrived + zero calls). Authentic path = CDP win.restore()/win.minimize() which deactivates
+  correctly -> used for all subsequent cases.
+- M2: PowerShell alias `diff`=Compare-Object takes precedence over a user function named Diff;
+  renamed to Get-ColDiff. Scripts kept ASCII-only (PS5.1 reads UTF-8-no-BOM .ps1 as GBK -> line
+  corruption with Chinese comments).
+- CDP wrapper is in-memory only (lost on app restart); no repo/runtime config was modified by the harness.
