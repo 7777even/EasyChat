@@ -7,11 +7,12 @@ import {
   onSetLocalStore, onGetLocalStore,
   onLoginSuccess, onLoadChatMessage, onLoadSessionData, onReLogin, onLoginOrRegister, winTitleOp,
   onOpenNewWindow, openWindow, onSetSessionSelect, onLoadContactApply, onUpdateContactNoReadCount,
-  onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onChangeLocalFolder,
+  onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onUpdateSysSetting, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck
 } from "./ipc"
 import { saveWindow } from './windowProxy'
+import { stopBlink } from './notification'
 
 const login_width = 300;
 const login_height = 370;
@@ -55,6 +56,8 @@ function createWindow() {
   })
 
   mainWindow.once('focus', () => mainWindow.flashFrame(false));
+  // 窗口获焦时终止新消息交替闪烁循环（notification.js，幂等）
+  mainWindow.on('focus', () => stopBlink());
 
   mainWindow.on('close', (e) => {
     mainWindow.hide();
@@ -227,6 +230,9 @@ function createWindow() {
 
   //获取设置信息
   onGetSettingInfo();
+
+  //更新系统设置（新消息提醒开关）
+  onUpdateSysSetting();
 
   //更改本地目录
   onChangeLocalFolder();
