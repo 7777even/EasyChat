@@ -7,6 +7,7 @@ import {
     updateSessionBySessionId
 } from "./db/ChatSessionUserModel"
 import { updateContactNoReadCount } from "./db/UserSetting"
+import { flashOnNewMessage } from "./notification"
 import { getWindow } from "./windowProxy";
 import store from "./store"
 //ws相关
@@ -89,10 +90,6 @@ const createWs = () => {
     // 从服务器接受到信息时的回调函数
     ws.onmessage = async function (e) {
         let mainWindow = getWindow("main");
-        //信息消息闪烁
-        if (!mainWindow.isFocused()) {
-            mainWindow.flashFrame(true);
-        }
         console.log('收到服务器消息', e.data)
         const message = JSON.parse(e.data);
         const leaveGroupUserId = message.extendData;
@@ -111,6 +108,8 @@ const createWs = () => {
             case 4://好友申请
                 await updateContactNoReadCount({ userId: store.getUserId(), noReadCount: 1 });
                 sender.send("reciveMessage", { messageType: message.messageType });
+                //新消息任务栏闪烁（抑制规则见 notification.js）
+                flashOnNewMessage(message, mainWindow);
                 break;
             case 6://文件上传完成
                 updateMessage({ status: message.status }, { messageId: message.messageId });
@@ -236,6 +235,9 @@ const createWs = () => {
                     break;
                 }
                 sender.send("reciveMessage", message);
+                //新消息任务栏闪烁：置于自身回声跳过分支之后（sendUserId==自己 已在上方 break），
+                //类型白名单 2/5 与其余抑制规则在 notification.js 内判定
+                flashOnNewMessage(message, mainWindow);
                 break;
         }
     }
