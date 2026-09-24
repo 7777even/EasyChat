@@ -74,6 +74,8 @@
 | 主进程维护 WS 句柄 | `wsClient.js`，连 `ws://<domain>:<5051>?token=<token>` |
 | 最大重连次数 | 5 |
 | 渲染进程感知 WS | 通过 preload 暴露 `window.bridge` 事件订阅 |
+| 新消息提醒 | `src/main/notification.js` `flashOnNewMessage`：白名单消息（type 2/5/4）+ 主窗口失焦 + 开关开 → 触发；**最小化场景为主动交替闪烁循环**（600ms `flashFrame(false)/(true)`，获焦/关开关停），非最小化为单次 `flashFrame(true)` 系统静态红底；ACK/SYNC/心跳/撤回/系统帧不闪（2026-09-24 由全帧无条件闪烁收敛而来，无横幅/声音） |
+| 提醒开关 | `user_setting.sysSetting.notifySwitch` JSON 键（缺省 `true`），设置页账号设置 el-switch 经 `updateSysSetting` 通道读写 |
 
 ## 6. 数据库约束
 
