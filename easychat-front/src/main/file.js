@@ -202,13 +202,32 @@ const checkFile = () => {
 }
 let server = null;
 const startLocalServer = (serverPort) => {
+    //渲染层重载后再次登录会重复调用：同端口服务仍在监听则直接复用，避免 EADDRINUSE 打崩主进程
+    if (server) {
+        if (server.listening && server.address() && server.address().port === serverPort) {
+            console.log('本地服务已在运行 http://127.0.0.1:' + serverPort);
+            return;
+        }
+        if (server.listening) {
+            server.close();
+        }
+        server = null;
+    }
     server = expressServer.listen(serverPort, () => {
         console.log('本地服务在 http://127.0.0.1:' + serverPort + "开启");
     })
+    //端口被外部占用等异常仅告警，不再抛出未捕获异常
+    server.on('error', (err) => {
+        console.warn('本地服务启动失败', err.message);
+        server = null;
+    });
 }
 
 const closeLocalServer = () => {
-    server.close();
+    if (server && server.listening) {
+        server.close();
+    }
+    server = null;
 }
 
 const getLocalFilePath = async (partType, showCover, fileId) => {
