@@ -505,6 +505,34 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         GroupInfo updateInfo = new GroupInfo();
         updateInfo.setGroupNotice(notice);
         groupInfoMapper.updateByGroupId(updateInfo, groupId);
+
+        // 群公告推送：落库一条系统消息并向全体群成员广播 WS 帧，
+        // 否则群成员收不到公告变更（历史实现只存不推）。
+        Date curDate = new Date();
+        String sessionId = StringTools.getChatSessionId4Group(groupId);
+        ChatMessage chatMessage = new ChatMessage();
+        chatMessage.setSessionId(sessionId);
+        chatMessage.setMessageType(MessageTypeEnum.GROUP_NOTICE.getType());
+        chatMessage.setMessageContent(String.format(MessageTypeEnum.GROUP_NOTICE.getInitMessage(),
+                tokenUserInfoDto.getNickName()));
+        chatMessage.setSendUserId(tokenUserInfoDto.getUserId());
+        chatMessage.setSendUserNickName(tokenUserInfoDto.getNickName());
+        chatMessage.setSendTime(curDate.getTime());
+        chatMessage.setContactId(groupId);
+        chatMessage.setContactType(UserContactTypeEnum.GROUP.getType());
+        chatMessage.setStatus(MessageStatusEnum.SENDED.getStatus());
+        chatMessageMapper.insert(chatMessage);
+
+        // 同步会话最后一条消息
+        ChatSession chatSession = new ChatSession();
+        chatSession.setLastMessage(chatMessage.getMessageContent());
+        chatSession.setLastReceiveTime(curDate.getTime());
+        chatSessionMapper.updateBySessionId(chatSession, sessionId);
+
+        MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
+        messageSendDto.setExtendData(notice);
+        messageSendDto.setLastMessage(chatMessage.getMessageContent());
+        messageHandler.sendMessage(messageSendDto);
     }
 
     @Override

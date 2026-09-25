@@ -5,6 +5,7 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.GroupMemberRoleEnum;
 import com.easychat.entity.enums.GroupStatusEnum;
 import com.easychat.entity.enums.MessageTypeEnum;
+import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.enums.UserContactStatusEnum;
 import com.easychat.entity.po.GroupInfo;
 import com.easychat.entity.po.UserContact;
@@ -12,10 +13,11 @@ import com.easychat.entity.query.GroupInfoQuery;
 import com.easychat.entity.query.UserContactQuery;
 import com.easychat.entity.vo.GroupInfoVO;
 import com.easychat.entity.vo.PaginationResultVO;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.exception.BusinessException;
 import com.easychat.service.GroupInfoService;
 import com.easychat.service.UserContactService;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,15 +39,15 @@ public class GroupController extends ABaseController {
     @Resource
     private UserContactService userContactService;
 
-    @RequestMapping(value = "/saveGroup")
+    @PostMapping(value = "/saveGroup")
     @GlobalInterceptor
-    public ResponseVO saveGroup(HttpServletRequest request,
-                                String groupId,
-                                @NotEmpty String groupName,
-                                String groupNotice,
-                                @NotNull Integer joinType,
-                                MultipartFile avatarFile,
-                                MultipartFile avatarCover) {
+    public Result<Void> saveGroup(HttpServletRequest request,
+                                  String groupId,
+                                  @NotEmpty String groupName,
+                                  String groupNotice,
+                                  @NotNull Integer joinType,
+                                  MultipartFile avatarFile,
+                                  MultipartFile avatarCover) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         GroupInfo groupInfo = new GroupInfo();
         groupInfo.setGroupId(groupId);
@@ -54,38 +56,34 @@ public class GroupController extends ABaseController {
         groupInfo.setGroupNotice(groupNotice);
         groupInfo.setJoinType(joinType);
         this.groupInfoService.saveGroup(groupInfo, avatarFile, avatarCover);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
-    @RequestMapping(value = "/loadMyGroup")
+    @PostMapping(value = "/loadMyGroup")
     @GlobalInterceptor
-    public ResponseVO loadMyGroup(HttpServletRequest request) {
+    public Result<List<GroupInfo>> loadMyGroup(HttpServletRequest request) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         GroupInfoQuery infoQuery = new GroupInfoQuery();
         infoQuery.setGroupOwnerId(tokenUserInfoDto.getUserId());
         infoQuery.setOrderBy("create_time desc");
         infoQuery.setStatus(GroupStatusEnum.NORMAL.getStatus());
         List<GroupInfo> groupInfoList = this.groupInfoService.findListByParam(infoQuery);
-        return getSuccessResponseVO(groupInfoList);
+        return success(groupInfoList);
     }
 
     /**
      * 获取群信息
-     *
-     * @param request
-     * @param groupId
-     * @return
      */
-    @RequestMapping(value = "/getGroupInfo")
+    @PostMapping(value = "/getGroupInfo")
     @GlobalInterceptor
-    public ResponseVO getGroupInfo(HttpServletRequest request,
-                                   @NotEmpty String groupId) {
+    public Result<GroupInfo> getGroupInfo(HttpServletRequest request,
+                                          @NotEmpty String groupId) {
         GroupInfo groupInfo = getGroupDetailCommon(request, groupId);
         UserContactQuery userContactQuery = new UserContactQuery();
         userContactQuery.setContactId(groupId);
         Integer memberCount = this.userContactService.findCountByParam(userContactQuery);
         groupInfo.setMemberCount(memberCount);
-        return getSuccessResponseVO(groupInfo);
+        return success(groupInfo);
     }
 
     private GroupInfo getGroupDetailCommon(HttpServletRequest request, String groupId) {
@@ -101,9 +99,9 @@ public class GroupController extends ABaseController {
         return groupInfo;
     }
 
-    @RequestMapping(value = "/getGroupInfo4Chat")
+    @PostMapping(value = "/getGroupInfo4Chat")
     @GlobalInterceptor
-    public ResponseVO getGroupInfo4Chat(HttpServletRequest request, @NotEmpty String groupId) {
+    public Result<GroupInfoVO> getGroupInfo4Chat(HttpServletRequest request, @NotEmpty String groupId) {
         GroupInfo groupInfo = getGroupDetailCommon(request, groupId);
         UserContactQuery userContactQuery = new UserContactQuery();
         userContactQuery.setContactId(groupId);
@@ -114,116 +112,100 @@ public class GroupController extends ABaseController {
         GroupInfoVO groupInfoVo = new GroupInfoVO();
         groupInfoVo.setGroupInfo(groupInfo);
         groupInfoVo.setUserContactList(userContactList);
-        return getSuccessResponseVO(groupInfoVo);
+        return success(groupInfoVo);
     }
-
 
     /**
      * 退群
-     *
-     * @param request
-     * @param groupId
-     * @return
      */
-    @RequestMapping(value = "/leaveGroup")
+    @PostMapping(value = "/leaveGroup")
     @GlobalInterceptor
-    public ResponseVO leaveGroup(HttpServletRequest request, @NotEmpty String groupId) {
+    public Result<Void> leaveGroup(HttpServletRequest request, @NotEmpty String groupId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.leaveGroup(tokenUserInfoDto.getUserId(), groupId, MessageTypeEnum.LEAVE_GROUP);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 解散群
-     *
-     * @param request
-     * @param groupId
-     * @return
      */
-    @RequestMapping(value = "/dissolutionGroup")
+    @PostMapping(value = "/dissolutionGroup")
     @GlobalInterceptor
-    public ResponseVO dissolutionGroup(HttpServletRequest request, @NotEmpty String groupId) {
+    public Result<Void> dissolutionGroup(HttpServletRequest request, @NotEmpty String groupId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.dissolutionGroup(tokenUserInfoDto.getUserId(), groupId);
-        return getSuccessResponseVO(null);
+        return success();
     }
-
 
     /**
      * 添加或者移除人员
-     *
-     * @param request
-     * @param groupId
-     * @param selectContacts
-     * @param opType
-     * @return
      */
-    @RequestMapping(value = "/addOrRemoveGroupUser")
+    @PostMapping(value = "/addOrRemoveGroupUser")
     @GlobalInterceptor
-    public ResponseVO addOrRemoveGroupUser(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String selectContacts,
-                                           @NotNull Integer opType) {
+    public Result<Void> addOrRemoveGroupUser(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String selectContacts,
+                                             @NotNull Integer opType) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.addOrRemoveGroupUser(tokenUserInfoDto, groupId, selectContacts, opType);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 转让群主（仅群主可操作）
      */
-    @RequestMapping(value = "/transferOwner")
+    @PostMapping(value = "/transferOwner")
     @GlobalInterceptor
-    public ResponseVO transferOwner(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String newOwnerUserId) {
+    public Result<Void> transferOwner(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String newOwnerUserId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.transferOwner(tokenUserInfoDto, groupId, newOwnerUserId);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 设置/取消管理员（仅群主可操作，role 0=取消管理员 1=设为管理员）
      */
-    @RequestMapping(value = "/setAdmin")
+    @PostMapping(value = "/setAdmin")
     @GlobalInterceptor
-    public ResponseVO setAdmin(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, @NotNull Integer role) {
+    public Result<Void> setAdmin(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, @NotNull Integer role) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         GroupMemberRoleEnum roleEnum = GroupMemberRoleEnum.ADMIN.getRole().equals(role)
                 ? GroupMemberRoleEnum.ADMIN : GroupMemberRoleEnum.MEMBER;
         groupInfoService.setAdmin(tokenUserInfoDto, groupId, userId, roleEnum);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 禁言/解除禁言（群主与管理员可操作，minutes=0 表示解除）
      */
-    @RequestMapping(value = "/muteMember")
+    @PostMapping(value = "/muteMember")
     @GlobalInterceptor
-    public ResponseVO muteMember(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, Integer minutes) {
+    public Result<Void> muteMember(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String userId, Integer minutes) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         if (minutes == null) {
             minutes = 0;
         }
         groupInfoService.muteMember(tokenUserInfoDto, groupId, userId, minutes);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
-     * 编辑群公告（群主与管理员可操作）
+     * 编辑群公告（群主与管理员可操作，保存后会向全体群成员推送）
      */
-    @RequestMapping(value = "/editNotice")
+    @PostMapping(value = "/editNotice")
     @GlobalInterceptor
-    public ResponseVO editNotice(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String notice) {
+    public Result<Void> editNotice(HttpServletRequest request, @NotEmpty String groupId, @NotEmpty String notice) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         groupInfoService.editGroupNotice(tokenUserInfoDto, groupId, notice);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 分页获取群成员列表
      */
-    @RequestMapping(value = "/memberList")
+    @PostMapping(value = "/memberList")
     @GlobalInterceptor
-    public ResponseVO memberList(HttpServletRequest request, @NotEmpty String groupId) {
+    public Result<PaginationResultVO<UserContact>> memberList(HttpServletRequest request, @NotEmpty String groupId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         PaginationResultVO<UserContact> result = groupInfoService.getGroupMemberList(tokenUserInfoDto, groupId);
-        return getSuccessResponseVO(result);
+        return success(result);
     }
 }
