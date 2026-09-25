@@ -64,6 +64,32 @@ const api = {
     checkMomentMediaChunks: "/moment/checkMediaChunks",
     deleteMoment: "/moment/delete",
     searchMessage: "/chat/searchMessage",//搜索消息
+    // ===== 云端漫游 / 定位跳转 / 全局搜索 =====
+    loadHistoryMessage: "/chat/loadHistoryMessage",//按会话拉服务端历史
+    locateMessage: "/chat/locateMessage",//定位到指定消息所在页
+    globalSearch: "/chat/globalSearch",//全局搜索（消息+联系人+群）
+    // ===== 会话属性（置顶/免打扰/草稿，服务端真源跨端同步） =====
+    setSessionTop: "/chat/setSessionTop",
+    setSessionNoDisturb: "/chat/setSessionNoDisturb",
+    saveSessionDraft: "/chat/saveSessionDraft",
+    // ===== 好友备注 / 分组 / 关键词搜索 =====
+    searchContactByKeyword: "/contact/searchByKeyword",
+    setContactRemark: "/contact/setRemark",
+    setContactGroup: "/contact/setGroup",
+    // ===== 账号：邮箱验证码 / 找回密码 =====
+    sendEmailCode: "/account/sendEmailCode",
+    resetPassword: "/account/resetPassword",
+    // ===== 朋友圈：详情 / 个人主页 / 评论删除 / 通知中心 =====
+    momentDetail: "/moment/detail",
+    userMomentList: "/moment/userMomentList",
+    deleteMomentComment: "/moment/deleteComment",
+    momentUnreadCount: "/moment/notify/unreadCount",
+    momentNotifyList: "/moment/notify/list",
+    momentNotifyRecent: "/moment/notify/recent",
+    momentMarkAllRead: "/moment/notify/markAllRead",
+    momentMarkReadByType: "/moment/notify/markReadByType",
+    momentMarkRead: "/moment/notify/markRead",
+    momentClearNotify: "/moment/notify/clear",
 }
 
 export default api;
