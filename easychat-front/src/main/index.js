@@ -59,6 +59,22 @@ function createWindow() {
   // 窗口获焦时终止新消息交替闪烁循环（notification.js，幂等）
   mainWindow.on('focus', () => stopBlink());
 
+  //顶层导航（含 F5 / Vite 全量刷新）开始即回到登录页，先复位登录窗口尺寸，
+  //避免残留登录成功后的 850x800（幂等，与 onLoginOrRegister / onReLogin 复位逻辑一致）
+  mainWindow.webContents.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => {
+    if (!isMainFrame || isInPlace) {
+      return;
+    }
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    }
+    mainWindow.setResizable(true);
+    mainWindow.setMinimumSize(login_width, login_height);
+    mainWindow.setSize(login_width, login_height);
+    mainWindow.center();
+    mainWindow.setResizable(false);
+  });
+
   mainWindow.on('close', (e) => {
     mainWindow.hide();
   })
