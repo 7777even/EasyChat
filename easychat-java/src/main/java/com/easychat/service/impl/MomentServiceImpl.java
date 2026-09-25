@@ -28,6 +28,7 @@ import com.easychat.mappers.MomentMapper;
 import com.easychat.mappers.MomentMediaMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
+import com.easychat.service.MomentNotifyService;
 import com.easychat.service.MomentService;
 import com.easychat.utils.StringTools;
 import org.slf4j.Logger;
@@ -64,6 +65,8 @@ public class MomentServiceImpl implements MomentService {
     private RedisComponet redisComponet;
     @Resource
     private AppConfig appConfig;
+    @Resource
+    private MomentNotifyService momentNotifyService;
 
     @Override
     public MomentVO publish(String content, Integer visibility, String visibleList, String invisibleList, String location, TokenUserInfoDto tokenUserInfoDto) {
@@ -87,9 +90,43 @@ public class MomentServiceImpl implements MomentService {
         moment.setCreateTime(now);
         moment.setUpdateTime(now);
         momentMapper.insert(moment);
+        // 朋友圈通知：新动态推给可见范围内的好友（私密动态不通知）
+        pushNewMomentNotify(moment, tokenUserInfoDto);
         Map<String, UserInfo> userCache = new HashMap<>();
         Map<String, Set<String>> contactCache = new HashMap<>();
         return buildMomentVO(moment, tokenUserInfoDto.getUserId(), userCache, contactCache);
+    }
+
+    /**
+     * 新动态通知：给可见范围内的好友各写一条 type=0 通知并推 WS 帧。
+     * 私密（visibility=2）不通知；白名单（3）只通知白名单内；黑名单过滤（4）排除名单内。
+     */
+    private void pushNewMomentNotify(Moment moment, TokenUserInfoDto tokenUserInfoDto) {
+        Integer visibility = moment.getVisibility() == null ? 0 : moment.getVisibility();
+        if (visibility == 2) {
+            return;
+        }
+        List<String> contactList = redisComponet.getUserContactList(tokenUserInfoDto.getUserId());
+        if (contactList == null || contactList.isEmpty()) {
+            return;
+        }
+        List<String> visible = parseList(moment.getVisibleList());
+        List<String> invisible = parseList(moment.getInvisibleList());
+        String brief = moment.getContent() == null ? "" : moment.getContent();
+        for (String contactId : contactList) {
+            if (StringTools.isEmpty(contactId)
+                    || !UserContactTypeEnum.USER.getPrefix().equals(contactId.substring(0, 1))) {
+                continue;
+            }
+            if (visibility == 3 && !visible.contains(contactId)) {
+                continue;
+            }
+            if (visibility == 4 && invisible.contains(contactId)) {
+                continue;
+            }
+            momentNotifyService.pushNotify(contactId, 0, moment.getId(), tokenUserInfoDto.getUserId(),
+                    tokenUserInfoDto.getNickName() + "发布了一条新动态：" + brief);
+        }
     }
 
     @Override
@@ -139,6 +176,9 @@ public class MomentServiceImpl implements MomentService {
             momentLike.setUserId(tokenUserInfoDto.getUserId());
             momentLike.setCreateTime(System.currentTimeMillis());
             momentLikeMapper.insert(momentLike);
+            // 朋友圈通知：点赞通知动态作者
+            momentNotifyService.pushNotify(moment.getUserId(), 1, momentId,
+                    tokenUserInfoDto.getUserId(), tokenUserInfoDto.getNickName() + "赞了你的动态");
         }
         return buildLikeResult(momentId, tokenUserInfoDto.getUserId(), new HashMap<>());
     }
@@ -166,6 +206,24 @@ public class MomentServiceImpl implements MomentService {
         comment.setStatus(1);
         comment.setCreateTime(now);
         momentCommentMapper.insert(comment);
+
+        // 朋友圈通知：评论通知动态作者；回复他人时额外通知被回复人
+        String brief = content.length() > 30 ? content.substring(0, 30) + "…" : content;
+        momentNotifyService.pushNotify(moment.getUserId(), 2, momentId,
+                tokenUserInfoDto.getUserId(), tokenUserInfoDto.getNickName() + "评论你的动态：" + brief);
+        if (!StringTools.isEmpty(replyToUserId) && !replyToUserId.equals(moment.getUserId())) {
+            momentNotifyService.pushNotify(replyToUserId, 3, comment.getId(),
+                    tokenUserInfoDto.getUserId(), tokenUserInfoDto.getNickName() + "回复了你的评论：" + brief);
+        }
+        // @ 提及：内容里形如 "@Uxxxx" 的用户收到 @ 提醒
+        for (String atUserId : parseAtUserIds(content)) {
+            if (atUserId.equals(moment.getUserId()) || atUserId.equals(replyToUserId)) {
+                continue;
+            }
+            momentNotifyService.pushNotify(atUserId, 4, momentId,
+                    tokenUserInfoDto.getUserId(), tokenUserInfoDto.getNickName() + "在评论中@了你");
+        }
+
         Map<String, UserInfo> userCache = new HashMap<>();
         userCache.put(tokenUserInfoDto.getUserId(), copyUserInfo(tokenUserInfoDto));
         MomentCommentVO vo = buildCommentVO(comment, userCache);
@@ -176,6 +234,26 @@ public class MomentServiceImpl implements MomentService {
             }
         }
         return vo;
+    }
+
+    /**
+     * 解析文本中的 @ 提及用户：约定格式为 "@Uxxxxxxxx"（@ 后紧跟用户 ID）
+     */
+    private List<String> parseAtUserIds(String content) {
+        List<String> result = new ArrayList<>();
+        if (StringTools.isEmpty(content)) {
+            return result;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("@(" + UserContactTypeEnum.USER.getPrefix() + "[A-Za-z0-9]+)")
+                .matcher(content);
+        while (matcher.find()) {
+            String userId = matcher.group(1);
+            if (!result.contains(userId)) {
+                result.add(userId);
+            }
+        }
+        return result;
     }
 
     private MomentVO buildMomentVO(Moment moment, String viewerId, Map<String, UserInfo> userCache, Map<String, Set<String>> contactCache) {
@@ -413,6 +491,62 @@ public class MomentServiceImpl implements MomentService {
         momentMapper.updateById(moment, momentId);
         
         logger.info("删除朋友圈成功, momentId: {}, userId: {}", momentId, tokenUserInfoDto.getUserId());
+    }
+
+    @Override
+    public void deleteComment(Long commentId, TokenUserInfoDto tokenUserInfoDto) {
+        MomentComment comment = momentCommentMapper.selectById(commentId);
+        if (comment == null || comment.getStatus() == null || comment.getStatus() == 0) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2501);
+        }
+        Moment moment = momentMapper.selectById(comment.getMomentId());
+        if (moment == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2501);
+        }
+        // 评论本人或动态作者可删除
+        boolean isCommentOwner = comment.getUserId().equals(tokenUserInfoDto.getUserId());
+        boolean isMomentOwner = moment.getUserId().equals(tokenUserInfoDto.getUserId());
+        if (!isCommentOwner && !isMomentOwner) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2502);
+        }
+        comment.setStatus(0);
+        momentCommentMapper.updateById(comment, commentId);
+    }
+
+    @Override
+    public List<MomentVO> loadUserMomentList(String targetUserId, TokenUserInfoDto tokenUserInfoDto, Integer pageNo, Integer pageSize) {
+        int realPageNo = pageNo == null || pageNo <= 0 ? 1 : pageNo;
+        int realPageSize = pageSize == null || pageSize <= 0 ? PageSize.SIZE20.getSize() : Math.min(pageSize, PageSize.SIZE40.getSize());
+        MomentQuery query = new MomentQuery();
+        query.setUserId(targetUserId);
+        query.setStatus(1);
+        query.setOrderBy("create_time desc");
+        query.setSimplePage(new SimplePage((realPageNo - 1) * realPageSize, realPageSize));
+        List<Moment> dataList = momentMapper.selectList(query);
+        List<MomentVO> result = new ArrayList<>();
+        Map<String, UserInfo> userCache = new HashMap<>();
+        Map<String, Set<String>> contactCache = new HashMap<>();
+        for (Moment item : dataList) {
+            if (!canView(item, tokenUserInfoDto.getUserId(), contactCache)) {
+                continue;
+            }
+            result.add(buildMomentVO(item, tokenUserInfoDto.getUserId(), userCache, contactCache));
+        }
+        return result;
+    }
+
+    @Override
+    public MomentVO loadMomentDetail(Long momentId, TokenUserInfoDto tokenUserInfoDto) {
+        Moment moment = momentMapper.selectById(momentId);
+        if (moment == null || moment.getStatus() == null || moment.getStatus() == 0) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2501);
+        }
+        Map<String, Set<String>> contactCache = new HashMap<>();
+        if (!canView(moment, tokenUserInfoDto.getUserId(), contactCache)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2502);
+        }
+        Map<String, UserInfo> userCache = new HashMap<>();
+        return buildMomentVO(moment, tokenUserInfoDto.getUserId(), userCache, contactCache);
     }
 
     /**

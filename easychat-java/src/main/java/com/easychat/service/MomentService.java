@@ -63,6 +63,21 @@ public interface MomentService {
      * 删除朋友圈
      */
     void deleteMoment(Long momentId, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 删除评论：评论本人或动态作者可删
+     */
+    void deleteComment(Long commentId, TokenUserInfoDto tokenUserInfoDto);
+
+    /**
+     * 个人主页：指定用户发布的动态列表
+     */
+    List<MomentVO> loadUserMomentList(String targetUserId, TokenUserInfoDto tokenUserInfoDto, Integer pageNo, Integer pageSize);
+
+    /**
+     * 动态详情（含点赞、评论）
+     */
+    MomentVO loadMomentDetail(Long momentId, TokenUserInfoDto tokenUserInfoDto);
 }
 
 

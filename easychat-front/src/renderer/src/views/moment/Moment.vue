@@ -1,5 +1,12 @@
 <template>
   <div class="moment-page">
+    <!-- 朋友圈通知中心入口 -->
+    <div class="moment-notify-bar" @click="openNotifyCenter">
+      <i class="iconfont icon-message"></i>
+      <span>朋友圈消息</span>
+      <span class="notify-count" v-if="unreadCount > 0">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+    </div>
+
     <!-- 发布朋友圈 -->
     <div class="moment-editor">
       <div class="editor-header">
@@ -47,9 +54,11 @@
     <el-scrollbar class="moment-list" ref="scrollbarRef">
       <div v-for="item in momentList" :key="item.id" class="moment-item">
         <div class="moment-header">
-          <Avatar :userId="item.userId" :width="45" :borderRadius="4" />
+          <div class="avatar-wrap" @click="openUserMoment(item)">
+            <Avatar :userId="item.userId" :width="45" :borderRadius="4" />
+          </div>
           <div class="moment-meta">
-            <div class="name">{{ item.nickName || item.userId }}</div>
+            <div class="name" @click="openUserMoment(item)">{{ item.nickName || item.userId }}</div>
             <div class="info-row">
               <span class="time">{{ formatTime(item.createTime) }}</span>
               <span v-if="item.location" class="location">
@@ -76,7 +85,7 @@
             v-for="(media, index) in item.mediaList"
             :key="media.id"
             class="media-item"
-            @click.stop="previewImages(item.mediaList, index)"
+            @click.stop="previewImages(item.mediaList, index, item)"
           >
             <img :src="getImageUrl(media.filePath)" />
             <div v-if="media.mediaType === 1" class="video-icon">
@@ -119,6 +128,11 @@
               </template>
               <span class="colon">：</span>
               <span class="content">{{ comment.content }}</span>
+              <span
+                v-if="comment.userId === currentUserId || item.userId === currentUserId"
+                class="comment-del"
+                @click="deleteComment(item, comment)"
+              >删除</span>
             </div>
           </div>
         </div>
@@ -164,6 +178,12 @@
     <!-- 朋友圈详情对话框 -->
     <MomentDetail ref="momentDetailRef" @refresh="loadMomentList" />
 
+    <!-- 朋友圈通知中心 -->
+    <MomentNotify ref="momentNotifyRef" @locateMoment="locateMoment" />
+
+    <!-- 朋友圈个人主页 -->
+    <UserMoment ref="userMomentRef" />
+
     <!-- 图片预览 -->
     <el-image-viewer
       v-if="showImageViewer"
@@ -179,6 +199,8 @@ import { ref, reactive, onMounted, getCurrentInstance, nextTick } from 'vue'
 import Avatar from '@/components/Avatar.vue'
 import PublishMoment from './PublishMoment.vue'
 import MomentDetail from './MomentDetail.vue'
+import MomentNotify from './MomentNotify.vue'
+import UserMoment from './UserMoment.vue'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 
@@ -189,6 +211,67 @@ const currentUserId = userInfoStore.getInfo().userId
 
 const publishMomentRef = ref(null)
 const momentDetailRef = ref(null)
+const momentNotifyRef = ref(null)
+const userMomentRef = ref(null)
+
+// 朋友圈个人主页：点头像或昵称进入
+const openUserMoment = (moment) => {
+  userMomentRef.value.show(moment.userId, moment.nickName)
+}
+
+// ===== 朋友圈通知：入口红点 + 通知中心 =====
+const unreadCount = ref(0)
+
+const loadUnreadCount = async () => {
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.momentUnreadCount,
+      showLoading: false,
+      showError: false
+    })
+    if (result && result.data != null) {
+      unreadCount.value = result.data
+    }
+  } catch (e) {
+    // 红点非核心链路，静默失败
+  }
+}
+
+const openNotifyCenter = () => {
+  unreadCount.value = 0
+  momentNotifyRef.value.show()
+}
+
+// 通知中心点击某条 → 拉动态详情并打开
+const locateMoment = async (momentId) => {
+  const result = await proxy.Request({
+    url: proxy.Api.momentDetail,
+    params: { momentId },
+    showLoading: false
+  })
+  if (!result) return
+  momentDetailRef.value.show(result.data)
+}
+
+const deleteComment = (moment, comment) => {
+  proxy.Confirm({
+    message: '确定要删除这条评论吗？',
+    okfun: async () => {
+      const result = await proxy.Request({
+        url: proxy.Api.deleteMomentComment,
+        params: { commentId: comment.id },
+        showLoading: false
+      })
+      if (!result) return
+      const list = moment.commentList || []
+      const index = list.findIndex((item) => item.id === comment.id)
+      if (index > -1) {
+        list.splice(index, 1)
+      }
+      proxy.Message.success('删除成功')
+    }
+  })
+}
 
 const form = reactive({
   content: '',
@@ -498,11 +581,26 @@ const showImageViewer = ref(false)
 const previewImageList = ref([])
 const previewStartIndex = ref(0)
 
-const previewImages = (mediaList, startIndex) => {
+const previewImages = (mediaList, startIndex, moment) => {
+  // 点视频不进图片预览：视频走详情页的独立媒体窗口播放
+  const clicked = mediaList[startIndex]
+  if (clicked && clicked.mediaType === 1) {
+    if (moment) {
+      showMomentDetail(moment)
+    }
+    return
+  }
   previewImageList.value = mediaList
     .filter((m) => m.mediaType === 0) // 只预览图片
     .map((m) => getImageUrl(m.filePath))
-  previewStartIndex.value = startIndex
+  // 起始下标需按过滤后的图片序列重算，否则点第 N 张会错位
+  let imageIndex = 0
+  for (let i = 0; i < startIndex; i++) {
+    if (mediaList[i] && mediaList[i].mediaType === 0) {
+      imageIndex++
+    }
+  }
+  previewStartIndex.value = imageIndex
   showImageViewer.value = true
 }
 
@@ -523,7 +621,20 @@ const handleScroll = () => {
 
 onMounted(() => {
   loadMomentList()
-  
+  loadUnreadCount()
+
+  // 实时收到朋友圈通知时点亮红点（主进程经 ipcRenderer 转发）
+  if (window.ipcRenderer) {
+    window.ipcRenderer.on('momentNotify', () => {
+      unreadCount.value = unreadCount.value + 1
+    })
+    window.ipcRenderer.on('momentUnread', (e, data) => {
+      if (data && data.unreadCount != null) {
+        unreadCount.value = data.unreadCount
+      }
+    })
+  }
+
   // 监听滚动事件
   nextTick(() => {
     if (scrollbarRef.value && scrollbarRef.value.wrapRef) {
@@ -541,6 +652,54 @@ onMounted(() => {
   padding: 15px;
   box-sizing: border-box;
   background: #f5f5f5;
+}
+
+.moment-notify-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .iconfont {
+    font-size: 18px;
+    color: #07c160;
+  }
+
+  .notify-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: #fa5151;
+    color: #fff;
+    border-radius: 9px;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+  }
+}
+
+.comment-del {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+
+  &:hover {
+    color: #fa5151;
+    text-decoration: underline;
+  }
 }
 
 .moment-editor {
@@ -645,6 +804,11 @@ onMounted(() => {
   align-items: flex-start;
   position: relative;
   
+  .avatar-wrap {
+    cursor: pointer;
+    line-height: 0;
+  }
+
   .moment-meta {
     margin-left: 12px;
     flex: 1;

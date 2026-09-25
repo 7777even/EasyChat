@@ -12,6 +12,10 @@
             <template v-if="item.name == 'chat' || item.name == 'contact'">
               <Badge :count="messageCountStore.getCount(item.countKey)" :top="5" :left="15"></Badge>
             </template>
+            <!-- 朋友圈未读通知红点 -->
+            <template v-if="item.name == 'moment'">
+              <Badge :count="momentUnread" :top="5" :left="15"></Badge>
+            </template>
           </div>
         </template>
       </div>
@@ -92,7 +96,42 @@ const menuList = ref([
 const componentRef = ref(null)
 const changeMenu = (item) => {
   currentMenu.value = item
+  // 进入朋友圈即视为已读，消掉红点
+  if (item.name == 'moment' && momentUnread.value > 0) {
+    markMomentRead()
+  }
   router.push(item.path)
+}
+
+// ===== 朋友圈通知红点 =====
+const momentUnread = ref(0)
+
+const loadMomentUnread = async () => {
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.momentUnreadCount,
+      showLoading: false,
+      showError: false
+    })
+    if (result && result.data != null) {
+      momentUnread.value = result.data
+    }
+  } catch (e) {
+    // 静默失败：红点非核心链路
+  }
+}
+
+const markMomentRead = async () => {
+  momentUnread.value = 0
+  try {
+    await proxy.Request({
+      url: proxy.Api.momentMarkAllRead,
+      showLoading: false,
+      showError: false
+    })
+  } catch (e) {
+    // 忽略
+  }
 }
 
 const currentMenu = ref(menuList.value[0])
@@ -136,6 +175,25 @@ onMounted(() => {
 
   getSysSetting()
 
+  loadMomentUnread()
+
+  // 朋友圈新通知：实时点亮红点
+  window.ipcRenderer.on('momentNotify', (e, message) => {
+    const extend = message.extendData || {}
+    if (extend.unreadCount != null) {
+      momentUnread.value = extend.unreadCount
+    } else {
+      momentUnread.value = momentUnread.value + 1
+    }
+  })
+
+  // 未读数变化（已读/清空同步）
+  window.ipcRenderer.on('momentUnread', (e, data) => {
+    if (data && data.unreadCount != null) {
+      momentUnread.value = data.unreadCount
+    }
+  })
+
   window.ipcRenderer.on('reLogin', (e, info) => {
     router.push('/login')
   })
@@ -150,6 +208,8 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('getLocalStoreCallback')
   window.ipcRenderer.removeAllListeners('reLogin')
   window.ipcRenderer.removeAllListeners('reloadAvatar')
+  window.ipcRenderer.removeAllListeners('momentNotify')
+  window.ipcRenderer.removeAllListeners('momentUnread')
 })
 
 watch(

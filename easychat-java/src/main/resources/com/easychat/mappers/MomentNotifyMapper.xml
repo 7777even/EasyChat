@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MomentNotifyMapper">
+
+    <resultMap id="base_result_map" type="com.easychat.entity.po.MomentNotify">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="type" property="type"/>
+        <result column="ref_id" property="refId"/>
+        <result column="from_user_id" property="fromUserId"/>
+        <result column="read_status" property="readStatus"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id,user_id,type,ref_id,from_user_id,read_status,create_time
+    </sql>
+
+    <sql id="base_condition_field">
+        <if test="query.id!=null">and id = #{query.id}</if>
+        <if test="query.userId!=null and query.userId!=''">and user_id = #{query.userId}</if>
+        <if test="query.type!=null">and type = #{query.type}</if>
+        <if test="query.refId!=null">and ref_id = #{query.refId}</if>
+        <if test="query.fromUserId!=null and query.fromUserId!=''">and from_user_id = #{query.fromUserId}</if>
+        <if test="query.readStatus!=null">and read_status = #{query.readStatus}</if>
+        <if test="query.typeList!=null and query.typeList.length>0">
+            and type in(<foreach collection="query.typeList" separator="," item="item">#{item}</foreach>)
+        </if>
+    </sql>
+
+    <sql id="base_condition">
+        <where>
+            <include refid="base_condition_field"/>
+        </where>
+    </sql>
+
+    <select id="selectList" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_notify
+        <include refid="base_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        select count(1) from moment_notify
+        <include refid="base_condition"/>
+    </select>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.MomentNotify" useGeneratedKeys="true" keyProperty="bean.id">
+        insert into moment_notify
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.userId!=null">user_id,</if>
+            <if test="bean.type!=null">type,</if>
+            <if test="bean.refId!=null">ref_id,</if>
+            <if test="bean.fromUserId!=null">from_user_id,</if>
+            <if test="bean.readStatus!=null">read_status,</if>
+            <if test="bean.createTime!=null">create_time,</if>
+        </trim>
+        <trim prefix="values(" suffix=")" suffixOverrides=",">
+            <if test="bean.userId!=null">#{bean.userId},</if>
+            <if test="bean.type!=null">#{bean.type},</if>
+            <if test="bean.refId!=null">#{bean.refId},</if>
+            <if test="bean.fromUserId!=null">#{bean.fromUserId},</if>
+            <if test="bean.readStatus!=null">#{bean.readStatus},</if>
+            <if test="bean.createTime!=null">#{bean.createTime},</if>
+        </trim>
+    </insert>
+
+    <insert id="insertBatch" parameterType="com.easychat.entity.po.MomentNotify" useGeneratedKeys="true" keyProperty="id">
+        insert into moment_notify(user_id,type,ref_id,from_user_id,read_status,create_time) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.userId},#{item.type},#{item.refId},#{item.fromUserId},#{item.readStatus},#{item.createTime})
+        </foreach>
+    </insert>
+
+    <insert id="insertOrUpdateBatch" parameterType="com.easychat.entity.po.MomentNotify">
+        insert into moment_notify(id,user_id,type,ref_id,from_user_id,read_status,create_time) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id},#{item.userId},#{item.type},#{item.refId},#{item.fromUserId},#{item.readStatus},#{item.createTime})
+        </foreach>
+        on duplicate key update
+        type = values(type),
+        ref_id = values(ref_id),
+        from_user_id = values(from_user_id),
+        read_status = values(read_status),
+        create_time = values(create_time)
+    </insert>
+
+    <update id="updateByParam" parameterType="com.easychat.entity.query.MomentNotifyQuery">
+        update moment_notify
+        <set>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.type!=null">type = #{bean.type},</if>
+            <if test="bean.refId!=null">ref_id = #{bean.refId},</if>
+            <if test="bean.fromUserId!=null">from_user_id = #{bean.fromUserId},</if>
+            <if test="bean.readStatus!=null">read_status = #{bean.readStatus},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+        </set>
+        <include refid="base_condition"/>
+    </update>
+
+    <delete id="deleteByParam">
+        delete from moment_notify
+        <include refid="base_condition"/>
+    </delete>
+
+    <update id="updateById" parameterType="com.easychat.entity.po.MomentNotify">
+        update moment_notify
+        <set>
+            <if test="bean.userId!=null">user_id = #{bean.userId},</if>
+            <if test="bean.type!=null">type = #{bean.type},</if>
+            <if test="bean.refId!=null">ref_id = #{bean.refId},</if>
+            <if test="bean.fromUserId!=null">from_user_id = #{bean.fromUserId},</if>
+            <if test="bean.readStatus!=null">read_status = #{bean.readStatus},</if>
+            <if test="bean.createTime!=null">create_time = #{bean.createTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from moment_notify where id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from moment_notify where id = #{id}
+    </select>
+
+    <!-- 按收件人批量标记已读 -->
+    <update id="markReadByUserId">
+        update moment_notify set read_status = 1
+        where user_id = #{userId} and (read_status is null or read_status = 0)
+        <if test="type!=null">and type = #{type}</if>
+    </update>
+</mapper>

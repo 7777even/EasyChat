@@ -225,22 +225,42 @@ const previewImageList = ref([])
 const previewStartIndex = ref(0)
 
 const previewMedia = (index) => {
-  // 只预览图片类型的媒体
-  const imageMediaList = moment.value.mediaList.filter((m) => m.mediaType === 0)
-  if (imageMediaList.length === 0) {
-    proxy.Message.warning('暂不支持视频预览')
+  const clickedMedia = moment.value.mediaList[index]
+  if (!clickedMedia) {
     return
   }
-  
-  previewImageList.value = imageMediaList.map((m) => getImageUrl(m.filePath))
-  // 找到当前点击的图片在图片列表中的索引
-  const clickedMedia = moment.value.mediaList[index]
-  if (clickedMedia.mediaType === 0) {
-    previewStartIndex.value = imageMediaList.findIndex((m) => m.id === clickedMedia.id)
-    showImageViewer.value = true
-  } else {
-    proxy.Message.warning('暂不支持视频预览')
+  // 视频：走独立媒体窗口播放（沿用聊天媒体的 showMedia 通道）
+  if (clickedMedia.mediaType === 1) {
+    window.ipcRenderer.send('newWindow', {
+      windowId: 'media',
+      title: '视频预览',
+      path: `/showMedia`,
+      data: {
+        currentFileId: clickedMedia.filePath,
+        fileList: [
+          {
+            partType: 'moment',
+            fileId: clickedMedia.filePath,
+            fileType: 1,
+            fileName: clickedMedia.filePath,
+            forceGet: false
+          }
+        ]
+      }
+    })
+    return
   }
+  // 图片：走内置图片查看器
+  const imageMediaList = moment.value.mediaList.filter((m) => m.mediaType === 0)
+  if (imageMediaList.length === 0) {
+    return
+  }
+  previewImageList.value = imageMediaList.map((m) => getImageUrl(m.filePath))
+  previewStartIndex.value = imageMediaList.findIndex((m) => m.id === clickedMedia.id)
+  if (previewStartIndex.value < 0) {
+    previewStartIndex.value = 0
+  }
+  showImageViewer.value = true
 }
 
 const closeImageViewer = () => {
