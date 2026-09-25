@@ -4,8 +4,9 @@ import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.SysSettingDto;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.redis.RedisComponet;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,9 +24,9 @@ public class AdminSettingController extends ABaseController {
     @Resource
     private RedisComponet redisComponet;
 
-    @RequestMapping("/saveSysSetting")
+    @PostMapping("/saveSysSetting")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO saveSysSetting(SysSettingDto sysSettingDto,
+    public Result<Void> saveSysSetting(SysSettingDto sysSettingDto,
                                      MultipartFile robotFile,
                                      MultipartFile robotCover) throws IOException {
         if (robotFile != null) {
@@ -39,13 +40,13 @@ public class AdminSettingController extends ABaseController {
             robotCover.transferTo(new File(filePath + Constants.COVER_IMAGE_SUFFIX));
         }
         redisComponet.saveSysSetting(sysSettingDto);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
-    @RequestMapping("/getSysSetting")
+    @PostMapping("/getSysSetting")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO getSysSetting() {
+    public Result<SysSettingDto> getSysSetting() {
         SysSettingDto sysSettingDto = redisComponet.getSysSetting();
-        return getSuccessResponseVO(sysSettingDto);
+        return success(sysSettingDto);
     }
 }

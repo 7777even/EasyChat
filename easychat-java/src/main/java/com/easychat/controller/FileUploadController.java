@@ -2,8 +2,9 @@ package com.easychat.controller;
 
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.dto.TokenUserInfoDto;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.service.FileUploadService;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -12,6 +13,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
+import java.util.List;
 
 /**
  * 分片上传控制器
@@ -26,24 +28,24 @@ public class FileUploadController extends ABaseController {
     /**
      * 上传文件分片
      */
-    @RequestMapping("/uploadChunk")
+    @PostMapping("/uploadChunk")
     @GlobalInterceptor
-    public ResponseVO uploadChunk(HttpServletRequest request,
+    public Result<Void> uploadChunk(HttpServletRequest request,
                                   @NotEmpty String fileId,
                                   @NotNull Integer chunkIndex,
                                   @NotNull Integer totalChunks,
                                   @NotNull MultipartFile chunk) {
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
         fileUploadService.uploadChunk(fileId, chunkIndex, totalChunks, chunk, userInfoDto);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
     /**
      * 合并文件分片
      */
-    @RequestMapping("/mergeChunks")
+    @PostMapping("/mergeChunks")
     @GlobalInterceptor
-    public ResponseVO mergeChunks(HttpServletRequest request,
+    public Result<Void> mergeChunks(HttpServletRequest request,
                                   @NotEmpty String fileId,
                                   @NotNull Long messageId,
                                   @NotEmpty String fileName,
@@ -51,18 +53,18 @@ public class FileUploadController extends ABaseController {
                                   MultipartFile cover) {
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
         fileUploadService.mergeChunks(fileId, messageId, fileName, totalChunks, cover, userInfoDto);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
     /**
      * 检查已上传的分片
      */
-    @RequestMapping("/checkChunks")
+    @PostMapping("/checkChunks")
     @GlobalInterceptor
-    public ResponseVO checkChunks(HttpServletRequest request,
+    public Result<List<Integer>> checkChunks(HttpServletRequest request,
                                   @NotEmpty String fileId,
                                   @NotNull Integer totalChunks) {
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
-        return getSuccessResponseVO(fileUploadService.checkUploadedChunks(fileId, totalChunks, userInfoDto));
+        return success(fileUploadService.checkUploadedChunks(fileId, totalChunks, userInfoDto));
     }
 }

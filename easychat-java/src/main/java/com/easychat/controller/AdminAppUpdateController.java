@@ -3,9 +3,11 @@ package com.easychat.controller;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.po.AppUpdate;
 import com.easychat.entity.query.AppUpdateQuery;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.PaginationResultVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.service.AppUpdateService;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,16 +31,16 @@ public class AdminAppUpdateController extends ABaseController {
     /**
      * 根据条件分页查询
      */
-    @RequestMapping("/loadUpdateList")
+    @PostMapping("/loadUpdateList")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO loadUpdateList(AppUpdateQuery query) {
+    public Result<PaginationResultVO> loadUpdateList(AppUpdateQuery query) {
         query.setOrderBy("id desc");
-        return getSuccessResponseVO(appUpdateService.findListByPage(query));
+        return success(appUpdateService.findListByPage(query));
     }
 
-    @RequestMapping("/saveUpdate")
+    @PostMapping("/saveUpdate")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO saveUpdate(Integer id,
+    public Result<Void> saveUpdate(Integer id,
                                  @NotEmpty String version,
                                  @NotEmpty String updateDesc,
                                  @NotNull Integer fileType,
@@ -51,20 +53,20 @@ public class AdminAppUpdateController extends ABaseController {
         appUpdate.setFileType(fileType);
         appUpdate.setOuterLink(outerLink);
         appUpdateService.saveUpdate(appUpdate, file);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
-    @RequestMapping("/delUpdate")
+    @PostMapping("/delUpdate")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO delUpdate(@NotNull Integer id) {
+    public Result<Void> delUpdate(@NotNull Integer id) {
         appUpdateService.deleteAppUpdateById(id);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
-    @RequestMapping("/postUpdate")
+    @PostMapping("/postUpdate")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO postUpdate(@NotNull Integer id, @NotNull Integer status, String grayscaleUid) {
+    public Result<Void> postUpdate(@NotNull Integer id, @NotNull Integer status, String grayscaleUid) {
         appUpdateService.postUpdate(id, status, grayscaleUid);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 }

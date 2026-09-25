@@ -5,13 +5,14 @@ import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.po.AppUpdate;
 import com.easychat.entity.vo.AppUpdateVO;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.service.AppUpdateService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.StringTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,15 +38,15 @@ public class UpdateController extends ABaseController {
     @Resource
     private AppUpdateService appUpdateService;
 
-    @RequestMapping("/checkVersion")
+    @PostMapping("/checkVersion")
     @GlobalInterceptor
-    public ResponseVO loadAllCategory(String appVersion, String uid) {
+    public Result<AppUpdateVO> loadAllCategory(String appVersion, String uid) {
         if (StringTools.isEmpty(appVersion)) {
-            return getSuccessResponseVO(null);
+            return success(null);
         }
         AppUpdate appUpdate = appUpdateService.getLatestUpdate(appVersion, uid);
         if (appUpdate == null) {
-            return getSuccessResponseVO(null);
+            return success(null);
         }
         AppUpdateVO updateVO = CopyTools.copy(appUpdate, AppUpdateVO.class);
         File file = new File(appConfig.getProjectFolder() + Constants.APP_UPDATE_FOLDER + appUpdate.getId() + Constants.APP_EXE_SUFFIX);
@@ -53,10 +54,10 @@ public class UpdateController extends ABaseController {
         updateVO.setUpdateList(Arrays.asList(appUpdate.getUpdateDescArray()));
         String fileName = Constants.APP_NAME + appUpdate.getVersion() + Constants.APP_EXE_SUFFIX;
         updateVO.setFileName(fileName);
-        return getSuccessResponseVO(updateVO);
+        return success(updateVO);
     }
 
-    @RequestMapping("/download")
+    @PostMapping("/download")
     @GlobalInterceptor
     public void download(HttpServletResponse response, @NotNull Integer id) {
         OutputStream out = null;

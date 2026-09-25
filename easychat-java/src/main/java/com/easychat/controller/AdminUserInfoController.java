@@ -3,8 +3,9 @@ package com.easychat.controller;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.query.UserInfoQuery;
 import com.easychat.entity.vo.PaginationResultVO;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.service.UserInfoService;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,27 +20,27 @@ public class AdminUserInfoController extends ABaseController {
     @Resource
     private UserInfoService userInfoService;
 
-    @RequestMapping("/loadUser")
+    @PostMapping("/loadUser")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO loadUser(UserInfoQuery userInfoQuery) {
+    public Result<PaginationResultVO> loadUser(UserInfoQuery userInfoQuery) {
         userInfoQuery.setOrderBy("create_time desc");
         PaginationResultVO resultVO = userInfoService.findListByPage(userInfoQuery);
-        return getSuccessResponseVO(resultVO);
+        return success(resultVO);
     }
 
 
-    @RequestMapping("/updateUserStatus")
+    @PostMapping("/updateUserStatus")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO updateUserStatus(@NotNull Integer status,
+    public Result<Void> updateUserStatus(@NotNull Integer status,
                                        @NotEmpty String userId) {
         userInfoService.updateUserStatus(status, userId);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
-    @RequestMapping("/forceOffLine")
+    @PostMapping("/forceOffLine")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO forceOffLine(@NotEmpty String userId) {
+    public Result<Void> forceOffLine(@NotEmpty String userId) {
         userInfoService.forceOffLine(userId);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 }

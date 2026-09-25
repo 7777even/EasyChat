@@ -3,9 +3,11 @@ package com.easychat.controller;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.po.UserInfoBeauty;
 import com.easychat.entity.query.UserInfoBeautyQuery;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.PaginationResultVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.service.UserInfoBeautyService;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,22 +28,22 @@ public class AdminUserInfoBeautyController extends ABaseController {
     /**
      * 根据条件分页查询
      */
-    @RequestMapping("/loadBeautyAccountList")
+    @PostMapping("/loadBeautyAccountList")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO loadBeautyAccountList(UserInfoBeautyQuery query) {
-        return getSuccessResponseVO(userInfoBeautyService.findListByPage(query));
+    public Result<PaginationResultVO<UserInfoBeauty>> loadBeautyAccountList(UserInfoBeautyQuery query) {
+        return success(userInfoBeautyService.findListByPage(query));
     }
 
-    @RequestMapping("/saveBeautAccount")
+    @PostMapping("/saveBeautAccount")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO saveBeautAccount(UserInfoBeauty beauty) {
+    public Result<Void> saveBeautAccount(UserInfoBeauty beauty) {
         userInfoBeautyService.saveAccount(beauty);
-        return getSuccessResponseVO(null);
+        return success(null);
     }
 
-    @RequestMapping("/delBeautAccount")
+    @PostMapping("/delBeautAccount")
     @GlobalInterceptor(checkAdmin = true)
-    public ResponseVO delBeautAccount(@NotNull Integer id) {
-        return getSuccessResponseVO(userInfoBeautyService.deleteUserInfoBeautyById(id));
+    public Result<Integer> delBeautAccount(@NotNull Integer id) {
+        return success(userInfoBeautyService.deleteUserInfoBeautyById(id));
     }
 }
