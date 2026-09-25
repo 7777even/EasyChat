@@ -806,6 +806,9 @@ onMounted(() => {
   // 监听新消息提示音
   onPlayNotifySound()
 
+  // 监听聊天记录导出结果
+  onExportChatRecordCallback()
+
   //重新加载已删除的会话
   onReloadChatSession()
 
@@ -837,6 +840,7 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('addLocalCallback')
   window.ipcRenderer.removeAllListeners('syncSession')
   window.ipcRenderer.removeAllListeners('reloadChatSessionCallback')
+  window.ipcRenderer.removeAllListeners('exportChatRecordCallback')
 })
 
 /**
@@ -906,6 +910,18 @@ const onContextMenu = (data, e) => {
         }
       },
       {
+        label: '导出聊天记录（TXT）',
+        onClick: () => {
+          doExportChat(data, 'txt')
+        }
+      },
+      {
+        label: '导出聊天记录（CSV）',
+        onClick: () => {
+          doExportChat(data, 'csv')
+        }
+      },
+      {
         label: '删除聊天',
         onClick: () => {
           proxy.Confirm({
@@ -917,6 +933,36 @@ const onContextMenu = (data, e) => {
         }
       }
     ]
+  })
+}
+
+// ===== 聊天记录导出：下发主进程落盘，回调提示结果 =====
+const doExportChat = (session, format) => {
+  if (!session || !session.sessionId) {
+    proxy.Message.warning('请先选择要导出的会话')
+    return
+  }
+  window.ipcRenderer.send('exportChatRecord', {
+    sessionId: session.sessionId,
+    contactName: session.contactName,
+    format
+  })
+}
+
+const onExportChatRecordCallback = () => {
+  window.ipcRenderer.on('exportChatRecordCallback', (e, result) => {
+    if (!result) {
+      return
+    }
+    // 用户主动取消保存：静默返回，不打扰
+    if (result.canceled) {
+      return
+    }
+    if (result.success) {
+      proxy.Message.success(`已导出 ${result.count} 条消息：${result.path}`)
+      return
+    }
+    proxy.Message.warning(result.error || '导出失败')
   })
 }
 //查看媒体详情

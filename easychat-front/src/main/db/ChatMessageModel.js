@@ -40,6 +40,20 @@ const selectMessageList = (query) => {
     })
 }
 
+/**
+ * 导出用：按会话全量读取消息（不分页），按 message_id 升序。
+ * 与 selectMessageList 的区别：后者是聊天窗口翻页用的分页倒序查询，不适合导出。
+ */
+const selectAllMessageList = (query) => {
+    return new Promise(async (resolve, reject) => {
+        const { sessionId } = query;
+        const params = [sessionId, store.getUserId()];
+        const sql = "select * from chat_message where session_id = ? and user_id = ? order by message_id asc";
+        const dataList = await queryAll(sql, params);
+        resolve(dataList || []);
+    })
+}
+
 const saveMessage = (data) => {
     data.userId = store.getUserId();
     return insertOrReplace("chat_message", data);
@@ -172,6 +186,7 @@ export {
     existsMessage,
     delMessage,
     selectMessageList,
+    selectAllMessageList,
     saveMessageBatch,
     selectByMessageId,
     searchMessages

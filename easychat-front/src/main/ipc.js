@@ -4,6 +4,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { initWs, closeWs, registerPendingAck } from './wsClient';
 import { initNotifySwitch, setNotifySwitch } from './notification';
+import { exportChatRecord } from './exportChat';
 import { selectMessageList, saveMessage, updateMessage, existsMessage, delMessage } from "./db/ChatMessageModel";
 import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSession, topChatSession, updateStatus, updateSessionAttr } from "./db/ChatSessionUserModel";
 import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser, updateSysSetting } from "./db/UserSetting";
@@ -203,6 +204,14 @@ const onSaveOrUpdateMessage = () => {
 const onSaveAs = () => {
     ipcMain.on("saveAs", async (e, data) => {
         saveAs(data);
+    });
+}
+
+//导出会话聊天记录（TXT / CSV），结果回传渲染层做提示
+const onExportChatRecord = () => {
+    ipcMain.on("exportChatRecord", async (e, data) => {
+        const result = await exportChatRecord(data);
+        e.sender.send("exportChatRecordCallback", result);
     });
 }
 
@@ -415,6 +424,7 @@ export {
     onSaveSessionDraft,
     onCreateCover,
     onSaveAs,
+    onExportChatRecord,
     onGetSettingInfo,
     onUpdateSysSetting,
     onChangeLocalFolder,
