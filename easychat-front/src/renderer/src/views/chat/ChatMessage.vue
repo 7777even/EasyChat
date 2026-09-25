@@ -4,6 +4,9 @@
     v-if="data.sendUserId == userInfoStore.getInfo().userId"
     @contextmenu.stop="onContextMenu($event)"
   >
+    <div class="select-check" v-if="multiSelectMode" @click.stop="toggleSelect">
+      <el-checkbox :model-value="selected"></el-checkbox>
+    </div>
     <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 ? 'recalled-message' : '']">
       <div class="sending" v-if="data.status == 0">
         <el-skeleton :animated="true">
@@ -16,18 +19,24 @@
         <div class="content recalled-content" v-if="data.messageType == 14">
           <span class="recall-text">{{ getRecallText() }}</span>
         </div>
-        <div class="content" v-html="data.messageContent" v-else-if="data.messageType != 5"></div>
-        <div class="content" v-else>
-          <template v-if="data.fileType == 0">
-            <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
-          </template>
-          <template v-if="data.fileType == 1">
-            <ChatMessageVideo :data="data" @click="showDetail"></ChatMessageVideo>
-          </template>
-          <template v-if="data.fileType == 2">
-            <ChatMessageFile :data="data" @click="showDetail"></ChatMessageFile>
-          </template>
-        </div>
+        <template v-else>
+          <div class="quote-block" v-if="quoteInfo">
+            <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
+            <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
+          </div>
+          <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+          <div class="content" v-else>
+            <template v-if="data.fileType == 0">
+              <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
+            </template>
+            <template v-if="data.fileType == 1">
+              <ChatMessageVideo :data="data" @click="showDetail"></ChatMessageVideo>
+            </template>
+            <template v-if="data.fileType == 2">
+              <ChatMessageFile :data="data" @click="showDetail"></ChatMessageFile>
+            </template>
+          </div>
+        </template>
       </template>
     </div>
     <Avatar :width="35" :userId="userInfoStore.getInfo().userId"> </Avatar>
@@ -37,6 +46,9 @@
     v-else
     @contextmenu.stop="onContextMenu($event)"
   >
+    <div class="select-check" v-if="multiSelectMode" @click.stop="toggleSelect">
+      <el-checkbox :model-value="selected"></el-checkbox>
+    </div>
     <div class="user-avatar">
       <Avatar :width="35" :userId="data.sendUserId"></Avatar>
     </div>
@@ -62,18 +74,24 @@
         <div class="content recalled-content" v-if="data.messageType == 14">
           <span class="recall-text">{{ getRecallText() }}</span>
         </div>
-        <div class="content" v-html="data.messageContent" v-else-if="data.messageType != 5"></div>
-        <div class="content" v-else>
-          <template v-if="data.fileType == 0">
-            <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
-          </template>
-          <template v-if="data.fileType == 1">
-            <ChatMessageVideo :data="data" @click="showDetail"></ChatMessageVideo>
-          </template>
-          <template v-if="data.fileType == 2">
-            <ChatMessageFile :data="data" @click="showDetail"></ChatMessageFile>
-          </template>
-        </div>
+        <template v-else>
+          <div class="quote-block" v-if="quoteInfo">
+            <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
+            <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
+          </div>
+          <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+          <div class="content" v-else>
+            <template v-if="data.fileType == 0">
+              <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
+            </template>
+            <template v-if="data.fileType == 1">
+              <ChatMessageVideo :data="data" @click="showDetail"></ChatMessageVideo>
+            </template>
+            <template v-if="data.fileType == 2">
+              <ChatMessageFile :data="data" @click="showDetail"></ChatMessageFile>
+            </template>
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -99,10 +117,53 @@ const props = defineProps({
   currentChatSession: {
     type: Object,
     default: {}
+  },
+  //多选模式：显示勾选框
+  multiSelectMode: {
+    type: Boolean,
+    default: false
+  },
+  //是否被勾选
+  selected: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['showMediaDetail', 'recallMessage'])
+//多选勾选切换
+const toggleSelect = () => {
+  emit('toggleSelect', props.data.messageId)
+}
+
+const emit = defineEmits([
+  'showMediaDetail',
+  'recallMessage',
+  'quoteMessage',
+  'forwardMessage',
+  'multiSelect',
+  'toggleSelect',
+  'deleteMessage'
+])
+
+/**
+ * 消息扩展数据（引用回复 / 转发来源），兼容对象与 JSON 字符串两种形态
+ */
+const parseExtraData = () => {
+  const extra = props.data.extraData
+  if (!extra) return null
+  if (typeof extra === 'object') return extra
+  try {
+    return JSON.parse(extra)
+  } catch (e) {
+    return null
+  }
+}
+
+const quoteInfo = computed(() => {
+  const extra = parseExtraData()
+  if (!extra || !extra.quoteContent) return null
+  return extra
+})
 
 const showDetail = () => {
   if (props.data.stauts == 0) {
@@ -120,39 +181,94 @@ const getRecallText = () => {
   return '该消息已撤回'
 }
 
-// 右键菜单
+// 右键菜单：撤回 / 复制 / 引用回复 / 转发 / 多选 / 删除
 const onContextMenu = (e) => {
-  // 只有自己的消息且不是撤回消息才能撤回
   const isMyMessage = props.data.sendUserId == userInfoStore.getInfo().userId
   const isRecalled = props.data.messageType == 14
   const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5
-  
-  if (!isMyMessage || isRecalled || !isNormalMessage) {
+
+  if (isRecalled || !isNormalMessage) {
     return
   }
-  
-  // 检查是否在2分钟内
-  const currentTime = Date.now()
-  const sendTime = props.data.sendTime
-  const timeDiff = currentTime - sendTime
-  const canRecall = timeDiff <= 120000 // 2分钟 = 120000毫秒
-  
-  if (!canRecall) {
-    return
-  }
-  
-  ContextMenu.showContextMenu({
-    x: e.x,
-    y: e.y,
-    items: [
-      {
+
+  const items = []
+
+  // 复制：文本消息复制正文，媒体消息复制文件名
+  items.push({
+    label: '复制',
+    onClick: () => {
+      const text =
+        props.data.messageType == 5
+          ? props.data.fileName || ''
+          : (props.data.messageContent || '').replace(/<[^>]+>/g, '')
+      copyText(text)
+    }
+  })
+
+  items.push({
+    label: '引用回复',
+    onClick: () => {
+      emit('quoteMessage', props.data)
+    }
+  })
+
+  items.push({
+    label: '转发',
+    onClick: () => {
+      emit('forwardMessage', props.data)
+    }
+  })
+
+  items.push({
+    label: '多选',
+    onClick: () => {
+      emit('multiSelect', props.data)
+    }
+  })
+
+  // 撤回：仅自己的消息且 2 分钟内
+  if (isMyMessage) {
+    const timeDiff = Date.now() - props.data.sendTime
+    if (timeDiff <= 120000) {
+      items.push({
         label: '撤回',
         onClick: () => {
           emit('recallMessage', props.data.messageId)
         }
-      }
-    ]
+      })
+    }
+  }
+
+  items.push({
+    label: '删除',
+    onClick: () => {
+      emit('deleteMessage', props.data)
+    }
   })
+
+  ContextMenu.showContextMenu({
+    x: e.x,
+    y: e.y,
+    items
+  })
+}
+
+// 复制文本：优先用 Electron 剪贴板，降级到浏览器 API
+const copyText = async (text) => {
+  if (!text) return
+  try {
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('copyText', text)
+      return
+    }
+  } catch (e) {
+    // 降级
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch (e) {
+    console.warn('复制失败', e)
+  }
 }
 </script>
 
@@ -265,6 +381,32 @@ const onContextMenu = (e) => {
     left: -4px;
     top: 35px;
     background: #fff;
+  }
+}
+
+// 引用回复块
+.quote-block {
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  border-left: 3px solid #b6b6b6;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  text-align: left;
+  font-size: 12px;
+  color: #6b6b6b;
+  .quote-name {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .quote-content {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px;
   }
 }
 

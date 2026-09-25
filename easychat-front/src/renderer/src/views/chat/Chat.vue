@@ -3,9 +3,15 @@
     <template #left-content>
       <div class="drag-panel drag"></div>
       <div class="top-search">
-        <el-input placeholder="搜索" v-model="searchKey" size="small" @keyup="search">
+        <el-input
+          placeholder="搜索（回车全局搜索）"
+          v-model="searchKey"
+          size="small"
+          @keyup="search"
+          @keyup.enter="openGlobalSearch"
+        >
           <template #suffix>
-            <span class="iconfont icon-search"></span>
+            <span class="iconfont icon-search global-search-icon" @click="openGlobalSearch"></span>
           </template>
         </el-input>
       </div>
@@ -45,6 +51,12 @@
       </div>
 
       <div class="chat-panel" v-show="Object.keys(currentChatSession).length > 0">
+        <div class="multi-select-bar" v-if="multiSelect.mode">
+          <span class="multi-tip">已选择 {{ multiSelect.ids.length }} 条</span>
+          <el-button size="small" type="primary" @click="forwardSelected">转发</el-button>
+          <el-button size="small" type="danger" @click="deleteSelected">删除</el-button>
+          <el-button size="small" @click="exitMultiSelect">退出多选</el-button>
+        </div>
         <div class="message-panel" id="message-panel">
           <div
             class="message-item"
@@ -78,8 +90,15 @@
               <ChatMessage
                 :data="data"
                 :currentChatSession="currentChatSession"
+                :multiSelectMode="multiSelect.mode"
+                :selected="multiSelect.ids.includes(data.messageId)"
                 @showMediaDetail="showMediaDetailHandler"
                 @recallMessage="recallMessageHandler"
+                @quoteMessage="quoteMessageHandler"
+                @forwardMessage="forwardMessageHandler"
+                @multiSelect="enterMultiSelect"
+                @toggleSelect="toggleMessageSelect"
+                @deleteMessage="deleteMessageHandler"
               ></ChatMessage>
             </template>
           </div>
@@ -102,6 +121,12 @@
     @delChatSessionCallback="delChatSession"
   ></ChatGroupDetail>
   <MessageSearch ref="messageSearchRef" @jumpToMessage="jumpToMessage"></MessageSearch>
+  <ForwardSelect ref="forwardSelectRef"></ForwardSelect>
+  <GlobalSearch
+    ref="globalSearchRef"
+    @openSession="openSessionFromSearch"
+    @jumpMessage="jumpMessageFromSearch"
+  ></GlobalSearch>
 </template>
 <script>
 export default {
@@ -122,12 +147,15 @@ import ChatMessage from './ChatMessage.vue'
 import ChatMessageTime from './ChatMessageTime.vue'
 import ChatMessageSys from './ChatMessageSys.vue'
 import MessageSend from './MessageSend.vue'
+import ForwardSelect from './ForwardSelect.vue'
+import GlobalSearch from './GlobalSearch.vue'
 import {ref, reactive, getCurrentInstance, nextTick, onMounted, onActivated, watch, onUnmounted} from 'vue'
 import {useRoute} from 'vue-router'
 
 import {useUserInfoStore} from '@/stores/UserInfoStore'
 import {useMessageCountStore} from '@/stores/MessageCountStore'
 import {useContactStateStore} from '@/stores/ContactStateStore'
+import {useSysSettingStore} from '@/stores/SysSettingStore'
 
 const route = useRoute()
 
@@ -136,6 +164,14 @@ const {proxy} = getCurrentInstance()
 const userInfoStore = useUserInfoStore()
 //消息数
 const messageCountStore = useMessageCountStore()
+//系统设置（含新消息提醒开关 notifySwitch）
+const sysSettingStore = useSysSettingStore()
+
+//全局提醒开关：缺省视为开启
+const notifySwitchOn = () => {
+  const setting = sysSettingStore.getSetting() || {}
+  return setting.notifySwitch === undefined ? true : Boolean(setting.notifySwitch)
+}
 
 const contactStateStore = useContactStateStore()
 
@@ -173,6 +209,11 @@ const messageCountInfo = {
   maxMessageId: null,
   noData: false
 }
+// 云端漫游：本地历史翻完后继续从服务端拉，避免新设备只能看到 3 天内的消息
+const remoteHistory = reactive({
+  noData: false,
+  lastMessageId: null
+})
 
 //消息列表
 const messageList = ref([])
@@ -194,6 +235,8 @@ const chatSessionClickHandler = (item) => {
   messageCountInfo.totalPage = 1
   messageCountInfo.maxMessageId = null
   messageCountInfo.noData = false
+  remoteHistory.noData = false
+  remoteHistory.lastMessageId = null
   loadChatMessage()
   //设置session
   setSessionSelect({contactId: item.contactId, sessionId: item.sessionId})
@@ -209,7 +252,12 @@ const setSessionSelect = ({contactId, sessionId}) => {
 }
 
 const loadChatMessage = () => {
-  if (loadingMessage.value || messageCountInfo.noData) {
+  if (loadingMessage.value) {
+    return
+  }
+  // 本地历史已翻完 → 转云端漫游，从服务端继续往更早拉
+  if (messageCountInfo.noData) {
+    loadRemoteHistoryMessage()
     return
   }
   messageCountInfo.pageNo++
@@ -220,6 +268,62 @@ const loadChatMessage = () => {
     pageNo: messageCountInfo.pageNo,
     maxMessageId: messageCountInfo.maxMessageId
   })
+}
+
+/**
+ * 云端消息漫游：本地 SQLite 没有更早消息时，按会话从服务端分页拉取历史。
+ * 解决「新设备只拉 3 天、历史翻页只读本地」的问题。
+ */
+const loadRemoteHistoryMessage = async () => {
+  if (loadingMessage.value || remoteHistory.noData || !currentChatSession.value.sessionId) {
+    return
+  }
+  loadingMessage.value = true
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.loadHistoryMessage,
+      showLoading: false,
+      showError: false,
+      params: {
+        sessionId: currentChatSession.value.sessionId,
+        lastMessageId: remoteHistory.lastMessageId,
+        pageSize: 20
+      }
+    })
+    const pageData = result && result.data
+    const list = pageData && pageData.list ? pageData.list : []
+    if (list.length == 0) {
+      remoteHistory.noData = true
+      return
+    }
+    // 服务端按 message_id desc 返回，翻转为升序后拼到列表头部
+    list.sort((a, b) => a.messageId - b.messageId)
+    remoteHistory.lastMessageId = list[0].messageId
+    // 本地已有则跳过，避免与本地数据重复
+    const existsIds = new Set(messageList.value.map((item) => item.messageId))
+    const appendList = list.filter((item) => !existsIds.has(item.messageId))
+    if (appendList.length == 0) {
+      return
+    }
+    const scrollAnchorId = messageList.value.length > 0 ? messageList.value[0].messageId : null
+    messageList.value = appendList.concat(messageList.value)
+    // 同时回写本地 SQLite，下次进入直接从本地读
+    appendList.forEach((item) => {
+      window.ipcRenderer.send('saveOrUpdateMessage', {message: item})
+    })
+    nextTick(() => {
+      if (scrollAnchorId != null) {
+        const anchor = document.querySelector('#message' + scrollAnchorId)
+        if (anchor) {
+          anchor.scrollIntoView()
+        }
+      }
+    })
+  } catch (e) {
+    console.warn('云端漫游拉取失败', e)
+  } finally {
+    loadingMessage.value = false
+  }
 }
 
 const onReciveMessage = () => {
@@ -408,6 +512,219 @@ const onSyncSession = () => {
   })
 }
 
+// 监听会话属性跨端同步（置顶 / 免打扰 / 草稿）
+const onSyncSessionUser = () => {
+  window.ipcRenderer.on('syncSessionUser', (e, syncData) => {
+    if (!syncData || !syncData.contactId) return
+    const session = chatSessionList.value.find((s) => s.contactId === syncData.contactId)
+    if (!session) return
+    if (syncData.action === 'top') {
+      session.topType = syncData.value
+      sortChatSessionList(chatSessionList.value)
+    } else if (syncData.action === 'noDisturb') {
+      session.noDisturb = syncData.value
+    } else if (syncData.action === 'draft') {
+      session.draft = syncData.value
+    }
+  })
+}
+
+/* ==================== 引用回复 / 转发 / 多选 ==================== */
+
+//多选模式：勾选后可批量转发或批量删除
+const multiSelect = reactive({
+  mode: false,
+  ids: []
+})
+
+//引用回复：把待引用消息交给 MessageSend 展示在输入框上方
+const quoteMessage = ref(null)
+const quoteMessageHandler = (message) => {
+  quoteMessage.value = {
+    messageId: message.messageId,
+    quoteNickName: message.sendUserNickName || '',
+    quoteContent:
+      message.messageType == 5 ? (message.fileName || '[文件]') : (message.messageContent || '')
+  }
+  messageSendRef.value &&
+    messageSendRef.value.setQuote &&
+    messageSendRef.value.setQuote(quoteMessage.value)
+}
+
+//清除引用
+const clearQuote = () => {
+  quoteMessage.value = null
+}
+
+//转发：弹出会话选择，逐条转发到选中的会话
+const forwardSelectRef = ref()
+const forwardMessageHandler = (message) => {
+  if (forwardSelectRef.value) {
+    forwardSelectRef.value.show(async (selectedList) => {
+      await doForward([message], selectedList)
+    })
+  }
+}
+
+const doForward = async (messages, contactList) => {
+  for (const contact of contactList) {
+    for (const message of messages) {
+      const extraData = JSON.stringify({
+        forwardFrom: message.sendUserId,
+        forwardNickName: message.sendUserNickName || ''
+      })
+      const content =
+        message.messageType == 5 ? (message.fileName || '[文件]') : (message.messageContent || '')
+      try {
+        await proxy.Request({
+          url: proxy.Api.sendMessage,
+          showLoading: false,
+          showError: false,
+          params: {
+            contactId: contact.contactId,
+            messageContent: content,
+            messageType: message.messageType,
+            extraData
+          }
+        })
+      } catch (e) {
+        console.warn('转发失败', e)
+      }
+    }
+  }
+}
+
+//进入多选模式
+const enterMultiSelect = (message) => {
+  multiSelect.mode = true
+  multiSelect.ids = [message.messageId]
+}
+
+//勾选 / 取消勾选
+const toggleMessageSelect = (messageId) => {
+  const index = multiSelect.ids.indexOf(messageId)
+  if (index == -1) {
+    multiSelect.ids.push(messageId)
+  } else {
+    multiSelect.ids.splice(index, 1)
+  }
+}
+
+//退出多选模式
+const exitMultiSelect = () => {
+  multiSelect.mode = false
+  multiSelect.ids = []
+}
+
+//多选：批量转发
+const forwardSelected = () => {
+  const selectedMessages = messageList.value.filter((item) => multiSelect.ids.includes(item.messageId))
+  if (selectedMessages.length == 0) {
+    return
+  }
+  forwardSelectRef.value &&
+    forwardSelectRef.value.show(async (selectedList) => {
+      await doForward(selectedMessages, selectedList)
+      exitMultiSelect()
+    })
+}
+
+//多选：批量删除（仅本地删除，服务端保留）
+const deleteSelected = () => {
+  if (multiSelect.ids.length == 0) {
+    return
+  }
+  proxy.Confirm({
+    message: `确定要删除选中的 ${multiSelect.ids.length} 条消息吗？`,
+    okfun: () => {
+      messageList.value = messageList.value.filter(
+        (item) => !multiSelect.ids.includes(item.messageId)
+      )
+      multiSelect.ids.forEach((messageId) => {
+        window.ipcRenderer.send('delLocalMessage', {messageId})
+      })
+      exitMultiSelect()
+    }
+  })
+}
+
+//单条删除（仅本地）
+const deleteMessageHandler = (message) => {
+  messageList.value = messageList.value.filter((item) => item.messageId !== message.messageId)
+  window.ipcRenderer.send('delLocalMessage', {messageId: message.messageId})
+}
+
+/**
+ * 新消息提示音：Web Audio 合成短促双音，无需引入音频资源文件。
+ * 免打扰会话与全局提醒开关关闭时不发声。
+ */
+let audioContext = null
+const playNotifySound = () => {
+  try {
+    if (!notifySwitchOn()) return
+    if (!audioContext) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!AudioCtx) return
+      audioContext = new AudioCtx()
+    }
+    if (audioContext.state === 'suspended') {
+      audioContext.resume()
+    }
+    const now = audioContext.currentTime
+    ;[880, 1175].forEach((freq, index) => {
+      const oscillator = audioContext.createOscillator()
+      const gain = audioContext.createGain()
+      oscillator.type = 'sine'
+      oscillator.frequency.value = freq
+      const start = now + index * 0.12
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16)
+      oscillator.connect(gain)
+      gain.connect(audioContext.destination)
+      oscillator.start(start)
+      oscillator.stop(start + 0.2)
+    })
+  } catch (e) {
+    console.warn('播放提示音失败', e)
+  }
+}
+
+const onPlayNotifySound = () => {
+  window.ipcRenderer.on('playNotifySound', (e, {messageType, contactId}) => {
+    // 免打扰会话不响铃
+    if (contactId) {
+      const session = chatSessionList.value.find((item) => item.contactId === contactId)
+      if (session && session.noDisturb == 1) {
+        return
+      }
+    }
+    playNotifySound()
+  })
+}
+
+/**
+ * 点击系统横幅定位：切到对应会话（toast 点击 → 主进程 → 渲染层）
+ */
+const onLocateSession = () => {
+  window.ipcRenderer.on('locateSession', (e, {contactId}) => {
+    if (!contactId) return
+    const session = chatSessionList.value.find((s) => s.contactId === contactId)
+    if (session) {
+      chatSessionClickHandler(session)
+      return
+    }
+    // 本地会话列表尚未加载时兜底：重载后再次定位
+    loadChatSession()
+    setTimeout(() => {
+      const retry = chatSessionList.value.find((s) => s.contactId === contactId)
+      if (retry) {
+        chatSessionClickHandler(retry)
+      }
+    }, 500)
+  })
+}
+
 //发送本地消息
 const sendMessage4LocalHandler = (messageObj) => {
   messageList.value.push(messageObj)
@@ -480,6 +797,15 @@ onMounted(() => {
   // 监听跨端会话同步
   onSyncSession()
 
+  // 监听会话属性跨端同步（置顶/免打扰/草稿）
+  onSyncSessionUser()
+
+  // 监听系统横幅点击定位
+  onLocateSession()
+
+  // 监听新消息提示音
+  onPlayNotifySound()
+
   //重新加载已删除的会话
   onReloadChatSession()
 
@@ -513,10 +839,44 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('reloadChatSessionCallback')
 })
 
-const setTop = (data) => {
-  data.topType = data.topType == 0 ? 1 : 0
+/**
+ * 置顶 / 取消置顶：服务端是真源，本地 SQLite 只是缓存。
+ * 先更新本地以便即时反馈，再调服务端持久化并广播到其他设备。
+ */
+const setTop = async (data) => {
+  const topType = data.topType == 0 ? 1 : 0
+  data.topType = topType
   sortChatSessionList(chatSessionList.value)
-  window.ipcRenderer.send('topChatSession', {contactId: data.contactId, topType: data.topType})
+  window.ipcRenderer.send('topChatSession', {contactId: data.contactId, topType})
+  try {
+    await proxy.Request({
+      url: proxy.Api.setSessionTop,
+      showLoading: false,
+      showError: false,
+      params: {contactId: data.contactId, topType}
+    })
+  } catch (e) {
+    console.warn('置顶同步服务端失败', e)
+  }
+}
+
+/**
+ * 会话免打扰：开启后该会话的新消息不闪烁、不响铃
+ */
+const setNoDisturb = async (data) => {
+  const noDisturb = data.noDisturb == 1 ? 0 : 1
+  data.noDisturb = noDisturb
+  window.ipcRenderer.send('setSessionNoDisturb', {contactId: data.contactId, noDisturb})
+  try {
+    await proxy.Request({
+      url: proxy.Api.setSessionNoDisturb,
+      showLoading: false,
+      showError: false,
+      params: {contactId: data.contactId, noDisturb}
+    })
+  } catch (e) {
+    console.warn('免打扰同步服务端失败', e)
+  }
 }
 
 //删除会话
@@ -537,6 +897,12 @@ const onContextMenu = (data, e) => {
         label: data.topType == 0 ? '置顶' : '取消置顶',
         onClick: () => {
           setTop(data)
+        }
+      },
+      {
+        label: data.noDisturb == 1 ? '取消免打扰' : '消息免打扰',
+        onClick: () => {
+          setNoDisturb(data)
         }
       },
       {
@@ -593,18 +959,96 @@ const showMessageSearch = () => {
   }
 }
 
-//跳转到指定消息
-const jumpToMessage = (messageId) => {
-  nextTick(() => {
-    const messageElement = document.getElementById('message' + messageId)
-    if (messageElement) {
-      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      messageElement.classList.add('highlight-message')
-      setTimeout(() => {
-        messageElement.classList.remove('highlight-message')
-      }, 2000)
+// ===== 全局搜索：跨会话消息 + 联系人 + 群组 =====
+const globalSearchRef = ref()
+const openGlobalSearch = () => {
+  globalSearchRef.value.show(searchKey.value)
+}
+
+// 搜索结果点联系人/群：切到对应会话，本地无会话时兜底重载
+const openSessionFromSearch = ({contactId, contactType}) => {
+  if (!contactId) {
+    return
+  }
+  const session = chatSessionList.value.find((item) => item.contactId === contactId)
+  if (session) {
+    chatSessionClickHandler(session)
+    return
+  }
+  window.ipcRenderer.send('reloadChatSession', {contactId, contactType})
+  setTimeout(() => {
+    const retry = chatSessionList.value.find((item) => item.contactId === contactId)
+    if (retry) {
+      chatSessionClickHandler(retry)
     }
-  })
+  }, 500)
+}
+
+// 搜索结果点聊天记录：先切会话，等消息列表就绪后再定位到该条
+const jumpMessageFromSearch = ({contactId, contactType, messageId}) => {
+  if (!contactId || !messageId) {
+    return
+  }
+  const currentId = currentChatSession.value.contactId
+  if (currentId === contactId) {
+    jumpToMessage(messageId)
+    return
+  }
+  openSessionFromSearch({contactId, contactType})
+  setTimeout(() => {
+    jumpToMessage(messageId)
+  }, 600)
+}
+
+/**
+ * 跳转到指定消息并高亮。
+ * 命中老消息（本地未渲染）时不再静默失败：先按 messageId 从服务端定位一页补齐，再滚动。
+ */
+const jumpToMessage = async (messageId) => {
+  const scrollToTarget = () => {
+    nextTick(() => {
+      const messageElement = document.getElementById('message' + messageId)
+      if (messageElement) {
+        messageElement.scrollIntoView({behavior: 'smooth', block: 'center'})
+        messageElement.classList.add('highlight-message')
+        setTimeout(() => {
+          messageElement.classList.remove('highlight-message')
+        }, 2000)
+      }
+    })
+  }
+  const exists = messageList.value.some((item) => item.messageId == messageId)
+  if (exists) {
+    scrollToTarget()
+    return
+  }
+  if (!currentChatSession.value.sessionId) {
+    return
+  }
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.locateMessage,
+      showLoading: false,
+      showError: false,
+      params: {messageId, pageSize: 20}
+    })
+    const list = result && result.data && result.data.list ? result.data.list : []
+    if (list.length == 0) {
+      return
+    }
+    list.sort((a, b) => a.messageId - b.messageId)
+    const existsIds = new Set(messageList.value.map((item) => item.messageId))
+    const appendList = list.filter((item) => !existsIds.has(item.messageId))
+    if (appendList.length > 0) {
+      messageList.value = messageList.value.concat(appendList)
+      appendList.forEach((item) => {
+        window.ipcRenderer.send('saveOrUpdateMessage', {message: item})
+      })
+    }
+    scrollToTarget()
+  } catch (e) {
+    console.warn('定位消息失败', e)
+  }
 }
 
 //发送消息
@@ -704,6 +1148,14 @@ const recallMessageHandler = async (messageId) => {
 
   .iconfont {
     font-size: 12px;
+  }
+
+  .global-search-icon {
+    cursor: pointer;
+
+    &:hover {
+      color: #07c160;
+    }
   }
 }
 

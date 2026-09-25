@@ -41,6 +41,13 @@
       </el-upload>
       <div class="iconfont icon-search" @click="showSearchDialog" title="搜索消息"></div>
     </div>
+    <div class="quote-panel" v-if="quoteInfo">
+      <div class="quote-text">
+        <span class="quote-name">{{ quoteInfo.quoteNickName || '引用' }}</span>
+        <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
+      </div>
+      <span class="iconfont icon-close quote-close" @click="clearQuote"></span>
+    </div>
     <div class="input-area" @drop="dropHandler" @dragover="dragOverHandler">
       <el-input
         :rows="5"
@@ -101,7 +108,7 @@
 <script setup>
 import SearchAdd from '@/views/contact/SearchAdd.vue'
 import {getFileType} from '@/utils/Constants.js'
-import {getCurrentInstance, onMounted, onUnmounted, ref} from 'vue'
+import {getCurrentInstance, onMounted, onUnmounted, ref, watch} from 'vue'
 import emojiList from '@/utils/Emoji.js'
 import {useUserInfoStore} from '@/stores/UserInfoStore'
 import {useSysSettingStore} from '@/stores/SysSettingStore'
@@ -124,10 +131,62 @@ const uploadProgress = ref({})
 
 const cleanMessage = () => {
   msgContent.value = ''
+  clearQuote()
 }
+
+// ===== 引用回复 =====
+const quoteInfo = ref(null)
+const setQuote = (quote) => {
+  quoteInfo.value = quote
+}
+const clearQuote = () => {
+  quoteInfo.value = null
+}
+
 defineExpose({
-  cleanMessage
+  cleanMessage,
+  setQuote,
+  clearQuote
 })
+
+// ===== 会话草稿：切会话时保存 / 恢复（跨端同步，服务端真源） =====
+let draftContactId = null
+let draftTimer = null
+watch(
+  () => props.currentChatSession.contactId,
+  (newContactId, oldContactId) => {
+    // 保存上一个会话的草稿
+    if (oldContactId && draftContactId === oldContactId) {
+      saveDraft(oldContactId, msgContent.value)
+    }
+    draftContactId = newContactId || null
+    // 恢复新会话草稿
+    msgContent.value = (newContactId && props.currentChatSession.draft) || ''
+    clearQuote()
+  },
+  {immediate: true}
+)
+
+// 输入防抖保存草稿
+watch(msgContent, (val) => {
+  if (!draftContactId) return
+  if (draftTimer) {
+    clearTimeout(draftTimer)
+  }
+  draftTimer = setTimeout(() => {
+    saveDraft(draftContactId, val)
+  }, 800)
+})
+
+const saveDraft = (contactId, draft) => {
+  window.ipcRenderer.send('saveSessionDraft', {contactId, draft: draft || ''})
+  proxy.Request({
+    url: proxy.Api.saveSessionDraft,
+    showLoading: false,
+    showError: false,
+    params: {contactId, draft: draft || ''}
+  }).catch(() => {})
+}
 
 const activeEmoji = ref('笑脸')
 
@@ -147,6 +206,39 @@ const sendMessage = async (e) => {
     return
   }
   sendMessageDo({messageContent, messageType: 2}, true)
+}
+
+/**
+ * 组装消息扩展数据：引用回复 / 群 @ 提及
+ * 引用落在 extraData（JSON），@ 落在 atUserIds（服务端用于红点提醒）
+ */
+const buildExtraData = (messageContent) => {
+  if (quoteInfo.value) {
+    return JSON.stringify({
+      quoteId: quoteInfo.value.messageId,
+      quoteContent: quoteInfo.value.quoteContent,
+      quoteNickName: quoteInfo.value.quoteNickName || ''
+    })
+  }
+  // 群 @ 提及：正文里形如 "@Uxxxx" 的用户 ID
+  if (props.currentChatSession.contactType == 1 && messageContent) {
+    const matched = messageContent.match(/@(U[A-Za-z0-9]+)/g)
+    if (matched && matched.length > 0) {
+      return JSON.stringify({atUserIds: matched.map((item) => item.substring(1))})
+    }
+  }
+  return null
+}
+
+const buildAtUserIds = (messageContent) => {
+  if (props.currentChatSession.contactType != 1 || !messageContent) {
+    return null
+  }
+  const matched = messageContent.match(/@(U[A-Za-z0-9]+)/g)
+  if (!matched || matched.length == 0) {
+    return null
+  }
+  return Array.from(new Set(matched.map((item) => item.substring(1)))).join(',')
 }
 
 //添加好友
@@ -205,7 +297,9 @@ const sendMessageDo = async (
       fileSize: messageObj.fileSize,
       fileName: messageObj.fileName,
       fileType: messageObj.fileType,
-      clientId: messageObj.clientId || null
+      clientId: messageObj.clientId || null,
+      extraData: messageObj.extraData || buildExtraData(messageObj.messageContent),
+      atUserIds: messageObj.atUserIds || buildAtUserIds(messageObj.messageContent)
     },
     showError: false,
     errorCallback: (responseData) => {
@@ -225,6 +319,12 @@ const sendMessageDo = async (
   if (cleanMsgContent) {
     msgContent.value = ''
   }
+  // 引用随消息一起落库展示
+  const extraData = messageObj.extraData || buildExtraData(messageObj.messageContent)
+  if (extraData) {
+    messageObj.extraData = extraData
+  }
+  clearQuote()
   Object.assign(messageObj, result.data)
   //更新列表
   emit('sendMessage4Local', messageObj)
