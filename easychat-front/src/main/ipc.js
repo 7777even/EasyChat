@@ -1,11 +1,11 @@
-import { shell, BrowserWindow, ipcMain } from 'electron';
+import { shell, BrowserWindow, ipcMain, clipboard } from 'electron';
 const NODE_ENV = process.env.NODE_ENV
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { initWs, closeWs, registerPendingAck } from './wsClient';
 import { initNotifySwitch, setNotifySwitch } from './notification';
-import { selectMessageList, saveMessage, updateMessage } from "./db/ChatMessageModel";
-import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSession, topChatSession, updateStatus } from "./db/ChatSessionUserModel";
+import { selectMessageList, saveMessage, updateMessage, existsMessage, delMessage } from "./db/ChatMessageModel";
+import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSession, topChatSession, updateStatus, updateSessionAttr } from "./db/ChatSessionUserModel";
 import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser, updateSysSetting } from "./db/UserSetting";
 import {
     saveFile2Local, checkFile, createCover, saveAs, changeLocalFolder, openLocalFolder,
@@ -151,6 +151,52 @@ const onAddLocalMessage = () => {
 const onUpdateLocalMessage = () => {
     ipcMain.on("updateLocalMessage", async (e, data) => {
         await updateMessage(data, { messageId: data.messageId });
+    });
+}
+
+//本地删除消息（多选删除 / 右键删除）
+const onDelLocalMessage = () => {
+    ipcMain.on("delLocalMessage", async (e, { messageId }) => {
+        if (!messageId) {
+            return;
+        }
+        await delMessage(messageId);
+    });
+}
+
+//复制文本到系统剪贴板（消息右键「复制」）
+const onCopyText = () => {
+    ipcMain.on("copyText", (e, text) => {
+        clipboard.writeText(text || '');
+    })
+}
+
+//会话免打扰：本地缓存 + 服务端真源（渲染层负责调服务端接口）
+const onSetSessionNoDisturb = () => {
+    ipcMain.on("setSessionNoDisturb", (e, { contactId, noDisturb }) => {
+        updateSessionAttr(contactId, 'noDisturb', noDisturb);
+    })
+}
+
+//会话草稿：切会话/退出时保存，跨端同步
+const onSaveSessionDraft = () => {
+    ipcMain.on("saveSessionDraft", (e, { contactId, draft }) => {
+        updateSessionAttr(contactId, 'draft', draft || '');
+    })
+}
+
+//云端漫游回写：把服务端拉取的历史消息落本地 SQLite，下次进入直接从本地读
+const onSaveOrUpdateMessage = () => {
+    ipcMain.on("saveOrUpdateMessage", async (e, { message }) => {
+        if (!message) {
+            return;
+        }
+        const exists = await existsMessage(message.messageId);
+        if (exists != null && exists.messageId != null) {
+            await updateMessage(message, { messageId: message.messageId });
+        } else {
+            await saveMessage(message);
+        }
     });
 }
 
@@ -362,6 +408,11 @@ export {
     onUpdateContactNoReadCount,
     onAddLocalMessage,
     onUpdateLocalMessage,
+    onSaveOrUpdateMessage,
+    onDelLocalMessage,
+    onCopyText,
+    onSetSessionNoDisturb,
+    onSaveSessionDraft,
     onCreateCover,
     onSaveAs,
     onGetSettingInfo,

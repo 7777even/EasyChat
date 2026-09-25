@@ -176,6 +176,24 @@ const updateStatus = (contactId) => {
     return update("chat_session_user", sessionInfo, paramData);
 }
 
+/**
+ * 会话用户级属性同步（置顶 / 免打扰 / 草稿）：服务端是真源，本地只是缓存，
+ * 收到跨端同步帧后直接落本地库，保证多端表现一致。
+ */
+const updateSessionAttr = (contactId, attrName, attrValue) => {
+    const allowKeys = { topType: 1, noDisturb: 1, draft: 1 };
+    if (!allowKeys[attrName]) {
+        return Promise.resolve();
+    }
+    const paramData = {
+        userId: store.getUserId(),
+        contactId
+    }
+    const sessionInfo = {};
+    sessionInfo[attrName] = attrValue;
+    return update("chat_session_user", sessionInfo, paramData);
+}
+
 
 export {
     updateSessionInfo4Message,
@@ -189,5 +207,6 @@ export {
     delChatSession,
     updateGroupName,
     topChatSession,
-    updateStatus
+    updateStatus,
+    updateSessionAttr
 }

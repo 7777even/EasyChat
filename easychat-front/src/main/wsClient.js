@@ -4,7 +4,7 @@ import { saveMessage, saveMessageBatch, updateMessage, existsMessage } from "./d
 import {
     saveOrUpdateChatSessionBatch4Init, saveOrUpdate4Message,
     updateGroupName, delChatSession, selectUserSessionByContactId,
-    updateSessionBySessionId
+    updateSessionBySessionId, topChatSession, updateSessionAttr
 } from "./db/ChatSessionUserModel"
 import { updateContactNoReadCount } from "./db/UserSetting"
 import { flashOnNewMessage } from "./notification"
@@ -64,6 +64,8 @@ let needReconnect = null;
 const initWs = (config, _sender) => {
     wsUrl = `${NODE_ENV !== 'development' ? store.getData("prodWsDomain") : store.getData("devWsDomain")}?token=${config.token}`;
     sender = _sender;
+    // 供 notification.js 在 toast 点击时回推渲染层（定位会话）
+    global.__easychatSender = _sender;
     needReconnect = true;
     maxReConnectTimes = 20;
     createWs();
@@ -165,12 +167,36 @@ const createWs = () => {
                 }
                 break;
             }
+            case 15://朋友圈新动态
+            case 16://朋友圈点赞
+            case 17://朋友圈评论/回复
+            case 18://朋友圈@提醒
+                // 朋友圈通知：不进会话，只推给渲染层做红点 / toast / 通知中心
+                sender.send("momentNotify", message);
+                flashOnNewMessage(message, mainWindow);
+                break;
+            case -7: { // SYNC_SESSION_USER：会话属性跨端同步（置顶/免打扰/草稿）
+                const syncData = message.extendData || {};
+                const attrMap = { top: 'topType', noDisturb: 'noDisturb', draft: 'draft' };
+                const attrName = attrMap[syncData.action];
+                if (syncData.contactId && attrName) {
+                    await updateSessionAttr(syncData.contactId, attrName, syncData.value);
+                    sender.send('syncSessionUser', syncData);
+                    console.log('SYNC_SESSION_USER 收到, action=' + syncData.action);
+                }
+                break;
+            }
+            case -8: { // 朋友圈未读通知数变化：实时点亮/消除朋友圈红点
+                sender.send("momentUnread", message.extendData || {});
+                break;
+            }
             case 2://聊条消息
             case 5://图片，视频消息
             case 8://解散群聊
             case 11://退出群聊
             case 12://提出群聊
             case 14://撤回消息
+            case 19://群公告更新
                 //如果是群聊消息，那么这个群里的所有人都会收到聊天消息，发送人和接收人是同一个人不做处理
                 if (message.sendUserId === store.getUserId() && message.contactType == 1 && messageType != 14) {
                     break;
@@ -235,9 +261,19 @@ const createWs = () => {
                     break;
                 }
                 sender.send("reciveMessage", message);
-                //新消息任务栏闪烁：置于自身回声跳过分支之后（sendUserId==自己 已在上方 break），
-                //类型白名单 2/5 与其余抑制规则在 notification.js 内判定
-                flashOnNewMessage(message, mainWindow);
+                //新消息提醒：置于自身回声跳过分支之后（sendUserId==自己 已在上方 break），
+                //类型白名单与其余抑制规则在 notification.js 内判定
+                //免打扰会话：本地 SQLite 的 no_disturb=1 时不闪不响
+                const notifySession = await selectUserSessionByContactId(message.contactId);
+                if (!notifySession || notifySession.noDisturb != 1) {
+                    flashOnNewMessage(message, mainWindow);
+                    // 提示音：由渲染层按提醒开关播放（主进程不便发声）
+                    sender.send("playNotifySound", {
+                        messageType,
+                        contactId: message.contactId,
+                        contactType: message.contactType
+                    });
+                }
                 break;
         }
     }

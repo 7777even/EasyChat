@@ -1,4 +1,4 @@
-import { queryCount, queryOne, queryAll, insertOrReplace, update } from "./ADB";
+import { queryCount, queryOne, queryAll, insertOrReplace, update, run } from "./ADB";
 import { updateNoReadCount } from "./ChatSessionUserModel"
 import store from "../store"
 
@@ -54,6 +54,12 @@ const updateMessage = (data, paramData) => {
 //查询本地消息是否已存在（撤回帧补落历史：本地缺行时需插入而非仅更新）
 const existsMessage = (messageId) => {
     return queryOne("select message_id from chat_message where user_id = ? and message_id = ?", [store.getUserId(), messageId]);
+}
+
+//本地删除单条消息（多选删除 / 右键删除；服务端保留，仅本端不可见）
+const delMessage = (messageId) => {
+    const sql = "delete from chat_message where user_id = ? and message_id = ?";
+    return run(sql, [store.getUserId(), messageId]);
 }
 
 const saveMessageBatch = (chatMessageList) => {
@@ -164,6 +170,7 @@ export {
     saveMessage,
     updateMessage,
     existsMessage,
+    delMessage,
     selectMessageList,
     saveMessageBatch,
     selectByMessageId,

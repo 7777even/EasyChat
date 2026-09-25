@@ -1,13 +1,18 @@
+import { Notification } from 'electron'
 import { selectSettingInfo } from './db/UserSetting'
 import store from './store'
 
-// ===== 新消息提醒：任务栏图标闪烁（openspec/changes/2026-09-24-desktop-notification） =====
-// 需求修订(2026-09-24)：不做系统横幅/声音/点击跳转，对齐微信——失焦收新消息时任务栏图标闪烁。
-// 职责：闪烁抑制规则 + flashFrame 调用。仅此模块发起闪烁，wsClient.js 只做调用接线。
+// ===== 新消息提醒：任务栏图标闪烁 + Windows toast + 提示音 + 点击定位 =====
+// 初版(openspec/changes/2026-09-24-desktop-notification)只做任务栏闪烁；
+// 本次增强补齐三件事：系统横幅(toast)、提示音、点击横幅定位到对应会话。
+// 职责：抑制规则 + flashFrame + toast。仅此模块发起提醒，wsClient.js 只做调用接线。
 
-// 仅这些消息类型触发闪烁：2 单聊/群聊文本、5 媒体消息、4 好友申请
-// （ACK(-1)/SYNC(-2)/心跳(-4)/撤回(14)/系统帧 3·6·8·9·10·11·12 等一律不闪）
-const NOTIFY_TYPE_WHITELIST = [2, 5, 4]
+// 触发提醒的消息类型：2 单聊/群聊文本、5 媒体消息、4 好友申请
+// 朋友圈通知 15 新动态 / 16 点赞 / 17 评论 / 18 @、19 群公告
+// （ACK(-1)/SYNC(-2)/心跳(-4)/撤回(14)/系统帧 3·6·8·9·10·11·12 等一律不提醒）
+const NOTIFY_TYPE_WHITELIST = [2, 5, 4, 15, 16, 17, 18, 19]
+// 朋友圈类通知只弹 toast、不闪任务栏（微信行为：朋友圈不触发图标闪烁）
+const MOMENT_TYPE_LIST = [15, 16, 17, 18]
 // 重连补推的过期消息时效阈值：超过 5 分钟不闪，防离线补推误闪
 const STALE_MESSAGE_MS = 5 * 60 * 1000
 
@@ -123,6 +128,14 @@ const flashOnNewMessage = (message, mainWindow) => {
         // 规则 5：过期补推消息（sendTime 为毫秒时间戳；缺失时放行）
         if (message.sendTime && Date.now() - message.sendTime > STALE_MESSAGE_MS) return
 
+        // 系统横幅 + 提示音（点击横幅定位到对应会话）
+        showToast(message, mainWindow)
+
+        // 朋友圈类不闪任务栏，仅 toast
+        if (MOMENT_TYPE_LIST.includes(message.messageType)) {
+            return
+        }
+
         // 两态触发（实现修订 2）：
         // - 最小化：主动交替闪烁循环（单次 flashFrame 在最小化窗口上无闪动动画）
         // - 非最小化失焦：单次 flashFrame 系统静态红底高亮（人工验收确认可接受）
@@ -134,6 +147,83 @@ const flashOnNewMessage = (message, mainWindow) => {
     } catch (e) {
         // 闪烁失败不影响消息收发主链路
         console.warn('任务栏闪烁失败', e)
+    }
+}
+
+/**
+ * Toast 文案：按消息类型拼装，媒体消息显示类型占位符而非二进制内容。
+ */
+const buildToastBody = (message) => {
+    const nickName = message.sendUserNickName || ''
+    switch (message.messageType) {
+        case 2:
+            return nickName ? nickName + '：' + (message.messageContent || '') : (message.messageContent || '新消息')
+        case 5:
+            return nickName + '：[文件]'
+        case 4:
+            return '收到一条好友申请'
+        case 15:
+            return nickName + ' 发布了一条新动态'
+        case 16:
+            return nickName + ' 赞了你的动态'
+        case 17:
+            return nickName + ' 评论了你的动态'
+        case 18:
+            return nickName + ' 在动态中@了你'
+        case 19:
+            return '群公告已更新：' + (message.messageContent || '')
+        default:
+            return message.messageContent || '新消息'
+    }
+}
+
+const buildToastTitle = (message) => {
+    if (message.messageType === 19) {
+        return '群公告'
+    }
+    if (MOMENT_TYPE_LIST.includes(message.messageType)) {
+        return '朋友圈'
+    }
+    if (message.contactType == 1) {
+        return message.contactName || '群聊消息'
+    }
+    return message.sendUserNickName || '新消息'
+}
+
+/**
+ * 弹出 Windows 系统横幅；点击时拉起窗口并通知渲染层定位到该会话。
+ * 不支持系统通知时静默降级为仅闪烁。
+ */
+const showToast = (message, mainWindow) => {
+    try {
+        if (!Notification.isSupported()) return
+        const toast = new Notification({
+            title: buildToastTitle(message),
+            body: buildToastBody(message),
+            silent: false
+        })
+        toast.on('click', () => {
+            try {
+                if (mainWindow) {
+                    if (mainWindow.isMinimized()) mainWindow.restore()
+                    mainWindow.show()
+                    mainWindow.focus()
+                }
+                stopBlink()
+                if (global.__easychatSender) {
+                    global.__easychatSender.send('locateSession', {
+                        contactId: message.contactId,
+                        contactType: message.contactType,
+                        messageType: message.messageType
+                    })
+                }
+            } catch (e) {
+                console.warn('通知点击定位失败', e)
+            }
+        })
+        toast.show()
+    } catch (e) {
+        console.warn('系统横幅弹出失败，降级为仅闪烁', e)
     }
 }
 
