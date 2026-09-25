@@ -1,0 +1,23 @@
+聊天记录导出成功 path=D:/tmp/out.csv count=4 userId=U1
+PASS  CSV 导出成功且条数=4
+PASS  以 UTF-8 BOM 开头
+PASS  表头含 消息ID
+PASS  公式注入被前置单引号
+PASS  双引号翻倍转义
+PASS  单元格内换行已消除（单行）
+PASS  媒体消息降级为占位符
+聊天记录导出成功 path=D:/tmp/out.csv count=4 userId=U1
+PASS  TXT 导出成功
+PASS  TXT 含 [时间] 昵称: 内容
+PASS  TXT 媒体占位符
+PASS  用户取消 → canceled=true 且无 error
+PASS  空会话 → 明确错误提示
+聊天记录导出失败 Error: EACCES
+    at globalThis.__stubs.fs.writeFileSync (file:///C:/Users/7even/AppData/Local/Temp/ec-export-smoke.mjs:72:53)
+    at Object.writeFileSync (file:///C:/Users/7even/AppData/Local/Temp/__ec_export_sut.mjs:2:61)
+    at Module.exportChatRecord (file:///C:/Users/7even/AppData/Local/Temp/__ec_export_sut.mjs:120:12)
+    at async file:///C:/Users/7even/AppData/Local/Temp/ec-export-smoke.mjs:73:12
+PASS  写盘异常 → 返回 error 不抛出
+PASS  缺少会话ID → 明确错误
+PASS  默认文件名非法字符被清洗
+defaultPath = EasyChat-张三_测试_群______-20260926.txt

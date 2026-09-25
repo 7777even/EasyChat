@@ -164,6 +164,17 @@
 | 朋友圈个人主页 | `POST /moment/userMomentList`（`targetUserId`） |
 | 评论删除 | `POST /moment/deleteComment`（`commentId`），动态发布者与评论者本人可删 |
 | 消息扩展 | `chat_message.extra_data`（JSON：引用/转发）、`at_user_ids`（@ 提及）、`duration`（语音时长） |
+| 聊天记录导出 | 会话右键菜单「导出聊天记录（TXT / CSV）」→ IPC `exportChatRecord` → 主进程 `src/main/exportChat.js` 读本地 SQLite 全量 → `dialog.showSaveDialog` → 落盘。**只导本地已持久化消息，不拉云端**；CSV 带 UTF-8 BOM 且对 `=+-@` 开头值前置单引号防 Excel 公式注入 |
+
+## 13. 前端主进程约定（易踩）
+
+| 项 | 值 |
+|----|-----|
+| IPC 通道注册 | `src/main/ipc.js` 里 `const onXxx = () => {...}` 定义并加进 `export {}` 后，**必须在 `src/main/index.js` 的 import 列表 + 启动初始化中调用一次**才会生效。项目不做自动扫描，漏注册时构建完全无感、功能静默失效 |
+| 注册遗漏门禁 | `node scripts/check-ipc-registration.mjs --strict`：对拍 ipc.js 导出与 index.js 调用，缺失即 exit 1 |
+| 全局工具能力边界 | `utils/Confirm.js` 仅支持 `{message, okfun, showCancelBtn, okText}`，**没有** `cancelfun` / `cancelText`；`utils/Message.js` 仅 `success` / `error` / `warning`。调用前先读实现，勿臆造参数 |
+| 本地 SQLite 字段 | `chat_message` 等表为 **snake_case**（`message_id`、`send_user_nick_name`、`file_type`）。渲染层对象是 camelCase，主进程读库取值勿混用 |
+| 文件类型枚举 | `file_type` / `File_TYPE`：0 图片、1 视频、2 文件 |
 
 ---
 
@@ -178,3 +189,5 @@
 > | 2026-09-26 | 上传新增可执行文件黑名单 + 类型白名单 + 分类限流（2603/2604）；旧静默 return 改为抛错 | 安全红线 §6.2-5 |
 > | 2026-09-26 | 好友备注/分组成立，`contactName` 改为备注优先；新增按昵称/备注/分组搜索好友 | 核心体验补齐 |
 > | 2026-09-26 | 登录策略改为默认多端在线（`single-device` 开关时挤下线而非拒绝） | 与 multi-device-sync 规格对齐 |
+> | 2026-09-26 | 新增聊天记录导出（TXT/CSV，仅本地数据） | openspec 2026-09-26-chat-record-export |
+> | 2026-09-26 | 修复 5 个 IPC 通道漏注册导致功能静默失效；新增 `check-ipc-registration.mjs` 门禁 | 同上的 QA 附带发现 |
