@@ -454,4 +454,74 @@ public class UserContactServiceImpl implements UserContactService {
         chatMessage.setStatus(MessageStatusEnum.SENDED.getStatus());
         chatMessageMapper.insert(chatMessage);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setContactRemark(String userId, String contactId, String remark) {
+        UserContact userContact = requireFriendContact(userId, contactId);
+        UserContact updateInfo = new UserContact();
+        updateInfo.setRemark(remark);
+        userContactMapper.updateByUserIdAndContactId(updateInfo, userId, contactId);
+        // 备注变更后同步会话显示名（有备注用备注，否则回退昵称）
+        String displayName = StringTools.isEmpty(remark)
+                ? (userContact.getContactName() == null ? "" : userContact.getContactName())
+                : remark;
+        // 会话列表显示名同步（仅更新该用户自己的会话记录）
+        ChatSessionUser updateSessionUser = new ChatSessionUser();
+        updateSessionUser.setContactName(displayName);
+        ChatSessionUserQuery sessionUserQuery = new ChatSessionUserQuery();
+        sessionUserQuery.setUserId(userId);
+        sessionUserQuery.setContactId(contactId);
+        chatSessionUserMapper.updateByParam(updateSessionUser, sessionUserQuery);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setContactGroup(String userId, String contactId, String groupName) {
+        requireFriendContact(userId, contactId);
+        UserContact updateInfo = new UserContact();
+        updateInfo.setGroupName(groupName);
+        userContactMapper.updateByUserIdAndContactId(updateInfo, userId, contactId);
+    }
+
+    /**
+     * 校验好友关系存在（仅好友可设置备注 / 分组）
+     */
+    private UserContact requireFriendContact(String userId, String contactId) {
+        UserContact userContact = userContactMapper.selectByUserIdAndContactId(userId, contactId);
+        if (userContact == null || !UserContactStatusEnum.FRIEND.getStatus().equals(userContact.getStatus())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2401);
+        }
+        return userContact;
+    }
+
+    @Override
+    public List<UserContact> searchContactByKeyword(String userId, String keyword) {
+        if (StringTools.isEmpty(keyword)) {
+            return new ArrayList<>();
+        }
+        UserContactQuery query = new UserContactQuery();
+        query.setUserId(userId);
+        query.setContactType(UserContactTypeEnum.USER.getType());
+        query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+        query.setQueryContactUserInfo(true);
+        List<UserContact> contactList = userContactMapper.selectList(query);
+        List<UserContact> result = new ArrayList<>();
+        if (contactList == null) {
+            return result;
+        }
+        for (UserContact item : contactList) {
+            String remark = item.getRemark();
+            String nickName = item.getContactName();
+            String groupName = item.getGroupName();
+            boolean matched = (remark != null && remark.contains(keyword))
+                    || (nickName != null && nickName.contains(keyword))
+                    || (item.getContactId() != null && item.getContactId().contains(keyword))
+                    || (groupName != null && groupName.contains(keyword));
+            if (matched) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
 }

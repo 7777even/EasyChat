@@ -41,6 +41,32 @@ public class UserInfoVO implements Serializable {
 
     private Integer contactStatus;
 
+    /**
+     * 好友备注名（仅当查看对象是自己的好友时返回，取自 user_contact.remark）
+     */
+    private String remark;
+
+    /**
+     * 好友分组名（仅当查看对象是自己的好友时返回，取自 user_contact.group_name）
+     */
+    private String groupName;
+
+    public String getRemark() {
+        return remark;
+    }
+
+    public void setRemark(String remark) {
+        this.remark = remark;
+    }
+
+    public String getGroupName() {
+        return groupName;
+    }
+
+    public void setGroupName(String groupName) {
+        this.groupName = groupName;
+    }
+
     public void setContactStatus(Integer contactStatus) {
         this.contactStatus = contactStatus;
     }

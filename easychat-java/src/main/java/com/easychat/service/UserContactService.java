@@ -97,4 +97,19 @@ public interface UserContactService {
     void removeGroupContact(String userId, String groupId, String contactId, UserContactStatusEnum statusEnum);
 
     void addContact4Robot(String userId);
+
+    /**
+     * 设置好友备注名
+     */
+    void setContactRemark(String userId, String contactId, String remark);
+
+    /**
+     * 设置好友分组
+     */
+    void setContactGroup(String userId, String contactId, String groupName);
+
+    /**
+     * 按关键词搜索好友：匹配备注名 / 昵称 / 用户ID / 分组名
+     */
+    java.util.List<UserContact> searchContactByKeyword(String userId, String keyword);
 }

@@ -39,6 +39,41 @@
       </div>
     </div>
     <div v-if="!searchResult" class="no-data">没有搜索到任何结果</div>
+
+    <!-- 按昵称 / 备注 / 分组搜索我的好友 -->
+    <div class="keyword-search">
+      <div class="keyword-form">
+        <el-input
+          clearable
+          placeholder="按昵称、备注或分组搜索我的好友"
+          v-model="keyword"
+          size="large"
+          @keydown.enter="searchByKeyword"
+        ></el-input>
+        <div class="search-btn iconfont icon-search" @click="searchByKeyword"></div>
+      </div>
+
+      <div class="keyword-result" v-if="keywordSearched">
+        <div class="result-title">好友（{{ keywordList.length }}）</div>
+        <div
+          v-for="item in keywordList"
+          :key="item.contactId"
+          class="keyword-item"
+          @click="sendMessage2Contact(item)"
+        >
+          <Avatar :userId="item.contactId" :width="36" :borderRadius="4"></Avatar>
+          <div class="keyword-meta">
+            <div class="keyword-name">{{ item.remark || item.contactName || item.contactId }}</div>
+            <div class="keyword-sub">
+              <span v-if="item.groupName">分组：{{ item.groupName }}</span>
+              <span v-else-if="item.remark">昵称：{{ item.contactName }}</span>
+              <span v-else>{{ item.contactId }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="keywordList.length == 0" class="no-data">没有匹配的好友</div>
+      </div>
+    </div>
   </ContentPanel>
   <SearchAdd ref="searchAddRef" @reload="resetForm"></SearchAdd>
 </template>
@@ -94,6 +129,37 @@ const resetForm = () => {
 const sendMessage = () => {
   router.push({ path: '/chat', query: { chatId: searchResult.value.contactId } })
 }
+
+// ===== 按昵称 / 备注 / 分组搜索好友 =====
+const keyword = ref()
+const keywordList = ref([])
+const keywordSearched = ref(false)
+
+const searchByKeyword = async () => {
+  const key = (keyword.value || '').trim()
+  if (!key) {
+    proxy.Message.warning('请输入搜索关键词')
+    return
+  }
+  const result = await proxy.Request({
+    url: proxy.Api.searchContactByKeyword,
+    params: { keyword: key },
+    showLoading: false,
+    showError: false
+  })
+  if (!result) {
+    return
+  }
+  keywordList.value = result.data || []
+  keywordSearched.value = true
+}
+
+const sendMessage2Contact = (item) => {
+  router.push({
+    path: '/chat',
+    query: { chatId: item.contactId, timestamp: new Date().getTime() }
+  })
+}
 </script>
 
 <style lang="scss" scoped>
@@ -145,6 +211,71 @@ const sendMessage = () => {
     padding: 10px;
     background: #fff;
     text-align: center;
+  }
+}
+
+.keyword-search {
+  margin-top: 20px;
+
+  .keyword-form {
+    display: flex;
+    align-items: center;
+    :deep(.el-input__wrapper) {
+      border-radius: 4px 0px 0px 4px;
+      border-right: none;
+    }
+    .search-btn {
+      background: #07c160;
+      color: #fff;
+      line-height: 40px;
+      width: 80px;
+      text-align: center;
+      border-radius: 0px 5px 5px 0px;
+      cursor: pointer;
+      &:hover {
+        background: #0dd36c;
+      }
+    }
+  }
+
+  .keyword-result {
+    margin-top: 10px;
+    background: #fff;
+    border-radius: 5px;
+    padding: 10px;
+
+    .result-title {
+      font-size: 12px;
+      color: #999;
+      padding-bottom: 6px;
+    }
+
+    .keyword-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        background: #f7f7f7;
+      }
+
+      .keyword-meta {
+        margin-left: 10px;
+
+        .keyword-name {
+          font-size: 14px;
+          color: #1a1a1a;
+        }
+
+        .keyword-sub {
+          font-size: 12px;
+          color: #999;
+          margin-top: 2px;
+        }
+      }
+    }
   }
 }
 </style>

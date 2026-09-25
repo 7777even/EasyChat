@@ -55,6 +55,16 @@ public class UserContact implements Serializable {
     private Date muteEndTime;
 
     /**
+     * 好友备注名（仅好友关系有效）
+     */
+    private String remark;
+
+    /**
+     * 好友分组名（仅好友关系有效）
+     */
+    private String groupName;
+
+    /**
      * 最后更新时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
@@ -139,6 +149,22 @@ public class UserContact implements Serializable {
 
     public Date getMuteEndTime() {
         return muteEndTime;
+    }
+
+    public String getRemark() {
+        return remark;
+    }
+
+    public void setRemark(String remark) {
+        this.remark = remark;
+    }
+
+    public String getGroupName() {
+        return groupName;
+    }
+
+    public void setGroupName(String groupName) {
+        this.groupName = groupName;
     }
 
     public void setMuteEndTime(Date muteEndTime) {

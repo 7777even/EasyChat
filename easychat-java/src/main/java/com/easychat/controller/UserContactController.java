@@ -12,18 +12,16 @@ import com.easychat.entity.po.UserInfo;
 import com.easychat.entity.query.UserContactApplyQuery;
 import com.easychat.entity.query.UserContactQuery;
 import com.easychat.entity.vo.PaginationResultVO;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.entity.vo.UserInfoVO;
 import com.easychat.exception.BusinessException;
-import com.easychat.redis.RedisUtils;
 import com.easychat.service.GroupInfoService;
 import com.easychat.service.UserContactApplyService;
 import com.easychat.service.UserContactService;
 import com.easychat.service.UserInfoService;
 import com.easychat.utils.CopyTools;
 import jodd.util.ArraysUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,7 +34,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/contact")
 public class UserContactController extends ABaseController {
-    private static final Logger logger = LoggerFactory.getLogger(UserContactController.class);
 
     @Resource
     private UserInfoService userInfoService;
@@ -45,34 +42,63 @@ public class UserContactController extends ABaseController {
     private GroupInfoService groupInfoService;
 
     @Resource
-    private RedisUtils redisUtils;
-
-    @Resource
     private UserContactService userContactService;
 
     @Resource
     private UserContactApplyService userContactApplyService;
 
-    @RequestMapping("/search")
+    @PostMapping("/search")
     @GlobalInterceptor
-    public ResponseVO search(HttpServletRequest request, @NotEmpty String contactId) {
+    public Result<UserContactSearchResultDto> search(HttpServletRequest request, @NotEmpty String contactId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContactSearchResultDto resultDto = userContactService.searchContact(tokenUserInfoDto.getUserId(), contactId);
-        return getSuccessResponseVO(resultDto);
+        return success(resultDto);
     }
 
-    @RequestMapping("/applyAdd")
+    /**
+     * 按关键词搜索好友（匹配备注名 / 昵称 / 用户ID / 分组名）
+     */
+    @PostMapping("/searchByKeyword")
     @GlobalInterceptor
-    public ResponseVO applyAdd(HttpServletRequest request, @NotEmpty String contactId,
-                               @NotEmpty String contactType, String applyInfo) {
+    public Result<List<UserContact>> searchByKeyword(HttpServletRequest request, @NotEmpty String keyword) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        return success(userContactService.searchContactByKeyword(tokenUserInfoDto.getUserId(), keyword));
+    }
+
+    /**
+     * 设置好友备注名
+     */
+    @PostMapping("/setRemark")
+    @GlobalInterceptor
+    public Result<Void> setRemark(HttpServletRequest request, @NotEmpty String contactId, String remark) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userContactService.setContactRemark(tokenUserInfoDto.getUserId(), contactId, remark);
+        return success();
+    }
+
+    /**
+     * 设置好友分组
+     */
+    @PostMapping("/setGroup")
+    @GlobalInterceptor
+    public Result<Void> setGroup(HttpServletRequest request, @NotEmpty String contactId, String groupName) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userContactService.setContactGroup(tokenUserInfoDto.getUserId(), contactId, groupName);
+        return success();
+    }
+
+    @PostMapping("/applyAdd")
+    @GlobalInterceptor
+    public Result<Integer> applyAdd(HttpServletRequest request, @NotEmpty String contactId,
+                                    @NotEmpty String contactType, String applyInfo) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         Integer joinType = userContactApplyService.applyAdd(tokenUserInfoDto, contactId, contactType, applyInfo);
-        return getSuccessResponseVO(joinType);
+        return success(joinType);
     }
 
-    @RequestMapping("/loadApply")
+    @PostMapping("/loadApply")
     @GlobalInterceptor
-    public ResponseVO loadApply(HttpServletRequest request, Integer pageNo) {
+    public Result<PaginationResultVO> loadApply(HttpServletRequest request, Integer pageNo) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContactApplyQuery userContactApplyQuery = new UserContactApplyQuery();
         userContactApplyQuery.setOrderBy("last_apply_time desc");
@@ -81,23 +107,23 @@ public class UserContactController extends ABaseController {
         userContactApplyQuery.setPageNo(pageNo);
         userContactApplyQuery.setPageSize(PageSize.SIZE15.getSize());
         PaginationResultVO resultVO = userContactApplyService.findListByPage(userContactApplyQuery);
-        return getSuccessResponseVO(resultVO);
+        return success(resultVO);
     }
 
-    @RequestMapping("/dealWithApply")
+    @PostMapping("/dealWithApply")
     @GlobalInterceptor
-    public ResponseVO dealWithApply(HttpServletRequest request, @NotNull Integer applyId, @NotNull Integer status) {
+    public Result<Void> dealWithApply(HttpServletRequest request, @NotNull Integer applyId, @NotNull Integer status) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         userContactApplyService.dealWithApply(tokenUserInfoDto.getUserId(), applyId, status);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
-    @RequestMapping("/loadContact")
+    @PostMapping("/loadContact")
     @GlobalInterceptor
-    public ResponseVO loadContact(HttpServletRequest request, @NotEmpty String contactType) {
+    public Result<List<UserContact>> loadContact(HttpServletRequest request, @NotEmpty String contactType) {
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByName(contactType);
         if (null == contactTypeEnum) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContactQuery contactQuery = new UserContactQuery();
@@ -115,13 +141,12 @@ public class UserContactController extends ABaseController {
                 UserContactStatusEnum.BLACKLIST_BE.getStatus()});
         contactQuery.setOrderBy("last_update_time desc");
         List<UserContact> contactList = userContactService.findListByParam(contactQuery);
-        return getSuccessResponseVO(contactList);
+        return success(contactList);
     }
 
-
-    @RequestMapping("/getContactInfo")
+    @PostMapping("/getContactInfo")
     @GlobalInterceptor
-    public ResponseVO getContactInfo(HttpServletRequest request, @NotEmpty String contactId) {
+    public Result<UserInfoVO> getContactInfo(HttpServletRequest request, @NotEmpty String contactId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserInfo userInfo = userInfoService.getUserInfoByUserId(contactId);
         UserInfoVO userInfoVO = CopyTools.copy(userInfo, UserInfoVO.class);
@@ -131,12 +156,12 @@ public class UserContactController extends ABaseController {
         if (userContact != null) {
             userInfoVO.setContactStatus(userContact.getStatus());
         }
-        return getSuccessResponseVO(userInfoVO);
+        return success(userInfoVO);
     }
 
-    @RequestMapping("/getContactUserInfo")
+    @PostMapping("/getContactUserInfo")
     @GlobalInterceptor
-    public ResponseVO getContactUserInfo(HttpServletRequest request, @NotEmpty String contactId) {
+    public Result<UserInfoVO> getContactUserInfo(HttpServletRequest request, @NotEmpty String contactId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContact userContact = this.userContactService.getUserContactByUserIdAndContactId(tokenUserInfoDto.getUserId(), contactId);
         if (null == userContact || !ArraysUtil.contains(new Integer[]{
@@ -144,41 +169,35 @@ public class UserContactController extends ABaseController {
                 UserContactStatusEnum.DEL_BE.getStatus(),
                 UserContactStatusEnum.BLACKLIST_BE.getStatus(),
                 UserContactStatusEnum.BLACKLIST_BE_FIRST.getStatus()}, userContact.getStatus())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         UserInfo userInfo = userInfoService.getUserInfoByUserId(contactId);
         UserInfoVO userInfoVO = CopyTools.copy(userInfo, UserInfoVO.class);
-        return getSuccessResponseVO(userInfoVO);
+        // 带回好友备注与分组，供联系人详情页展示与编辑
+        userInfoVO.setRemark(userContact.getRemark());
+        userInfoVO.setGroupName(userContact.getGroupName());
+        return success(userInfoVO);
     }
-
 
     /**
      * 删除联系人
-     *
-     * @param request
-     * @param contactId
-     * @return
      */
-    @RequestMapping("/delContact")
+    @PostMapping("/delContact")
     @GlobalInterceptor
-    public ResponseVO delContact(HttpServletRequest request, @NotEmpty String contactId) {
+    public Result<Void> delContact(HttpServletRequest request, @NotEmpty String contactId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         userContactService.removeUserContact(tokenUserInfoDto.getUserId(), contactId, UserContactStatusEnum.DEL);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
     /**
      * 添加到黑名单
-     *
-     * @param request
-     * @param contactId
-     * @return
      */
-    @RequestMapping("/addContact2BlackList")
+    @PostMapping("/addContact2BlackList")
     @GlobalInterceptor
-    public ResponseVO addContact2BlackList(HttpServletRequest request, @NotEmpty String contactId) {
+    public Result<Void> addContact2BlackList(HttpServletRequest request, @NotEmpty String contactId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         userContactService.removeUserContact(tokenUserInfoDto.getUserId(), contactId, UserContactStatusEnum.BLACKLIST);
-        return getSuccessResponseVO(null);
+        return success();
     }
 }

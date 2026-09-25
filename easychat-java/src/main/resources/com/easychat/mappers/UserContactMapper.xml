@@ -21,6 +21,10 @@
         <result column="role" property="role"/>
         <!--禁言到期时间-->
         <result column="mute_end_time" property="muteEndTime"/>
+        <!--好友备注名-->
+        <result column="remark" property="remark"/>
+        <!--好友分组名-->
+        <result column="group_name" property="groupName"/>
     </resultMap>
 
 
@@ -28,7 +32,7 @@
     <sql id="base_column_list">
         user_id
         ,contact_id,contact_type,create_time,status,
-		 last_update_time,role,mute_end_time
+		 last_update_time,role,mute_end_time,remark,group_name
     </sql>
 
     <sql id="base_condition_filed">
@@ -84,7 +88,7 @@
     <select id="selectList" resultMap="base_result_map">
         SELECT c.*
         <if test="query.queryContactUserInfo or query.queryUserInfo">
-            ,u.nick_name contactName,u.sex sex
+            ,COALESCE(NULLIF(c.remark,''), u.nick_name) contactName,u.sex sex
         </if>
         <if test="query.queryGroupInfo">
             ,g.group_name contactName
