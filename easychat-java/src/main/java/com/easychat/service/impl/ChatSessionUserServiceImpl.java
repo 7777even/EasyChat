@@ -1,8 +1,10 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
 import com.easychat.entity.enums.MessageTypeEnum;
 import com.easychat.entity.enums.PageSize;
+import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.enums.UserContactStatusEnum;
 import com.easychat.entity.enums.UserContactTypeEnum;
 import com.easychat.entity.po.ChatSessionUser;
@@ -11,10 +13,12 @@ import com.easychat.entity.query.ChatSessionUserQuery;
 import com.easychat.entity.query.SimplePage;
 import com.easychat.entity.query.UserContactQuery;
 import com.easychat.entity.vo.PaginationResultVO;
+import com.easychat.exception.BusinessException;
 import com.easychat.mappers.ChatSessionUserMapper;
 import com.easychat.mappers.UserContactMapper;
 import com.easychat.service.ChatSessionUserService;
 import com.easychat.utils.StringTools;
+import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +40,9 @@ public class ChatSessionUserServiceImpl implements ChatSessionUserService {
 
     @Resource
     private UserContactMapper<UserContact, UserContactQuery> userContactMapper;
+
+    @Resource
+    private ChannelContextUtils channelContextUtils;
 
     /**
      * 根据条件查询列表
@@ -138,6 +145,46 @@ public class ChatSessionUserServiceImpl implements ChatSessionUserService {
     @Override
     public Integer deleteChatSessionUserByUserIdAndContactId(String userId, String contactId) {
         return this.chatSessionUserMapper.deleteByUserIdAndContactId(userId, contactId);
+    }
+
+    /**
+     * 会话用户级属性变更的公共落库 + 跨端广播逻辑
+     */
+    private void updateSessionUserAttr(String userId, String contactId, String action, Object value,
+                                       java.util.function.BiConsumer<ChatSessionUser, Object> setter) {
+        ChatSessionUser dbInfo = chatSessionUserMapper.selectByUserIdAndContactId(userId, contactId);
+        if (dbInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1003);
+        }
+        ChatSessionUser updateInfo = new ChatSessionUser();
+        setter.accept(updateInfo, value);
+        chatSessionUserMapper.updateByUserIdAndContactId(updateInfo, userId, contactId);
+        // 其他在线设备同步（本地 SQLite 只是缓存，服务端才是真源）
+        channelContextUtils.broadcastSessionUserSync(userId, action, dbInfo.getSessionId(), contactId, value);
+    }
+
+    @Override
+    public void setSessionTop(String userId, String contactId, Integer topType) {
+        if (topType == null || (topType != Constants.ZERO && topType != Constants.ONE)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        updateSessionUserAttr(userId, contactId, "top", topType,
+                (bean, v) -> bean.setTopType((Integer) v));
+    }
+
+    @Override
+    public void setSessionNoDisturb(String userId, String contactId, Integer noDisturb) {
+        if (noDisturb == null || (noDisturb != Constants.ZERO && noDisturb != Constants.ONE)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        updateSessionUserAttr(userId, contactId, "noDisturb", noDisturb,
+                (bean, v) -> bean.setNoDisturb((Integer) v));
+    }
+
+    @Override
+    public void saveSessionDraft(String userId, String contactId, String draft) {
+        updateSessionUserAttr(userId, contactId, "draft", draft == null ? "" : draft,
+                (bean, v) -> bean.setDraft((String) v));
     }
 
     @Override

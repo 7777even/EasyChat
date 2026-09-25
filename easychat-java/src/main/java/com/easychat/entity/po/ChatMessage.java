@@ -84,6 +84,21 @@ public class ChatMessage implements Serializable {
      */
     private String clientId;
 
+    /**
+     * 消息扩展数据 JSON：引用回复 / 转发来源 / @ 提及等
+     */
+    private String extraData;
+
+    /**
+     * 被 @ 的用户 ID 列表，逗号分隔（群聊 @ 提及）
+     */
+    private String atUserIds;
+
+    /**
+     * 语音 / 视频时长（秒）
+     */
+    private Integer duration;
+
 
     public void setMessageId(Long messageId) {
         this.messageId = messageId;
@@ -203,6 +218,30 @@ public class ChatMessage implements Serializable {
 
     public String getClientId() {
         return this.clientId;
+    }
+
+    public String getExtraData() {
+        return extraData;
+    }
+
+    public void setExtraData(String extraData) {
+        this.extraData = extraData;
+    }
+
+    public String getAtUserIds() {
+        return atUserIds;
+    }
+
+    public void setAtUserIds(String atUserIds) {
+        this.atUserIds = atUserIds;
+    }
+
+    public Integer getDuration() {
+        return duration;
+    }
+
+    public void setDuration(Integer duration) {
+        this.duration = duration;
     }
 
     @Override

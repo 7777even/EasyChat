@@ -13,6 +13,12 @@
         <result column="session_id" property="sessionId"/>
         <!--联系人名称-->
         <result column="contact_name" property="contactName"/>
+        <!--置顶 0未置顶 1置顶（服务端真源，跨端同步）-->
+        <result column="top_type" property="topType"/>
+        <!--免打扰 0正常 1免打扰-->
+        <result column="no_disturb" property="noDisturb"/>
+        <!--会话草稿-->
+        <result column="draft" property="draft"/>
     </resultMap>
 
 
@@ -20,7 +26,7 @@
     <sql id="base_column_list">
         user_id
         ,contact_id,session_id,
-		 contact_name
+		 contact_name, top_type, no_disturb, draft
     </sql>
 
     <sql id="base_condition_filed">
@@ -101,6 +107,15 @@
             <if test="bean.contactName != null">
                 contact_name,
             </if>
+            <if test="bean.topType != null">
+                top_type,
+            </if>
+            <if test="bean.noDisturb != null">
+                no_disturb,
+            </if>
+            <if test="bean.draft != null">
+                draft,
+            </if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="bean.userId!=null">
@@ -114,6 +129,15 @@
             </if>
             <if test="bean.contactName!=null">
                 #{bean.contactName},
+            </if>
+            <if test="bean.topType!=null">
+                #{bean.topType},
+            </if>
+            <if test="bean.noDisturb!=null">
+                #{bean.noDisturb},
+            </if>
+            <if test="bean.draft!=null">
+                #{bean.draft},
             </if>
         </trim>
     </insert>
@@ -223,6 +247,15 @@
             <if test="bean.contactName != null">
                 contact_name = #{bean.contactName},
             </if>
+            <if test="bean.topType != null">
+                top_type = #{bean.topType},
+            </if>
+            <if test="bean.noDisturb != null">
+                no_disturb = #{bean.noDisturb},
+            </if>
+            <if test="bean.draft != null">
+                draft = #{bean.draft},
+            </if>
         </set>
         <include refid="query_condition"/>
     </update>
@@ -242,6 +275,15 @@
             </if>
             <if test="bean.contactName != null">
                 contact_name = #{bean.contactName},
+            </if>
+            <if test="bean.topType != null">
+                top_type = #{bean.topType},
+            </if>
+            <if test="bean.noDisturb != null">
+                no_disturb = #{bean.noDisturb},
+            </if>
+            <if test="bean.draft != null">
+                draft = #{bean.draft},
             </if>
         </set>
         where user_id=#{userId} and contact_id=#{contactId}

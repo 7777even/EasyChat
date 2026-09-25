@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.config.EasyChatProperties;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
@@ -8,18 +9,23 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.*;
 import com.easychat.entity.po.ChatMessage;
 import com.easychat.entity.po.ChatSession;
+import com.easychat.entity.po.ChatSessionUser;
 import com.easychat.entity.po.UserContact;
 import com.easychat.entity.query.ChatMessageQuery;
 import com.easychat.entity.query.ChatSessionQuery;
+import com.easychat.entity.query.ChatSessionUserQuery;
 import com.easychat.entity.query.SimplePage;
 import com.easychat.entity.query.UserContactQuery;
+import com.easychat.entity.vo.GlobalSearchResultVO;
 import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.exception.BusinessException;
 import com.easychat.mappers.ChatMessageMapper;
 import com.easychat.mappers.ChatSessionMapper;
+import com.easychat.mappers.ChatSessionUserMapper;
 import com.easychat.mappers.UserContactMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.ChatMessageService;
+import com.easychat.service.GroupInfoService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.DateUtil;
 import com.easychat.utils.StringTools;
@@ -28,13 +34,16 @@ import com.easychat.websocket.MessageHandler;
 import jodd.util.ArraysUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import java.io.File;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
@@ -65,6 +74,16 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Resource
     private ChannelContextUtils channelContextUtils;
+
+    @Resource
+    @Lazy
+    private GroupInfoService groupInfoService;
+
+    @Resource
+    private EasyChatProperties easyChatProperties;
+
+    @Resource
+    private ChatSessionUserMapper<ChatSessionUser, ChatSessionUserQuery> chatSessionUserMapper;
 
     /**
      * 根据条件查询列表
@@ -183,6 +202,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                     throw new BusinessException(ResponseCodeEnum.CODE_903);
                 }
             }
+            // 群聊禁言校验：被群主/管理员禁言的成员不允许发言
+            if (UserContactTypeEnum.GROUP == UserContactTypeEnum.getByPrefix(chatMessage.getContactId())) {
+                groupInfoService.checkMuted(tokenUserInfoDto.getUserId(), chatMessage.getContactId());
+            }
         }
         String sessionId = null;
         String sendUserId = tokenUserInfoDto.getUserId();
@@ -273,6 +296,61 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         return messageSend;
     }
 
+    /**
+     * 可执行文件/脚本后缀黑名单：白名单之上再叠一层硬拦截（安全红线 §6.2-5）
+     */
+    private static final List<String> DANGEROUS_SUFFIX_LIST = Arrays.asList(
+            "exe", "bat", "cmd", "com", "scr", "pif", "msi", "dll", "sys", "jar", "sh", "ps1", "vbs", "vbe", "js", "jse", "wsf", "lnk");
+
+    /**
+     * 上传文件校验：类型白名单 + 可执行文件黑名单 + 分类大小上限。
+     * 不通过时抛出业务异常（2603 超限 / 2604 类型不支持），不做静默丢弃。
+     */
+    private void checkFileAllowed(MultipartFile file, SysSettingDto sysSettingDto) {
+        String originalName = file.getOriginalFilename();
+        String fileSuffix = StringTools.getFileSuffix(originalName);
+        if (StringTools.isEmpty(fileSuffix)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2604);
+        }
+        String suffix = fileSuffix.toLowerCase().replace(".", "");
+        // 1. 可执行文件硬拦截
+        if (DANGEROUS_SUFFIX_LIST.contains(suffix)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2604, "禁止上传可执行文件");
+        }
+        // 2. 类型白名单：配置允许的文件类型 + 视频后缀
+        String allowedFileTypes = easyChatProperties.getFileUpload().getAllowedFileTypes();
+        boolean inWhiteList = false;
+        if (!StringTools.isEmpty(allowedFileTypes)) {
+            inWhiteList = Arrays.asList(allowedFileTypes.toLowerCase().split(",")).contains(suffix);
+        }
+        if (!inWhiteList) {
+            for (String videoSuffix : Constants.VIDEO_SUFFIX_LIST) {
+                if (videoSuffix.toLowerCase().replace(".", "").equals(suffix)) {
+                    inWhiteList = true;
+                    break;
+                }
+            }
+        }
+        if (!inWhiteList) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2604);
+        }
+        // 3. 分类大小上限
+        boolean isImage = Arrays.asList(Constants.IMAGE_SUFFIX_LIST).contains(fileSuffix.toLowerCase());
+        boolean isVideo = Arrays.asList(Constants.VIDEO_SUFFIX_LIST).contains(fileSuffix.toLowerCase());
+        long maxSize;
+        if (isImage && sysSettingDto.getMaxImageSize() != null) {
+            maxSize = Constants.FILE_SIZE_MB * sysSettingDto.getMaxImageSize();
+        } else if (isVideo && sysSettingDto.getMaxVideoSize() != null) {
+            maxSize = Constants.FILE_SIZE_MB * sysSettingDto.getMaxVideoSize();
+        } else {
+            maxSize = Constants.FILE_SIZE_MB * (sysSettingDto.getMaxFileSize() == null ? 15 : sysSettingDto.getMaxFileSize());
+        }
+        if (file.getSize() > maxSize) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2603,
+                    "文件大小超出限制，最大 " + (maxSize / Constants.FILE_SIZE_MB) + "MB");
+        }
+    }
+
     @Override
     public void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile cover) {
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
@@ -284,19 +362,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
 
         SysSettingDto sysSettingDto = redisComponet.getSysSetting();
-        String fileSuffix = StringTools.getFileSuffix(file.getOriginalFilename());
-        if (!StringTools.isEmpty(fileSuffix) && ArraysUtil.contains(Constants.IMAGE_SUFFIX_LIST, fileSuffix.toLowerCase())
-                && file.getSize() > Constants.FILE_SIZE_MB * sysSettingDto.getMaxImageSize()) {
-            return;
-        } else if (!StringTools.isEmpty(fileSuffix) && ArraysUtil.contains(Constants.VIDEO_SUFFIX_LIST, fileSuffix.toLowerCase())
-                && file.getSize() > Constants.FILE_SIZE_MB * sysSettingDto.getMaxVideoSize()) {
-            return;
-        } else if (!StringTools.isEmpty(fileSuffix) &&
-                !ArraysUtil.contains(Constants.VIDEO_SUFFIX_LIST, fileSuffix.toLowerCase()) &&
-                !ArraysUtil.contains(Constants.IMAGE_SUFFIX_LIST, fileSuffix.toLowerCase()) &&
-                file.getSize() > Constants.FILE_SIZE_MB * sysSettingDto.getMaxFileSize()) {
-            return;
-        }
+        // 文件类型与大小校验：白名单之外一律拒绝（含 .exe 等可执行文件），超限抛错而非静默丢弃
+        checkFileAllowed(file, sysSettingDto);
         String fileName = file.getOriginalFilename();
         String fileExtName = StringTools.getFileSuffix(fileName);
         String fileRealName = messageId + fileExtName;
@@ -432,25 +499,115 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         if (!StringTools.isEmpty(sendUserId)) {
             query.setSendUserId(sendUserId);
         }
-        if (messageType != null) {
-            query.setMessageType(messageType);
-        }
         if (startTime != null) {
             query.setSendTimeStart(startTime);
         }
         if (endTime != null) {
             query.setSendTimeEnd(endTime);
         }
-        
-        // 只搜索普通聊天消息和媒体消息
-        query.setMessageTypeList(new Integer[]{
-            MessageTypeEnum.CHAT.getType(),
-            MessageTypeEnum.MEDIA_CHAT.getType()
-        });
-        
+
+        // 类型筛选与「只搜聊天/媒体消息」的默认范围互斥：
+        // 传了 messageType 就按该类型精确过滤，否则限定在普通聊天 + 媒体消息内。
+        // 历史实现两者叠加（message_type = X AND message_type IN (2,5)），
+        // 导致筛选非 2/5 类型时结果必然为空。
+        if (messageType != null && messageType > 0) {
+            query.setMessageType(messageType);
+        } else {
+            query.setMessageTypeList(new Integer[]{
+                    MessageTypeEnum.CHAT.getType(),
+                    MessageTypeEnum.MEDIA_CHAT.getType()
+            });
+        }
+
         query.setOrderBy("send_time desc");
-        
+
         return this.findListByPage(query);
+    }
+
+    @Override
+    public PaginationResultVO<ChatMessage> loadHistoryMessage(String sessionId, Long lastMessageId, Integer pageSize) {
+        ChatMessageQuery query = new ChatMessageQuery();
+        query.setSessionId(sessionId);
+        query.setMessageIdLt(lastMessageId);
+        query.setPageNo(1);
+        query.setPageSize(pageSize);
+        // 向上翻页：从新到旧
+        query.setOrderBy("message_id desc");
+        return this.findListByPage(query);
+    }
+
+    @Override
+    public PaginationResultVO<ChatMessage> locateMessage(Long messageId, Integer pageSize) {
+        ChatMessage target = chatMessageMapper.selectByMessageId(messageId);
+        if (target == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2201);
+        }
+        // 以目标消息为锚点，取其之后（更新）的一页，保证目标在页内
+        ChatMessageQuery query = new ChatMessageQuery();
+        query.setSessionId(target.getSessionId());
+        query.setMessageIdGe(messageId);
+        query.setPageNo(1);
+        query.setPageSize(pageSize);
+        query.setOrderBy("message_id asc");
+        return this.findListByPage(query);
+    }
+
+    @Override
+    public GlobalSearchResultVO globalSearch(String userId, String keyword, String scope) {
+        GlobalSearchResultVO result = new GlobalSearchResultVO();
+        if (StringTools.isEmpty(keyword)) {
+            return result;
+        }
+        boolean searchMessage = "all".equals(scope) || "message".equals(scope);
+        boolean searchContact = "all".equals(scope) || "contact".equals(scope);
+        boolean searchGroup = "all".equals(scope) || "group".equals(scope);
+
+        if (searchMessage) {
+            // 只在当前用户参与的会话里搜，避免跨用户越权
+            ChatSessionUserQuery sessionUserQuery = new ChatSessionUserQuery();
+            sessionUserQuery.setUserId(userId);
+            List<ChatSessionUser> sessionList = chatSessionUserMapper.selectList(sessionUserQuery);
+            if (sessionList != null && !sessionList.isEmpty()) {
+                List<String> sessionIds = sessionList.stream()
+                        .map(ChatSessionUser::getSessionId).distinct().collect(Collectors.toList());
+                ChatMessageQuery query = new ChatMessageQuery();
+                query.setMessageContentFuzzy(keyword);
+                query.setSessionIdList(sessionIds);
+                query.setMessageTypeList(new Integer[]{
+                        MessageTypeEnum.CHAT.getType(),
+                        MessageTypeEnum.MEDIA_CHAT.getType()
+                });
+                query.setPageNo(1);
+                query.setPageSize(20);
+                query.setOrderBy("send_time desc");
+                result.setMessageList(this.findListByParam(query));
+            }
+        }
+
+        if (searchContact || searchGroup) {
+            UserContactQuery contactQuery = new UserContactQuery();
+            contactQuery.setUserId(userId);
+            contactQuery.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+            List<UserContact> contactList = userContactMapper.selectList(contactQuery);
+            if (contactList != null && !contactList.isEmpty()) {
+                List<UserContact> matched = contactList.stream().filter(item -> {
+                    String name = item.getRemark() != null ? item.getRemark() : item.getContactName();
+                    return (name != null && name.contains(keyword))
+                            || (item.getContactId() != null && item.getContactId().contains(keyword));
+                }).collect(Collectors.toList());
+                if (searchContact) {
+                    result.setContactList(matched.stream()
+                            .filter(item -> UserContactTypeEnum.USER.getType().equals(item.getContactType()))
+                            .collect(Collectors.toList()));
+                }
+                if (searchGroup) {
+                    result.setGroupList(matched.stream()
+                            .filter(item -> UserContactTypeEnum.GROUP.getType().equals(item.getContactType()))
+                            .collect(Collectors.toList()));
+                }
+            }
+        }
+        return result;
     }
 
 }

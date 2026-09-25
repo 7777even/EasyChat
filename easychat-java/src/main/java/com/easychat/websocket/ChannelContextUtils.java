@@ -458,6 +458,32 @@ public class ChannelContextUtils {
     }
 
     /**
+     * 广播会话用户级属性变更帧（置顶 / 免打扰 / 草稿）给指定用户的所有在线设备。
+     *
+     * @param userId     用户 ID
+     * @param action     变更动作：top / noDisturb / draft
+     * @param sessionId  会话 ID
+     * @param contactId  联系人 ID
+     * @param value      新值
+     */
+    public void broadcastSessionUserSync(String userId, String action, String sessionId, String contactId, Object value) {
+        ChannelGroup userGroup = USER_CONTEXT_MAP.get(userId);
+        if (userGroup == null || userGroup.isEmpty()) {
+            return;
+        }
+        MessageSendDto syncDto = new MessageSendDto();
+        syncDto.setMessageType(Constants.WS_SYNC_SESSION_USER_MESSAGE_TYPE);
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("action", action);
+        data.put("sessionId", sessionId);
+        data.put("contactId", contactId);
+        data.put("value", value);
+        syncDto.setExtendData(data);
+        userGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(syncDto)));
+        logger.debug("SYNC_SESSION_USER broadcast -> userId={}, action={}, devices={}", userId, action, userGroup.size());
+    }
+
+    /**
      * 获取指定 userId 的所有活跃 Channel 数量（用于日志 / 调试）。
      */
     public int getUserChannelCount(String userId) {

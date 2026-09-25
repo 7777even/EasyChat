@@ -70,4 +70,25 @@ public interface ChatSessionUserService {
     Integer deleteChatSessionUserByUserIdAndContactId(String userId, String contactId);
 
     void updateRedundanceInfo(String contactName, String contactId);
+
+    /**
+     * 设置会话置顶状态（服务端真源），并向该用户其他在线设备广播同步帧
+     *
+     * @param userId    当前操作用户
+     * @param contactId 会话联系人 ID
+     * @param topType   0取消置顶 1置顶
+     */
+    void setSessionTop(String userId, String contactId, Integer topType);
+
+    /**
+     * 设置会话免打扰
+     *
+     * @param noDisturb 0正常 1免打扰
+     */
+    void setSessionNoDisturb(String userId, String contactId, Integer noDisturb);
+
+    /**
+     * 保存会话草稿（跨端同步）
+     */
+    void saveSessionDraft(String userId, String contactId, String draft);
 }

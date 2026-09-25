@@ -8,14 +8,19 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.MessageTypeEnum;
 import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.po.ChatMessage;
-import com.easychat.entity.vo.ResponseVO;
+import com.easychat.entity.po.ChatSessionUser;
+import com.easychat.entity.query.ChatMessageQuery;
+import com.easychat.entity.vo.PaginationResultVO;
+import com.easychat.entity.vo.Result;
 import com.easychat.exception.BusinessException;
+import com.easychat.mappers.ChatSessionUserMapper;
 import com.easychat.service.ChatMessageService;
 import com.easychat.service.ChatSessionUserService;
 import com.easychat.utils.StringTools;
 import org.apache.commons.lang3.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,19 +49,25 @@ public class ChatController extends ABaseController {
     private ChatSessionUserService chatSessionUserService;
 
     @Resource
+    private ChatSessionUserMapper<ChatSessionUser, com.easychat.entity.query.ChatSessionUserQuery> chatSessionUserMapper;
+
+    @Resource
     private AppConfig appConfig;
 
 
-    @RequestMapping("/sendMessage")
+    @PostMapping("/sendMessage")
     @GlobalInterceptor
-    public ResponseVO sendMessage(HttpServletRequest request,
-                                  @NotEmpty String contactId,
-                                  @NotEmpty @Max(500) String messageContent,
-                                  @NotNull Integer messageType,
-                                  Long fileSize,
-                                  String fileName,
-                                  Integer fileType,
-                                  String clientId) {
+    public Result<MessageSendDto> sendMessage(HttpServletRequest request,
+                                              @NotEmpty String contactId,
+                                              @NotEmpty @Max(500) String messageContent,
+                                              @NotNull Integer messageType,
+                                              Long fileSize,
+                                              String fileName,
+                                              Integer fileType,
+                                              String clientId,
+                                              String extraData,
+                                              String atUserIds,
+                                              Integer duration) {
         MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(messageType);
         if (null == messageTypeEnum || !ArrayUtils.contains(new Integer[]{MessageTypeEnum.CHAT.getType(), MessageTypeEnum.MEDIA_CHAT.getType()}, messageType)) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
@@ -70,29 +81,33 @@ public class ChatController extends ABaseController {
         chatMessage.setFileType(fileType);
         chatMessage.setMessageType(messageType);
         chatMessage.setClientId(clientId);
+        // 引用回复 / 转发 / @ 提及等扩展数据（原样落库并随帧回推）
+        chatMessage.setExtraData(extraData);
+        chatMessage.setAtUserIds(atUserIds);
+        chatMessage.setDuration(duration);
         MessageSendDto messageSendDto = chatMessageService.saveMessage(chatMessage, tokenUserInfoDto);
-        return getSuccessResponseVO(messageSendDto);
+        return success(messageSendDto);
     }
 
-    @RequestMapping("uploadFile")
+    @PostMapping("uploadFile")
     @GlobalInterceptor
-    public ResponseVO uploadFile(HttpServletRequest request,
-                                 @NotNull Long messageId,
-                                 @NotNull MultipartFile file,
-                                 @NotNull MultipartFile cover) {
+    public Result<Void> uploadFile(HttpServletRequest request,
+                                   @NotNull Long messageId,
+                                   @NotNull MultipartFile file,
+                                   MultipartFile cover) {
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
         chatMessageService.saveMessageFile(userInfoDto.getUserId(), messageId, file, cover);
-        return getSuccessResponseVO(null);
+        return success();
     }
 
-    @RequestMapping("downloadFile")
+    @PostMapping("downloadFile")
     @GlobalInterceptor
     public void downloadFile(HttpServletRequest request, HttpServletResponse response,
                              @NotEmpty String fileId,
                              @NotNull Boolean showCover,
                              String partType) throws Exception {
         logger.info("下载文件请求: fileId={}, showCover={}, partType={}", fileId, showCover, partType);
-        
+
         TokenUserInfoDto userInfoDto = getTokenUserInfo(request);
         OutputStream out = null;
         FileInputStream in = null;
@@ -111,7 +126,6 @@ public class ChatController extends ABaseController {
                     logger.error("朋友圈文件不存在: {}", momentPath);
                     throw new BusinessException(ResponseCodeEnum.CODE_602);
                 }
-                logger.info("朋友圈文件存在，大小: {} bytes", file.length());
             } else if (!StringTools.isNumber(fileId)) {
                 // 处理头像文件
                 String avatarFolderName = Constants.FILE_FOLDER_FILE + Constants.FILE_FOLDER_AVATAR_NAME;
@@ -156,30 +170,139 @@ public class ChatController extends ABaseController {
         }
     }
 
-    @RequestMapping("/recallMessage")
+    @PostMapping("/recallMessage")
     @GlobalInterceptor
-    public ResponseVO recallMessage(HttpServletRequest request,
-                                    @NotNull Long messageId) {
+    public Result<MessageSendDto> recallMessage(HttpServletRequest request,
+                                                @NotNull Long messageId) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         MessageSendDto messageSendDto = chatMessageService.recallMessage(messageId, tokenUserInfoDto);
-        return getSuccessResponseVO(messageSendDto);
+        return success(messageSendDto);
     }
 
-    @RequestMapping("/searchMessage")
+    /**
+     * 会话内消息搜索
+     * <p>
+     * 安全修复：必须校验 sessionId 归属当前用户（会话 ID 可推算，历史实现存在越权读取他人消息的风险）。
+     */
+    @PostMapping("/searchMessage")
     @GlobalInterceptor
-    public ResponseVO searchMessage(HttpServletRequest request,
-                                    @NotEmpty String sessionId,
-                                    String keyword,
-                                    String sendUserId,
-                                    Integer messageType,
-                                    Long startTime,
-                                    Long endTime,
-                                    Integer pageNo) {
+    public Result<PaginationResultVO<ChatMessage>> searchMessage(HttpServletRequest request,
+                                                                 @NotEmpty String sessionId,
+                                                                 String keyword,
+                                                                 String sendUserId,
+                                                                 Integer messageType,
+                                                                 Long startTime,
+                                                                 Long endTime,
+                                                                 Integer pageNo) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        com.easychat.entity.query.ChatMessageQuery query = new com.easychat.entity.query.ChatMessageQuery();
+        checkSessionOwner(tokenUserInfoDto.getUserId(), sessionId);
+        ChatMessageQuery query = new ChatMessageQuery();
         query.setSessionId(sessionId);
         query.setPageNo(pageNo);
         query.setPageSize(20);
-        return getSuccessResponseVO(chatMessageService.searchMessage(query, keyword, sendUserId, messageType, startTime, endTime));
+        return success(chatMessageService.searchMessage(query, keyword, sendUserId, messageType, startTime, endTime));
+    }
+
+    /**
+     * 云端消息漫游：按会话分页拉取服务端历史消息
+     * <p>
+     * lastMessageId 为空时从最新一条往前取；否则取 messageId &lt; lastMessageId 的更早消息。
+     * 同样校验会话归属，防止越权。
+     */
+    @PostMapping("/loadHistoryMessage")
+    @GlobalInterceptor
+    public Result<PaginationResultVO<ChatMessage>> loadHistoryMessage(HttpServletRequest request,
+                                                                      @NotEmpty String sessionId,
+                                                                      Long lastMessageId,
+                                                                      Integer pageSize) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        checkSessionOwner(tokenUserInfoDto.getUserId(), sessionId);
+        return success(chatMessageService.loadHistoryMessage(sessionId, lastMessageId,
+                pageSize == null || pageSize <= 0 || pageSize > 100 ? 20 : pageSize));
+    }
+
+    /**
+     * 定位到指定消息：返回该消息所在页（用于搜索结果跳转 / @ 提及跳转）
+     */
+    @PostMapping("/locateMessage")
+    @GlobalInterceptor
+    public Result<PaginationResultVO<ChatMessage>> locateMessage(HttpServletRequest request,
+                                                                 @NotNull Long messageId,
+                                                                 Integer pageSize) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        ChatMessage message = chatMessageService.getChatMessageByMessageId(messageId);
+        if (message == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2201);
+        }
+        checkSessionOwner(tokenUserInfoDto.getUserId(), message.getSessionId());
+        return success(chatMessageService.locateMessage(messageId,
+                pageSize == null || pageSize <= 0 || pageSize > 100 ? 20 : pageSize));
+    }
+
+    /**
+     * 全局搜索：跨会话消息 + 联系人 + 群组
+     *
+     * @param scope all / message / contact / group
+     */
+    @PostMapping("/globalSearch")
+    @GlobalInterceptor
+    public Result<com.easychat.entity.vo.GlobalSearchResultVO> globalSearch(HttpServletRequest request,
+                                                                           @NotEmpty String keyword,
+                                                                           String scope) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        String realScope = StringTools.isEmpty(scope) ? "all" : scope;
+        return success(chatMessageService.globalSearch(tokenUserInfoDto.getUserId(), keyword, realScope));
+    }
+
+    /**
+     * 置顶 / 取消置顶（服务端真源，跨端同步）
+     */
+    @PostMapping("/setSessionTop")
+    @GlobalInterceptor
+    public Result<Void> setSessionTop(HttpServletRequest request,
+                                      @NotEmpty String contactId,
+                                      @NotNull Integer topType) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        chatSessionUserService.setSessionTop(tokenUserInfoDto.getUserId(), contactId, topType);
+        return success();
+    }
+
+    /**
+     * 会话免打扰
+     */
+    @PostMapping("/setSessionNoDisturb")
+    @GlobalInterceptor
+    public Result<Void> setSessionNoDisturb(HttpServletRequest request,
+                                            @NotEmpty String contactId,
+                                            @NotNull Integer noDisturb) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        chatSessionUserService.setSessionNoDisturb(tokenUserInfoDto.getUserId(), contactId, noDisturb);
+        return success();
+    }
+
+    /**
+     * 保存会话草稿（跨端同步）
+     */
+    @PostMapping("/saveSessionDraft")
+    @GlobalInterceptor
+    public Result<Void> saveSessionDraft(HttpServletRequest request,
+                                         @NotEmpty String contactId,
+                                         String draft) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        chatSessionUserService.saveSessionDraft(tokenUserInfoDto.getUserId(), contactId, draft);
+        return success();
+    }
+
+    /**
+     * 校验会话归属：chat_session_user 中存在 (userId, sessionId) 记录才允许访问
+     */
+    private void checkSessionOwner(String userId, String sessionId) {
+        com.easychat.entity.query.ChatSessionUserQuery query = new com.easychat.entity.query.ChatSessionUserQuery();
+        query.setUserId(userId);
+        query.setSessionId(sessionId);
+        Integer count = chatSessionUserMapper.selectCount(query);
+        if (count == null || count == 0) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2202);
+        }
     }
 }

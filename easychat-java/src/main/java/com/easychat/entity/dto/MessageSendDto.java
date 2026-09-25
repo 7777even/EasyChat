@@ -50,6 +50,38 @@ public class MessageSendDto<T> implements Serializable {
     // 会话内单调序号（同 session_id 下严格递增，由 Redis INCR 产生）
     private Long seq;
 
+    // ===== 消息扩展（引用回复 / 转发 / @ 提及） =====
+    // 扩展数据 JSON：{"quoteId":123,"quoteContent":"...","quoteUserId":"U1","forwardFrom":"U2"}
+    private String extraData;
+    // 被 @ 的用户 ID，逗号分隔
+    private String atUserIds;
+    // 语音 / 视频时长（秒）
+    private Integer duration;
+
+    public String getExtraData() {
+        return extraData;
+    }
+
+    public void setExtraData(String extraData) {
+        this.extraData = extraData;
+    }
+
+    public String getAtUserIds() {
+        return atUserIds;
+    }
+
+    public void setAtUserIds(String atUserIds) {
+        this.atUserIds = atUserIds;
+    }
+
+    public Integer getDuration() {
+        return duration;
+    }
+
+    public void setDuration(Integer duration) {
+        this.duration = duration;
+    }
+
     public Integer getStatus() {
         return status;
     }

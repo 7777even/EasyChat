@@ -115,11 +115,63 @@ public class ChatMessageQuery extends BaseParam {
     private List<String> contactIdList;
 
     /**
+     * 会话ID列表（全局搜索：限定在当前用户参与的会话内）
+     */
+    private List<String> sessionIdList;
+
+    public List<String> getSessionIdList() {
+        return sessionIdList;
+    }
+
+    public void setSessionIdList(List<String> sessionIdList) {
+        this.sessionIdList = sessionIdList;
+    }
+
+    /**
      * 消息ID Long 列表（用于按 messageId 批量查询）
      */
     private List<Long> messageIdLongList;
 
     private Long lastReceiveTime;
+
+    /**
+     * message_id &lt; messageIdLt：用于历史消息向上翻页（云端漫游）
+     */
+    private Long messageIdLt;
+
+    /**
+     * message_id &gt;= messageIdGe：用于定位到某条消息并取其所在页
+     */
+    private Long messageIdGe;
+
+    /**
+     * 被 @ 的用户 ID（精确匹配 at_user_ids 包含该 ID）
+     */
+    private String atUserId;
+
+    public Long getMessageIdLt() {
+        return messageIdLt;
+    }
+
+    public void setMessageIdLt(Long messageIdLt) {
+        this.messageIdLt = messageIdLt;
+    }
+
+    public Long getMessageIdGe() {
+        return messageIdGe;
+    }
+
+    public void setMessageIdGe(Long messageIdGe) {
+        this.messageIdGe = messageIdGe;
+    }
+
+    public String getAtUserId() {
+        return atUserId;
+    }
+
+    public void setAtUserId(String atUserId) {
+        this.atUserId = atUserId;
+    }
 
     public void setMessageId(Long messageId) {
         this.messageId = messageId;

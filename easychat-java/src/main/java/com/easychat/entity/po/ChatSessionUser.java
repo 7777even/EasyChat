@@ -39,6 +39,45 @@ public class ChatSessionUser implements Serializable {
 
     private Integer memberCount;
 
+    /**
+     * 0未置顶 1置顶（服务端真源，跨端同步）
+     */
+    private Integer topType;
+
+    /**
+     * 0正常 1免打扰（不闪烁不响铃）
+     */
+    private Integer noDisturb;
+
+    /**
+     * 会话草稿（跨端同步）
+     */
+    private String draft;
+
+    public Integer getTopType() {
+        return topType;
+    }
+
+    public void setTopType(Integer topType) {
+        this.topType = topType;
+    }
+
+    public Integer getNoDisturb() {
+        return noDisturb;
+    }
+
+    public void setNoDisturb(Integer noDisturb) {
+        this.noDisturb = noDisturb;
+    }
+
+    public String getDraft() {
+        return draft;
+    }
+
+    public void setDraft(String draft) {
+        this.draft = draft;
+    }
+
     public Integer getMemberCount() {
         return memberCount;
     }

@@ -87,6 +87,29 @@ public interface ChatMessageService {
     /**
      * 搜索消息
      */
-    PaginationResultVO<ChatMessage> searchMessage(ChatMessageQuery query, String keyword, String sendUserId, 
+    PaginationResultVO<ChatMessage> searchMessage(ChatMessageQuery query, String keyword, String sendUserId,
                                                    Integer messageType, Long startTime, Long endTime);
+
+    /**
+     * 云端消息漫游：按会话分页拉取服务端历史消息（新设备可拉全量历史）
+     *
+     * @param sessionId     会话 ID（调用方需已校验归属）
+     * @param lastMessageId 上一页最早一条消息的 ID；为空表示从最新开始
+     * @param pageSize      每页条数
+     */
+    PaginationResultVO<ChatMessage> loadHistoryMessage(String sessionId, Long lastMessageId, Integer pageSize);
+
+    /**
+     * 定位到指定消息：返回该消息所在的一页（用于搜索结果跳转 / @ 提及跳转）
+     */
+    PaginationResultVO<ChatMessage> locateMessage(Long messageId, Integer pageSize);
+
+    /**
+     * 全局搜索：跨会话检索消息 + 联系人 + 群组
+     *
+     * @param userId   当前用户
+     * @param keyword  关键词
+     * @param scope    all / message / contact / group
+     */
+    com.easychat.entity.vo.GlobalSearchResultVO globalSearch(String userId, String keyword, String scope);
 }

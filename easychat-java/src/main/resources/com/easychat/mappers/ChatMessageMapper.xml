@@ -35,6 +35,12 @@
         <result column="seq" property="seq"/>
         <!--客户端去重键-->
         <result column="client_id" property="clientId"/>
+        <!--消息扩展数据JSON（引用/转发/@）-->
+        <result column="extra_data" property="extraData"/>
+        <!--被@的用户ID-->
+        <result column="at_user_ids" property="atUserIds"/>
+        <!--语音/视频时长秒-->
+        <result column="duration" property="duration"/>
     </resultMap>
 
 
@@ -43,7 +49,7 @@
         message_id
         ,session_id,message_type,message_content,send_user_id,
 		 send_user_nick_name,send_time,contact_id,contact_type,file_size,
-		 file_name,file_type,status,seq,client_id
+		 file_name,file_type,status,seq,client_id,extra_data,at_user_ids,duration
     </sql>
 
     <sql id="base_condition_filed">
@@ -94,6 +100,18 @@
         </if>
         <if test="query.messageIdLongList != null and query.messageIdLongList.size()>0">
             and message_id in(<foreach collection="query.messageIdLongList" separator="," item="item">#{item}</foreach>)
+        </if>
+        <if test="query.messageIdLt != null">
+            and message_id &lt; #{query.messageIdLt}
+        </if>
+        <if test="query.messageIdGe != null">
+            and message_id &gt;= #{query.messageIdGe}
+        </if>
+        <if test="query.atUserId != null and query.atUserId!=''">
+            and at_user_ids like concat('%', #{query.atUserId}, '%')
+        </if>
+        <if test="query.sessionIdList != null and query.sessionIdList.size()>0">
+            and session_id in(<foreach collection="query.sessionIdList" separator="," item="item">#{item}</foreach>)
         </if>
     </sql>
     <!-- 通用条件列-->
@@ -213,6 +231,15 @@
             <if test="bean.clientId != null">
                 client_id,
             </if>
+            <if test="bean.extraData != null">
+                extra_data,
+            </if>
+            <if test="bean.atUserIds != null">
+                at_user_ids,
+            </if>
+            <if test="bean.duration != null">
+                duration,
+            </if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="bean.sessionId!=null">
@@ -256,6 +283,15 @@
             </if>
             <if test="bean.clientId!=null">
                 #{bean.clientId},
+            </if>
+            <if test="bean.extraData!=null">
+                #{bean.extraData},
+            </if>
+            <if test="bean.atUserIds!=null">
+                #{bean.atUserIds},
+            </if>
+            <if test="bean.duration!=null">
+                #{bean.duration},
             </if>
         </trim>
     </insert>
@@ -309,6 +345,15 @@
             <if test="bean.clientId != null">
                 client_id,
             </if>
+            <if test="bean.extraData != null">
+                extra_data,
+            </if>
+            <if test="bean.atUserIds != null">
+                at_user_ids,
+            </if>
+            <if test="bean.duration != null">
+                duration,
+            </if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="bean.messageId!=null">
@@ -355,6 +400,15 @@
             </if>
             <if test="bean.clientId!=null">
                 #{bean.clientId},
+            </if>
+            <if test="bean.extraData!=null">
+                #{bean.extraData},
+            </if>
+            <if test="bean.atUserIds!=null">
+                #{bean.atUserIds},
+            </if>
+            <if test="bean.duration!=null">
+                #{bean.duration},
             </if>
         </trim>
         on DUPLICATE key update
