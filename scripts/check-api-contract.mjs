@@ -13,53 +13,46 @@
  *   --strict 时 WARN 视为 exit 1
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const STRICT = process.argv.includes('--strict');
 
-// ── 后端路由扫描 ──────────────────────────────────────────
+// ── 后端路由扫描（纯 Node，不依赖 grep 子进程） ──────────
 function scanBackendRoutes() {
-  const { execSync } = require('node:child_process');
-  // 用 grep 提取 @GetMapping / @PostMapping / @RequestMapping
-  const patterns = {
-    GetMapping: 'GetMapping',
-    PostMapping: 'PostMapping',
-    PutMapping: 'PutMapping',
-    DeleteMapping: 'DeleteMapping',
-    PatchMapping: 'PatchMapping',
-    RequestMapping: 'RequestMapping',
-  };
+  const ctrlDir = join(ROOT, 'easychat-java/src/main/java/com/easychat/controller');
+  const annoRe = /@(Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:value\s*=\s*)?["']([^"']*)["']\s*\)/g;
 
   const routes = [];
+  let files = [];
   try {
-    // 扫描 java 注解
-    for (const [method, anno] of Object.entries(patterns)) {
-      try {
-        const raw = execSync(
-          `grep -rno "@${anno}(\\"[^\\"]*\\")" --include="*.java" easychat-java/src/main/java/com/easychat/controller/`,
-          { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-        );
-        for (const line of raw.split('\n').filter(Boolean)) {
-          const m = line.match(/@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\("([^"]+)"\)/);
-          if (m && !line.includes('class')) {
-            const foundMethod = m[1].replace('Mapping', '').toUpperCase();
-            const path = m[2];
-            routes.push({
-              method: foundMethod === 'REQUEST' ? 'ANY' : foundMethod,
-              path: path.startsWith('/api/') ? path : `/api${path}`,
-              source: line.split(':')[0],
-            });
-          }
-        }
-      } catch (_) { /* grep 空结果抛错忽略 */ }
+    files = readdirSync(ctrlDir).filter(f => f.endsWith('.java'));
+  } catch (_) {
+    return routes;
+  }
+  for (const f of files) {
+    const content = readFileSync(join(ctrlDir, f), 'utf-8');
+    const classIdx = content.search(/public\s+class\s/);
+    // 类级前缀：class 声明之前的第一个 @RequestMapping("...")
+    let prefix = '';
+    const before = classIdx > 0 ? content.slice(0, classIdx) : '';
+    const pm = before.match(/@RequestMapping\s*\(\s*(?:value\s*=\s*)?["']([^"']*)["']\s*\)/);
+    if (pm) prefix = pm[1];
+    // 方法级注解（跳过类级那条）
+    let m;
+    annoRe.lastIndex = 0;
+    while ((m = annoRe.exec(content)) !== null) {
+      if (classIdx > 0 && m.index < classIdx) continue; // 类级声明，非路由
+      const method = m[1] === 'Request' ? 'ANY' : m[1].toUpperCase();
+      const raw = m[2];
+      let path = (prefix.replace(/\/$/, '') + '/' + raw.replace(/^\//, '')).replace(/\/{2,}/g, '/');
+      if (!path.startsWith('/')) path = '/' + path;
+      const lineNo = content.slice(0, m.index).split('\n').length;
+      routes.push({ method, path, source: `${f}:${lineNo}` });
     }
-  } catch (e) {
-    // fallback: 文件扫描
   }
   return routes;
 }
@@ -71,13 +64,14 @@ function scanFrontendCalls() {
       join(ROOT, 'easychat-front/src/renderer/src/utils/Api.js'),
       'utf-8'
     );
-    // 粗略抓 url: "..." 或 url:'...'
-    const urlRe = /url\s*[:=]\s*['"`]([^'"`]+)['"`]/g;
-    const methodRe = /method\s*[:=]\s*['"`]([^'"`]+)['"`]/g;
+    // Api.js 为对象字面量：key: "/path"（以 / 开头的才是路由，跳过 http 域名等）
+    const urlRe = /(^|\n)\s*[A-Za-z_$][\w$]*\s*:\s*['"](\/[^'"]*)['"]/g;
     const calls = [];
     let m;
     while ((m = urlRe.exec(content)) !== null) {
-      calls.push({ path: m[1], method: 'ANY', source: 'Api.js:' + content.substring(0, m[1].length).split('\n').length });
+      const path = m[2];
+      const lineNo = content.slice(0, m.index).split('\n').length;
+      calls.push({ path, method: 'ANY', source: 'Api.js:' + lineNo });
     }
     return calls;
   } catch (e) {
