@@ -9,7 +9,9 @@ import {
   onOpenNewWindow, openWindow, onSetSessionSelect, onLoadContactApply, onUpdateContactNoReadCount,
   onAddLocalMessage, onUpdateLocalMessage, onCreateCover, onSaveAs, onGetSettingInfo, onUpdateSysSetting, onChangeLocalFolder,
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
-  onTopChatSession, onReloadChatSession, onRegisterPendingAck
+  onTopChatSession, onReloadChatSession, onRegisterPendingAck,
+  onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
+  onExportChatRecord
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 import { stopBlink } from './notification'
@@ -238,11 +240,29 @@ function createWindow() {
   //更新本地消息（撤回消息）
   onUpdateLocalMessage();
 
+  //云端漫游回写：把服务端拉取的历史消息落本地
+  onSaveOrUpdateMessage();
+
+  //本地删除消息（多选删除 / 右键删除）
+  onDelLocalMessage();
+
+  //复制文本到系统剪贴板
+  onCopyText();
+
+  //会话免打扰本地缓存
+  onSetSessionNoDisturb();
+
+  //会话草稿本地缓存
+  onSaveSessionDraft();
+
   //生成缩略图
   onCreateCover();
 
   //文件另存为
   onSaveAs();
+
+  //导出会话聊天记录
+  onExportChatRecord();
 
   //获取设置信息
   onGetSettingInfo();
