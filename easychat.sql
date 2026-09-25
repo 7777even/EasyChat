@@ -54,6 +54,9 @@ CREATE TABLE `chat_message`  (
   `status` tinyint(1) NULL DEFAULT 1 COMMENT '状态 0:正在发送 1:已发送',
   `seq` bigint(20) NULL DEFAULT NULL COMMENT '会话内单调序号（同 session_id 下严格递增，用于排序/补推/ACK）',
   `client_id` varchar(64) NULL DEFAULT NULL COMMENT '客户端生成的消息去重键（send_user_id + client_id 唯一）',
+  `extra_data` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '消息扩展数据JSON（引用/转发/@）',
+  `at_user_ids` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '被@的用户ID，逗号分隔',
+  `duration` int(11) NULL DEFAULT NULL COMMENT '语音/视频时长秒',
   PRIMARY KEY (`message_id`) USING BTREE,
   INDEX `idx_session_id`(`session_id`) USING BTREE,
   INDEX `idx_send_user_id`(`send_user_id`) USING BTREE,
@@ -82,6 +85,9 @@ CREATE TABLE `chat_session_user`  (
   `contact_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '联系人ID',
   `session_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '会话ID',
   `contact_name` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '联系人名称',
+  `top_type` tinyint(1) NULL DEFAULT 0 COMMENT '0未置顶 1置顶（服务端真源，跨端同步）',
+  `no_disturb` tinyint(1) NULL DEFAULT 0 COMMENT '0正常 1免打扰（不闪烁不响铃）',
+  `draft` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '会话草稿（跨端同步）',
   PRIMARY KEY (`user_id`, `contact_id`) USING BTREE,
   INDEX `idx_user_id`(`user_id`) USING BTREE,
   INDEX `idx_session_id`(`session_id`) USING BTREE
@@ -115,6 +121,8 @@ CREATE TABLE `user_contact`  (
   `last_update_time` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
   `role` tinyint(1) NULL DEFAULT 2 COMMENT '群成员角色（仅群组 contact_type=1 有效）0:群主 1:管理员 2:成员',
   `mute_end_time` datetime NULL DEFAULT NULL COMMENT '禁言到期时间（仅群组有效，NULL表示未被禁言）',
+  `remark` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '好友备注名',
+  `group_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '好友分组名',
   PRIMARY KEY (`user_id`, `contact_id`) USING BTREE,
   INDEX `idx_contact_id`(`contact_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4  COMMENT = '联系人';
@@ -257,5 +265,89 @@ CREATE TABLE `moment_notify` (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_user`(`user_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '朋友圈通知';
+
+-- ----------------------------
+-- Table structure for email_verify_code
+-- ----------------------------
+DROP TABLE IF EXISTS `email_verify_code`;
+CREATE TABLE `email_verify_code` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `email` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '邮箱',
+  `code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '验证码',
+  `type` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0注册 1找回密码 2修改邮箱',
+  `status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0未使用 1已使用',
+  `expire_time` bigint(20) NOT NULL COMMENT '过期时间戳毫秒',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_email_type`(`email`, `type`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '邮箱验证码';
+
+-- ----------------------------
+-- Table structure for group_file
+-- ----------------------------
+DROP TABLE IF EXISTS `group_file`;
+CREATE TABLE `group_file` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `group_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '群ID',
+  `file_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '文件名',
+  `file_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '存储路径',
+  `file_size` bigint(20) NULL DEFAULT NULL COMMENT '文件大小',
+  `file_type` tinyint(1) NULL DEFAULT 0 COMMENT '0图片 1视频 2文件',
+  `cover_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '封面',
+  `upload_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '上传人',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '上传时间毫秒',
+  `status` tinyint(1) NULL DEFAULT 1 COMMENT '1正常 0删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_group`(`group_id`, `create_time`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '群文件/群相册';
+
+-- ----------------------------
+-- Table structure for moment_report
+-- ----------------------------
+DROP TABLE IF EXISTS `moment_report`;
+CREATE TABLE `moment_report` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `moment_id` bigint(20) NULL DEFAULT NULL COMMENT '被举报动态ID',
+  `comment_id` bigint(20) NULL DEFAULT NULL COMMENT '被举报评论ID',
+  `report_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '举报人',
+  `reason` tinyint(1) NULL DEFAULT 0 COMMENT '0色情 1暴力 2诈骗 3侵权 4其他',
+  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '补充说明',
+  `status` tinyint(1) NULL DEFAULT 0 COMMENT '0待处理 1已处理 2已驳回',
+  `handle_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理人',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '举报时间毫秒',
+  `handle_time` bigint(20) NULL DEFAULT NULL COMMENT '处理时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_status`(`status`, `create_time`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '内容举报';
+
+-- ----------------------------
+-- Table structure for message_report
+-- ----------------------------
+DROP TABLE IF EXISTS `message_report`;
+CREATE TABLE `message_report` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `message_id` bigint(20) NOT NULL COMMENT '被举报消息ID',
+  `report_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '举报人',
+  `reason` tinyint(1) NULL DEFAULT 0 COMMENT '0色情 1暴力 2诈骗 3侵权 4其他',
+  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '补充说明',
+  `status` tinyint(1) NULL DEFAULT 0 COMMENT '0待处理 1已处理 2已驳回',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '举报时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_status`(`status`, `create_time`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '消息举报';
+
+-- ----------------------------
+-- Table structure for sensitive_word
+-- ----------------------------
+DROP TABLE IF EXISTS `sensitive_word`;
+CREATE TABLE `sensitive_word` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `word` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '敏感词',
+  `level` tinyint(1) NULL DEFAULT 1 COMMENT '1提醒 2替换 3禁止发送',
+  `status` tinyint(1) NULL DEFAULT 1 COMMENT '1启用 0停用',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_word`(`word`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '敏感词';
 
 SET FOREIGN_KEY_CHECKS = 1;

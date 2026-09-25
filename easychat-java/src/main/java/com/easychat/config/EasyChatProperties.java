@@ -26,6 +26,9 @@ public class EasyChatProperties {
     /** 文件上传配置 */
     private FileUpload fileUpload = new FileUpload();
 
+    /** 登录策略配置 */
+    private Login login = new Login();
+
     public String getProjectFolder() {
         return projectFolder;
     }
@@ -48,6 +51,45 @@ public class EasyChatProperties {
 
     public void setFileUpload(FileUpload fileUpload) {
         this.fileUpload = fileUpload;
+    }
+
+    public Login getLogin() {
+        return login;
+    }
+
+    public void setLogin(Login login) {
+        this.login = login;
+    }
+
+    /**
+     * 登录策略配置
+     * <p>
+     * singleDevice=true 时：只允许单端在线，新登录会把旧设备挤下线（推 FORCE_OFF_LINE 帧）。<br>
+     * singleDevice=false（默认）时：允许多端同时在线，符合 openspec/specs/multi-device-sync 承诺。
+     */
+    public static class Login {
+
+        /** 是否强制单端登录：true=新登录挤掉旧登录；false=允许多端在线 */
+        private Boolean singleDevice = false;
+
+        /** 多端模式下同一账号允许的同时在线设备数上限（0 或 null 表示不限制） */
+        private Integer maxDeviceCount = 0;
+
+        public Boolean getSingleDevice() {
+            return singleDevice;
+        }
+
+        public void setSingleDevice(Boolean singleDevice) {
+            this.singleDevice = singleDevice;
+        }
+
+        public Integer getMaxDeviceCount() {
+            return maxDeviceCount;
+        }
+
+        public void setMaxDeviceCount(Integer maxDeviceCount) {
+            this.maxDeviceCount = maxDeviceCount;
+        }
     }
 
     /**

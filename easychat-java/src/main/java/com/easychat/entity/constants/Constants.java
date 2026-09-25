@@ -15,6 +15,9 @@ public class Constants {
 
     public static final Integer LENGTH_30 = 30;
 
+    /** 邮箱验证码长度 */
+    public static final Integer LENGTH_6 = 6;
+
     public static final String SESSION_KEY = "session_key";
 
     public static final String FILE_FOLDER_FILE = "/file/";
@@ -65,6 +68,9 @@ public class Constants {
 
     public static final String REDIS_KEY_WS_TOKEN_USERID = "easychat:ws:token:userid";
 
+    // 多端登录：同一账号的全部有效 token 列表（用于整体登出 / 挤下线）
+    public static final String REDIS_KEY_WS_TOKEN_USERID_LIST = "easychat:ws:token:userid:list:";
+
     public static final String REDIS_KEY_WS_USER_HEART_BEAT = "easychat:ws:user:heartbeat";
 
     public static final String REDIS_KEY_WS_ON_LINE_USER = "easychat:ws:online:";
@@ -101,6 +107,18 @@ public class Constants {
      * 服务端→客户端：跨端会话同步。通知其他设备某会话的元数据已更新（最后消息、未读数等），需立即刷新。
      */
     public static final Integer WS_SYNC_SESSION_MESSAGE_TYPE = -6;
+
+    /**
+     * 服务端→客户端：会话用户级属性同步（置顶 / 免打扰 / 草稿）。
+     * extendData = {action:'top'|'noDisturb'|'draft', sessionId, contactId, value}
+     */
+    public static final Integer WS_SYNC_SESSION_USER_MESSAGE_TYPE = -7;
+
+    /**
+     * 服务端→客户端：朋友圈未读通知数变化（用于实时点亮/消除朋友圈红点）
+     * extendData = {unreadCount: N}
+     */
+    public static final Integer WS_MOMENT_UNREAD_MESSAGE_TYPE = -8;
 
     public static final String APP_UPDATE_FOLDER = "/app/";
 
