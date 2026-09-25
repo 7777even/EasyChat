@@ -74,7 +74,12 @@
 | 主进程维护 WS 句柄 | `wsClient.js`，连 `ws://<domain>:<5051>?token=<token>` |
 | 最大重连次数 | 5 |
 | 渲染进程感知 WS | 通过 preload 暴露 `window.bridge` 事件订阅 |
-| 新消息提醒 | `src/main/notification.js` `flashOnNewMessage`：白名单消息（type 2/5/4）+ 主窗口失焦 + 开关开 → 触发；**最小化场景为主动交替闪烁循环**（600ms `flashFrame(false)/(true)`，获焦/关开关停），非最小化为单次 `flashFrame(true)` 系统静态红底；ACK/SYNC/心跳/撤回/系统帧不闪（2026-09-24 由全帧无条件闪烁收敛而来，无横幅/声音） |
+| 新消息提醒 | `src/main/notification.js` `flashOnNewMessage`：白名单消息（type 2 文本 / 5 媒体 / 4 好友申请 / 15-18 朋友圈 / 19 群公告）+ 主窗口失焦 + 开关开 → 触发；**最小化场景为主动交替闪烁循环**（600ms `flashFrame(false)/(true)`，获焦/关开关停），非最小化为单次 `flashFrame(true)` 系统静态红底；朋友圈类（15-18）**只弹 toast 不闪任务栏**；ACK/SYNC/心跳/撤回/系统帧不提醒 |
+| 系统横幅 | 同模块 `showToast`：`Notification.isSupported()` 为真时弹 Windows 横幅，点击横幅 → 拉起窗口 + 推 `locateSession` 帧定位会话；不支持时静默降级为仅闪烁 |
+| 提示音 | 主进程发 `playNotifySound` 帧，渲染层 `Chat.vue` 按提醒开关播放 |
+| 免打扰抑制 | 会话本地 `no_disturb=1` 时不闪烁、不响铃（仅落库） |
+| 朋友圈通知帧 | 类型 15 新动态 / 16 点赞 / 17 评论回复 / 18 @；主进程转发 `momentNotify` 给渲染层做红点；`-8` 帧携带 `extendData.unreadCount` 同步未读数 |
+| 会话属性同步帧 | 类型 `-7`（SYNC_SESSION_USER），`extendData.action` ∈ `top`/`noDisturb`/`draft`，主进程回写本地 SQLite 并转发 `syncSessionUser` |
 | 提醒开关 | `user_setting.sysSetting.notifySwitch` JSON 键（缺省 `true`），设置页账号设置 el-switch 经 `updateSysSetting` 通道读写 |
 
 ## 6. 数据库约束
@@ -83,9 +88,12 @@
 |----|-----|
 | 数据源 | MySQL `easychat` |
 | 连接池 | HikariCP（min-idle 5 / max-pool 10 / conn-timeout 30s） |
-| 文件上传上限 | `multipart max-file-size / max-request-size`：15MB |
+| 文件上传上限 | `multipart max-file-size / max-request-size`：15MB；实际按系统设置分类限流（图片/视频/文件各自上限） |
 | 图片白名单 | `.jpeg/.jpg/.png/.gif/.bmp/.webp` |
 | 视频白名单 | `.mp4/.avi/.rmvb/.mkv/.mov` |
+| 可执行文件黑名单 | `exe/bat/cmd/com/scr/pif/msi/dll/sys/jar/sh/ps1/vbs/vbe/js/jse/wsf/lnk`，命中即拒（错误码 2604） |
+| 上传校验 | `ChatMessageServiceImpl.checkFileAllowed`：后缀非空 → 黑名单 → 类型白名单 → 分类大小；超限抛 2603，类型不支持抛 2604（旧实现为超限静默 return） |
+| 好友备注/分组 | `user_contact.remark` / `user_contact.group_name`；`selectList` 的 `contactName` 取 `COALESCE(NULLIF(remark,''), nick_name)`，即备注优先 |
 | 本地数据目录 | `<app.getPath('userData')>` |
 | 本地 DB | sqlite3，表由 `src/main/db/Tables.js` 定义 |
 
@@ -137,6 +145,26 @@
 | `FILE_FOLDER_AVATAR_NAME` | `avatar/` |
 | `APP_UPDATE_FOLDER` | `/app/` |
 
+## 12. 接口契约与业务事实（2026-09 补齐）
+
+| 项 | 值 |
+|----|-----|
+| 统一响应包络 | **仅** `Result<T>`（`code`/`message`/`data`，`code=0` 成功）。旧包络 `ResponseVO` 及 `ABaseController` 三个兼容方法已于 2026-09-26 删除，全仓零引用 |
+| 错误码扩展 | `2603` 文件大小超限、`2604` 文件类型不支持（沿用 §3.1 的 2600-2699 文件域分段） |
+| 登录策略 | 默认**允许多端同时在线**；配置 `easychat.login.single-device=true` 时新登录把旧设备挤下线（推 FORCE_OFF_LINE 并关闭其 WS），**不再是拒绝登录报错** |
+| 修改密码 | `POST /userInfo/updatePassword` 必传 `oldPassword` + `password`；服务端校验旧密码 MD5 匹配，且新旧不得相同，成功后关闭 WS 强制重登 |
+| 找回密码 | `POST /account/sendEmailCode`（`type=1`，60 秒防重发，10 分钟有效）+ `POST /account/resetPassword`（`email`/`code`/`newPassword`）；未配置邮件服务时验证码写日志 |
+| 消息搜索 | `POST /chat/searchMessage` 强制校验会话归属（`chat_session_user` 存在记录），防会话 ID 推算越权 |
+| 云端漫游 | `POST /chat/loadHistoryMessage`（按 `lastMessageId` 向前翻页）+ `POST /chat/locateMessage`（定位某条消息所在页，供搜索/@跳转） |
+| 全局搜索 | `POST /chat/globalSearch`，`scope` ∈ `all`/`message`/`contact`/`group`，返回 `GlobalSearchResultVO`（messageList/contactList/groupList） |
+| 会话属性 | `chat_session_user` 增列 `top_type`（置顶跨端）、`no_disturb`（免打扰）、`draft`（草稿跨端），服务端为真源，变更经 `-7` 帧同步各端 |
+| 群禁言 | `GroupInfoServiceImpl.checkMuted()` 已在 `ChatMessageServiceImpl` 发送链路注入，被禁言成员发言直接抛业务异常 |
+| 群公告 | `editNotice` 落一条 `GROUP_NOTICE`(19) 系统消息并向全体成员广播 WS 帧（旧实现只存不推） |
+| 朋友圈通知 | 表 `moment_notify`；`MomentNotifyService` 提供未读数/列表/已读/清空；接口前缀 `/moment/notify/*` |
+| 朋友圈个人主页 | `POST /moment/userMomentList`（`targetUserId`） |
+| 评论删除 | `POST /moment/deleteComment`（`commentId`），动态发布者与评论者本人可删 |
+| 消息扩展 | `chat_message.extra_data`（JSON：引用/转发）、`at_user_ids`（@ 提及）、`duration`（语音时长） |
+
 ---
 
 > **变更日志（事实变化时必须在此追加一行）**
@@ -144,3 +172,9 @@
 > | 日期 | 变更说明 | 来源 |
 > |------|----------|------|
 > | 2026-09-22 | 初始建立，对齐 AGENTS.md 与现有代码实测 | 第三轮规范建设 |
+> | 2026-09-24 | 新消息提醒收敛为白名单 + 失焦闪烁，去掉全帧无条件闪烁 | 桌面提醒变更 |
+> | 2026-09-26 | 提醒扩展为「闪烁 + 系统横幅 + 提示音 + 点击定位」，新增朋友圈类帧与免打扰抑制 | IM 能力补齐 |
+> | 2026-09-26 | 响应包络统一为 `Result<T>`，`ResponseVO` 及三个兼容方法删除 | 契约统一 |
+> | 2026-09-26 | 上传新增可执行文件黑名单 + 类型白名单 + 分类限流（2603/2604）；旧静默 return 改为抛错 | 安全红线 §6.2-5 |
+> | 2026-09-26 | 好友备注/分组成立，`contactName` 改为备注优先；新增按昵称/备注/分组搜索好友 | 核心体验补齐 |
+> | 2026-09-26 | 登录策略改为默认多端在线（`single-device` 开关时挤下线而非拒绝） | 与 multi-device-sync 规格对齐 |
