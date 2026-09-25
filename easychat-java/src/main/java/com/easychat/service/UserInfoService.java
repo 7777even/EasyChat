@@ -99,4 +99,19 @@ public interface UserInfoService {
     void updateUserStatus(Integer status, String userId);
 
     void forceOffLine(String userId);
+
+    /**
+     * 修改密码：必须校验原密码，校验通过后才更新
+     */
+    void updatePassword(String userId, String oldPassword, String newPassword);
+
+    /**
+     * 发送邮箱验证码（type：0注册 1找回密码）
+     */
+    void sendEmailCode(String email, Integer type);
+
+    /**
+     * 通过邮箱验证码重置密码（忘记密码找回）
+     */
+    void resetPasswordByEmail(String email, String code, String newPassword);
 }

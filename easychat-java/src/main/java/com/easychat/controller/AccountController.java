@@ -102,6 +102,28 @@ public class AccountController extends ABaseController {
     }
 
     /**
+     * 发送邮箱验证码（type：0注册 1找回密码）
+     */
+    @PostMapping(value = "/sendEmailCode")
+    public Result<Void> sendEmailCode(@NotEmpty String email, Integer type) {
+        userInfoService.sendEmailCode(email, type == null ? 0 : type);
+        return success();
+    }
+
+    /**
+     * 忘记密码：通过邮箱验证码重置密码
+     */
+    @PostMapping(value = "/resetPassword")
+    public Result<Void> resetPassword(@NotEmpty String email,
+                                      @NotEmpty String code,
+                                      @NotEmpty(message = "新密码不能为空")
+                                      @javax.validation.constraints.Pattern(regexp = Constants.REGEX_PASSWORD, message = "密码格式不正确")
+                                      String newPassword) {
+        userInfoService.resetPasswordByEmail(email, code, newPassword);
+        return success();
+    }
+
+    /**
      * 获取系统设置
      */
     @GetMapping(value = "/getSysSetting")

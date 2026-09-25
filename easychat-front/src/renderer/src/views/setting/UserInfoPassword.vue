@@ -1,7 +1,16 @@
 <template>
   <div>
     <el-form :model="formData" :rules="rules" ref="formDataRef" label-width="80px" @submit.prevent>
-      <el-form-item label="密码" prop="password">
+      <el-form-item label="原密码" prop="oldPassword">
+        <el-input
+          type="password"
+          clearable
+          placeholder="请输入当前使用的原密码"
+          v-model.trim="formData.oldPassword"
+          show-password
+        ></el-input>
+      </el-form-item>
+      <el-form-item label="新密码" prop="password">
         <el-input
           type="password"
           clearable
@@ -47,9 +56,21 @@ const validateRePass = (rule, value, callback) => {
 }
 
 const rules = {
+  oldPassword: [
+    { required: true, message: '请输入原密码' }
+  ],
   password: [
     { required: true, message: '请输入新密码' },
-    { validator: proxy.Verify.password, message: '密码只能是数字、字母、特殊字符8~18位' }
+    { validator: proxy.Verify.password, message: '密码只能是数字、字母、特殊字符8~18位' },
+    {
+      validator: (rule, value, callback) => {
+        if (value && value === formData.value.oldPassword) {
+          callback(new Error('新密码不能与原密码相同'))
+        } else {
+          callback()
+        }
+      }
+    }
   ],
   rePassword: [
     { required: true, message: '请再次输入密码' },

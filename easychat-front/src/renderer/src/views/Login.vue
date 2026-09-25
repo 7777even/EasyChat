@@ -55,8 +55,8 @@
             </template>
           </el-input>
         </el-form-item>
-        <!--登录密码-->
-        <el-form-item prop="password">
+        <!--登录密码：找回密码流程下不展示-->
+        <el-form-item prop="password" v-if="!isReset">
           <el-input
             type="password"
             size="large"
@@ -70,7 +70,7 @@
             </template>
           </el-input>
         </el-form-item>
-        <el-form-item prop="rePassword" v-if="!isLogin">
+        <el-form-item prop="rePassword" v-if="!isLogin && !isReset">
           <el-input
             type="password"
             size="large"
@@ -84,7 +84,8 @@
             </template>
           </el-input>
         </el-form-item>
-        <el-form-item prop="checkCode">
+        <!--图形验证码：找回密码改用邮箱验证码-->
+        <el-form-item prop="checkCode" v-if="!isReset">
           <div class="check-code-panel">
             <el-input
               size="large"
@@ -100,15 +101,71 @@
             <img :src="checkCodeUrl" class="check-code" @click="changeCheckCode" />
           </div>
         </el-form-item>
+
+        <!--找回密码：邮箱验证码 + 新密码-->
+        <template v-if="isReset">
+          <el-form-item prop="emailCode">
+            <div class="check-code-panel">
+              <el-input
+                size="large"
+                placeholder="请输入邮箱验证码"
+                v-model.trim="formData.emailCode"
+                maxLength="10"
+                @focus="clearVerify"
+              >
+                <template #prefix>
+                  <span class="iconfont icon-checkcode"></span>
+                </template>
+              </el-input>
+              <el-button
+                class="send-code-btn"
+                size="large"
+                :disabled="codeCountdown > 0"
+                @click="sendEmailCode"
+              >{{ codeCountdown > 0 ? codeCountdown + 's 后重发' : '获取验证码' }}</el-button>
+            </div>
+          </el-form-item>
+          <el-form-item prop="newPassword">
+            <el-input
+              type="password"
+              size="large"
+              placeholder="请输入新密码"
+              v-model.trim="formData.newPassword"
+              show-password
+              @focus="clearVerify"
+            >
+              <template #prefix>
+                <span class="iconfont icon-password"></span>
+              </template>
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="reNewPassword">
+            <el-input
+              type="password"
+              size="large"
+              placeholder="请再次输入新密码"
+              v-model.trim="formData.reNewPassword"
+              show-password
+              @focus="clearVerify"
+              @keyup.enter="submit"
+            >
+              <template #prefix>
+                <span class="iconfont icon-password"></span>
+              </template>
+            </el-input>
+          </el-form-item>
+        </template>
+
         <el-form-item>
           <el-button type="primary" @click="submit" class="login-btn">{{
-            isLogin ? '登录' : '注册'
+            isReset ? '重置密码' : isLogin ? '登录' : '注册'
           }}</el-button>
         </el-form-item>
         <div class="bottom-link">
           <span class="a-link no-account" @click="changeOpType">{{
-            isLogin ? '没有账号?' : '已有账号?'
+            isReset ? '返回登录' : isLogin ? '没有账号?' : '已有账号?'
           }}</span>
+          <span v-if="isLogin && !isReset" class="a-link forgot-link" @click="openReset">忘记密码?</span>
         </div>
       </el-form>
     </div>
@@ -144,7 +201,62 @@ const isLogin = ref(true)
 const formData = ref({})
 const formDataRef = ref()
 
+// 找回密码模式：与登录/注册互斥，共用邮箱输入框
+const isReset = ref(false)
+const codeCountdown = ref(0)
+let countdownTimer = null
+
+const openReset = () => {
+  isReset.value = true
+  clearVerify()
+  formData.value.password = ''
+  formData.value.checkCode = ''
+}
+
+const sendEmailCode = async () => {
+  clearVerify()
+  if (!checkValue('checkEmail', formData.value.email, '请输入正确的邮箱')) {
+    return
+  }
+  const result = await proxy.Request({
+    url: proxy.Api.sendEmailCode,
+    params: {
+      email: formData.value.email,
+      type: 1 // 1找回密码
+    }
+  })
+  if (!result) {
+    return
+  }
+  proxy.Message.success('验证码已发送，10分钟内有效')
+  // 60 秒倒计时，与后端同频防重发
+  codeCountdown.value = 60
+  countdownTimer = setInterval(() => {
+    codeCountdown.value--
+    if (codeCountdown.value <= 0) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
 const changeOpType = () => {
+  // 找回密码态下先退回登录态，再切换登录/注册
+  if (isReset.value) {
+    isReset.value = false
+    if (countdownTimer) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+      codeCountdown.value = 0
+    }
+    nextTick(() => {
+      formDataRef.value.resetFields()
+      formData.value = {}
+      changeCheckCode()
+      clearVerify()
+    })
+    return
+  }
   window.ipcRenderer.send('loginOrRegister', !isLogin.value)
   isLogin.value = !isLogin.value
   nextTick(() => {
@@ -178,6 +290,40 @@ const submit = async () => {
   if (!checkValue('checkEmail', formData.value.email, '请输入正确的邮箱')) {
     return
   }
+
+  // ===== 找回密码：邮箱验证码 + 新密码 =====
+  if (isReset.value) {
+    if (!checkValue(null, formData.value.emailCode, '请输入邮箱验证码')) {
+      return
+    }
+    if (
+      !checkValue('checkPassword', formData.value.newPassword, '密码只能是数字、字母、特殊字符8~18位')
+    ) {
+      return
+    }
+    if (formData.value.newPassword != formData.value.reNewPassword) {
+      errorMsg.value = '两次输入的密码不一致'
+      return
+    }
+    const resetResult = await proxy.Request({
+      url: proxy.Api.resetPassword,
+      params: {
+        email: formData.value.email,
+        code: formData.value.emailCode,
+        newPassword: formData.value.newPassword
+      },
+      errorCallback: (response) => {
+        errorMsg.value = response.message || response.info || '重置失败'
+      }
+    })
+    if (!resetResult) {
+      return
+    }
+    proxy.Message.success('密码重置成功，请使用新密码登录')
+    changeOpType()
+    return
+  }
+
   if (
     !checkValue('checkPassword', formData.value.password, '密码只能是数字、字母、特殊字符8~18位')
   ) {
@@ -275,6 +421,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('loadLocalUserCallback')
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
 })
 
 //选择邮箱
@@ -351,8 +501,15 @@ const selectEmail = (email) => {
       height: 36px;
       font-size: 16px;
     }
+    .send-code-btn {
+      margin-left: 5px;
+      width: 120px;
+    }
     .bottom-link {
       text-align: right;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
     }
   }
 }

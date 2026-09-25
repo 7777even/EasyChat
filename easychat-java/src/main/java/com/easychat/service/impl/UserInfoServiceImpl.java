@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.config.EasyChatProperties;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
@@ -9,12 +10,14 @@ import com.easychat.entity.po.GroupInfo;
 import com.easychat.entity.po.UserContact;
 import com.easychat.entity.po.UserInfo;
 import com.easychat.entity.po.UserInfoBeauty;
+import com.easychat.entity.po.EmailVerifyCode;
 import com.easychat.entity.query.*;
 import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.entity.vo.UserInfoVO;
 import com.easychat.exception.BusinessException;
 import com.easychat.mappers.GroupInfoMapper;
 import com.easychat.mappers.UserContactMapper;
+import com.easychat.mappers.EmailVerifyCodeMapper;
 import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
@@ -70,6 +73,14 @@ public class UserInfoServiceImpl implements UserInfoService {
 
     @Resource
     private UserInfoBeautyMapper<UserInfoBeauty, UserInfoBeautyQuery> userInfoBeautyMapper;
+
+    @Resource
+    private EasyChatProperties easyChatProperties;
+
+    @Resource
+    private EmailVerifyCodeMapper<EmailVerifyCode, EmailVerifyCodeQuery> emailVerifyCodeMapper;
+
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(UserInfoServiceImpl.class);
 
     /**
      * 根据条件查询列表
@@ -256,9 +267,14 @@ public class UserInfoServiceImpl implements UserInfoService {
         }
 
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfoDto(userInfo);
-        Long lastHeartBeat = redisComponet.getUserHeartBeat(tokenUserInfoDto.getUserId());
-        if (lastHeartBeat != null) {
-            throw new BusinessException("此账号已经在别处登录，请退出后再登录");
+        // 登录策略：默认允许多端同时在线（与 openspec/specs/multi-device-sync 一致）；
+        // 开启 easychat.login.single-device=true 时，新登录把旧设备挤下线而不是报错拒绝。
+        if (Boolean.TRUE.equals(easyChatProperties.getLogin().getSingleDevice())) {
+            Long lastHeartBeat = redisComponet.getUserHeartBeat(tokenUserInfoDto.getUserId());
+            if (lastHeartBeat != null) {
+                // 旧设备先踢下线（推 FORCE_OFF_LINE 帧并关闭其 WS 连接），新登录继续成功
+                forceOffLine(tokenUserInfoDto.getUserId());
+            }
         }
 
         //保存登录信息到redis中
@@ -330,6 +346,100 @@ public class UserInfoServiceImpl implements UserInfoService {
         UserInfo updateInfo = new UserInfo();
         updateInfo.setStatus(userStatusEnum.getStatus());
         userInfoMapper.updateByUserId(updateInfo, userId);
+    }
+
+    @Override
+    public void updatePassword(String userId, String oldPassword, String newPassword) {
+        if (StringTools.isEmpty(oldPassword) || StringTools.isEmpty(newPassword)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        UserInfo dbInfo = userInfoMapper.selectByUserId(userId);
+        if (dbInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+        if (!dbInfo.getPassword().equals(StringTools.encodeByMD5(oldPassword))) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2103);
+        }
+        if (dbInfo.getPassword().equals(StringTools.encodeByMD5(newPassword))) {
+            throw new BusinessException("新密码不能与原密码相同");
+        }
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setPassword(StringTools.encodeByMD5(newPassword));
+        userInfoMapper.updateByUserId(updateInfo, userId);
+    }
+
+    @Override
+    public void sendEmailCode(String email, Integer type) {
+        if (StringTools.isEmpty(email)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        // 找回密码时必须校验邮箱已注册；注册时则相反
+        UserInfo userInfo = userInfoMapper.selectByEmail(email);
+        if (type != null && type == 1) {
+            if (userInfo == null) {
+                throw new BusinessException(ResponseCodeEnum.CODE_2101);
+            }
+        } else if (userInfo != null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2102);
+        }
+        // 60 秒内不重复发送
+        EmailVerifyCodeQuery query = new EmailVerifyCodeQuery();
+        query.setEmail(email);
+        query.setType(type == null ? 0 : type);
+        query.setStatus(0);
+        query.setOrderBy("create_time desc");
+        query.setSimplePage(new SimplePage(0, 1));
+        List<EmailVerifyCode> latest = emailVerifyCodeMapper.selectList(query);
+        long now = System.currentTimeMillis();
+        if (!latest.isEmpty() && now - latest.get(0).getCreateTime() < 60 * 1000L) {
+            throw new BusinessException("验证码已发送，请稍后再试");
+        }
+        String code = StringTools.getRandomNumber(Constants.LENGTH_6);
+        EmailVerifyCode bean = new EmailVerifyCode();
+        bean.setEmail(email);
+        bean.setCode(code);
+        bean.setType(type == null ? 0 : type);
+        bean.setStatus(0);
+        bean.setCreateTime(now);
+        bean.setExpireTime(now + 10 * 60 * 1000L);
+        emailVerifyCodeMapper.insert(bean);
+        // 未配置邮件服务时把验证码写日志，便于本地联调；生产应替换为真实邮件发送
+        logger.info("邮箱验证码已生成 email={}, type={}, code={}（10分钟内有效）", email, type, code);
+    }
+
+    @Override
+    public void resetPasswordByEmail(String email, String code, String newPassword) {
+        if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        EmailVerifyCodeQuery query = new EmailVerifyCodeQuery();
+        query.setEmail(email);
+        query.setCode(code);
+        query.setType(1);
+        query.setStatus(0);
+        query.setOrderBy("create_time desc");
+        query.setSimplePage(new SimplePage(0, 1));
+        List<EmailVerifyCode> list = emailVerifyCodeMapper.selectList(query);
+        if (list.isEmpty()) {
+            throw new BusinessException("验证码错误");
+        }
+        EmailVerifyCode verifyCode = list.get(0);
+        if (verifyCode.getExpireTime() != null && System.currentTimeMillis() > verifyCode.getExpireTime()) {
+            throw new BusinessException("验证码已过期");
+        }
+        UserInfo userInfo = userInfoMapper.selectByEmail(email);
+        if (userInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setPassword(StringTools.encodeByMD5(newPassword));
+        userInfoMapper.updateByUserId(updateInfo, userInfo.getUserId());
+
+        EmailVerifyCode used = new EmailVerifyCode();
+        used.setStatus(1);
+        EmailVerifyCodeQuery updateQuery = new EmailVerifyCodeQuery();
+        updateQuery.setId(verifyCode.getId());
+        emailVerifyCodeMapper.updateByParam(used, updateQuery);
     }
 
     @Override

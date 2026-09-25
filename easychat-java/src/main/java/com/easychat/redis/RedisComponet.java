@@ -37,6 +37,22 @@ public class RedisComponet {
     public void saveTokenUserInfoDto(TokenUserInfoDto tokenUserInfoDto) {
         redisUtils.setex(Constants.REDIS_KEY_WS_TOKEN + tokenUserInfoDto.getToken(), tokenUserInfoDto, Constants.REDIS_KEY_EXPIRES_DAY * 2);
         redisUtils.setex(Constants.REDIS_KEY_WS_TOKEN_USERID + tokenUserInfoDto.getUserId(), tokenUserInfoDto.getToken(), Constants.REDIS_KEY_EXPIRES_DAY * 2);
+        // 多端登录：把 token 追加进该用户的 token 列表（去重）
+        String listKey = Constants.REDIS_KEY_WS_TOKEN_USERID_LIST + tokenUserInfoDto.getUserId();
+        List<String> tokenList = redisUtils.getQueueList(listKey);
+        if (tokenList == null) {
+            tokenList = new java.util.ArrayList<>();
+        }
+        if (!tokenList.contains(tokenUserInfoDto.getToken())) {
+            redisUtils.lpush(listKey, tokenUserInfoDto.getToken(), Constants.REDIS_KEY_TOKEN_EXPIRES);
+        }
+    }
+
+    /**
+     * 获取指定用户当前持有的全部有效 token（多端登录场景）
+     */
+    public List<String> getTokenListByUserId(String userId) {
+        return redisUtils.getQueueList(Constants.REDIS_KEY_WS_TOKEN_USERID_LIST + userId);
     }
 
     /**
@@ -45,10 +61,19 @@ public class RedisComponet {
      * @param userId
      */
     public void cleanUserTokenByUserId(String userId) {
+        // 清理全部端持有的 token（多端登录：一个用户可能同时有多个有效 token）
+        List<String> tokenList = getTokenListByUserId(userId);
+        if (tokenList != null) {
+            for (String token : tokenList) {
+                redisUtils.delete(Constants.REDIS_KEY_WS_TOKEN + token);
+            }
+            redisUtils.delete(Constants.REDIS_KEY_WS_TOKEN_USERID_LIST + userId);
+        }
         String token = (String) redisUtils.get(Constants.REDIS_KEY_WS_TOKEN_USERID + userId);
         if (!StringTools.isEmpty(token)) {
             redisUtils.delete(Constants.REDIS_KEY_WS_TOKEN + token);
         }
+        redisUtils.delete(Constants.REDIS_KEY_WS_TOKEN_USERID + userId);
     }
 
 

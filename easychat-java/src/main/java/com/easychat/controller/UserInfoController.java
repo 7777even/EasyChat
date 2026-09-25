@@ -81,17 +81,19 @@ public class UserInfoController extends ABaseController {
 
     /**
      * 修改密码
+     * <p>
+     * 安全修复：必须校验旧密码。历史实现只接收新密码，
+     * 一旦 token 泄漏即可直接改密接管账号。
      */
     @PostMapping("/updatePassword")
     @GlobalInterceptor
     public Result<Void> updatePassword(HttpServletRequest request,
-                                        @NotEmpty(message = "密码不能为空")
-                                        @Pattern(regexp = Constants.REGEX_PASSWORD, message = "密码格式不正确")
-                                        String password) {
+                                       @NotEmpty(message = "原密码不能为空") String oldPassword,
+                                       @NotEmpty(message = "新密码不能为空")
+                                       @Pattern(regexp = Constants.REGEX_PASSWORD, message = "密码格式不正确")
+                                       String password) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        UserInfo userInfo = new UserInfo();
-        userInfo.setPassword(StringTools.encodeByMD5(password));
-        this.userInfoService.updateUserInfoByUserId(userInfo, tokenUserInfoDto.getUserId());
+        userInfoService.updatePassword(tokenUserInfoDto.getUserId(), oldPassword, password);
         // 关闭 WebSocket 连接，强制重新登录
         channelContextUtils.closeContext(tokenUserInfoDto.getUserId());
         return success();
