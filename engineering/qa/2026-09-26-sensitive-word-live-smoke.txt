@@ -1,0 +1,142 @@
+===== sensitive-word-admin 活体冒烟 =====
+时间: 2026-09-26T20:57:54
+BASE=http://localhost:5050/api  admin=test@qq.com  user=karina7710@test.com
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] migration-007 delete_flag 字段存在
+   [PASS] migration-007 uk_word_flag 唯一索引存在(word,delete_flag)
+   [PASS] 旧 uk_word 索引已移除
+   admin/user 登录成功
+
+=== 1. C1 分页筛选 / 新增 / 编辑 / 逻辑删除 ===
+   [PASS] 新增词条 code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 新增后库内存在且 delete_flag=0
+   [PASS] 重复新增返回 2704 | (400, {'code': 2704, 'message': '词条已存在', 'data': None})
+   [PASS] 编辑词条（改级别/状态）code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 编辑已落库 level=2 status=0
+   [PASS] 编辑改名撞同名存活词条返回 2704 | (400, {'code': 2704, 'message': '词条已存在', 'data': None})
+   [PASS] 编辑不存在的词条返回 2705 | (400, {'code': 2705, 'message': '词条不存在', 'data': None})
+   [PASS] 删除不存在的词条返回 2705 | (400, {'code': 2705, 'message': '词条不存在', 'data': None})
+   [PASS] 筛选 keyword+level+status 命中编辑后的 w1 | 1
+   [PASS] 列表只含 delete_flag=0 行（无 delete_flag 字段泄漏）
+
+=== 2. C5 删后重新增 / 删后重导入 ===
+   [PASS] 删除存活词条 code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 删除为逻辑删除（行仍在、delete_flag>0）
+   [PASS] 删除后不再计入存活
+   [PASS] 删后重新新增同名词 code=0（唯一索引不被已删行占用） | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 重新增后存活 1 行
+
+=== 3. C2 批量导入（txt / csv / 超限 / 格式） ===
+   [PASS] txt 导入 code=0 | {'code': 0, 'message': 'success', 'data': {'success': 3, 'skipped': 1, 'failed': 1}}
+   [PASS] txt 三态计数 success=3 skipped=1 failed=1 | {'success': 3, 'skipped': 1, 'failed': 1}
+   [PASS] 导入词已入库且同词不重复
+   [PASS] csv 导入 code=0（含表头） | {'code': 0, 'message': 'success', 'data': {'success': 2, 'skipped': 1, 'failed': 2}}
+   [PASS] csv 三态计数 success=2 skipped=1 failed=2 | {'success': 2, 'skipped': 1, 'failed': 2}
+   [PASS] csv 级别/状态按列落库
+   [PASS] 超过 5000 行返回 1001 | {'code': 1001, 'message': '导入行数不能超过 5000 行', 'data': None}
+   [PASS] 不支持的扩展名返回 1001 | {'code': 1001, 'message': '仅支持 .txt / .csv 文件', 'data': None}
+   [PASS] 超过 2MB 返回 1001 | {'code': 1001, 'message': '导入文件不能超过 2MB', 'data': None}
+
+=== 4. C3 导出 CSV（BOM + 公式注入防护）与往返 ===
+   [PASS] 导出 HTTP 200 | 200
+   [PASS] 导出含 UTF-8 BOM | b'\xef\xbb\xbfwor'
+   [PASS] 导出表头 word,level,status | ['word,level,status']
+   [PASS] 已删词条不在导出中
+   [PASS] 存活词条（含重新新增的 w1）只出现一行 | ['SMOKESW-BAN,3,1']
+   [PASS] 公式注入防护：= 开头词被前置单引号 | ["'=SMOKESW-SUM,1,1"]
+   [PASS] 导出列数固定为 3（无 delete_flag 字段） | ['word,level,status', 'SMOKESW-BAN,3,1', 'SMOKESW-T1,3,1']
+   [PASS] 导出文件原样导回 success=0（全部 skipped） | {'success': 0, 'skipped': 7, 'failed': 0}
+   [PASS] 往返后存活词数不变 | 7 -> 7
+
+=== 5. C4 写后自动热更（拦截 / 替换 / 删除失效） ===
+   [PASS] 新增 level3 词后发送含该词消息被拦截 2701 | {'code': 2701, 'message': '内容包含敏感词，禁止发送', 'data': None}
+   [PASS] 被拦截内容未入库
+   [PASS] 新增 level2 词后发布 code=0 | {'code': 0, 'message': 'success', 'data': {'id': 11, 'userId': 'U04259455805', 'nickName': 'test', 'content': 'SMOKESW-MOMENT *** 可发内容', 'mediaType': 0, 'location': None, 'visibility': 0, 'createTime': 1790427476880, 'likedByMe': False, 'mediaList': [], 'likeList': [], 'commentList': []}}
+   [PASS] 命中词被替换为 *** | SMOKESW-MOMENT *** 可发内容
+   [PASS] 删除 level3 词后立即失效（发布 code=0） | {'code': 0, 'message': 'success', 'data': {'id': 12, 'userId': 'U04259455805', 'nickName': 'test', 'content': 'SMOKESW-MOMENT SMOKESW-HOTBAN 删除后可发', 'mediaType': 0, 'location': None, 'visibility': 0, 'createTime': 1790427477111, 'likedByMe': False, 'mediaList': [], 'likeList': [], 'commentList': []}}
+   [PASS] 导入后新词立即生效（拦截 2701） | {'code': 2701, 'message': '内容包含敏感词，禁止发送', 'data': None}
+
+=== 6. 权限隔离（404 / 901） ===
+   [PASS] 非管理员被 checkAdmin 拦截返回 404 | (400, {'code': 404, 'message': '请求地址不存在', 'data': None})
+   [PASS] 无 token 返回 901 | (400, {'code': 901, 'message': '登录超时', 'data': None})
+   [PASS] 无 token 导出返回 901 | b'{"code":901,"message":"\xe7\x99\xbb\xe5\xbd\x95\xe8\xb6\x85\xe6\x97\xb6","data":null}'
+   [PASS] 非管理员删除被拦截 404 | (400, {'code': 404, 'message': '请求地址不存在', 'data': None})
+
+=== 7. fixture 清理 ===
+   [PASS] fixture 词已清理 | 0
+   [PASS] fixture 朋友圈已清理 | 0
+
+===== 结果: 49/49 PASS =====
+===== sensitive-word-admin 活体冒烟 =====
+时间: 2026-09-26T21:16:34
+BASE=http://localhost:5050/api  admin=test@qq.com  user=karina7710@test.com
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] migration-007 delete_flag 字段存在
+   [PASS] migration-007 uk_word_flag 唯一索引存在(word,delete_flag)
+   [PASS] 旧 uk_word 索引已移除
+   admin/user 登录成功
+
+=== 1. C1 分页筛选 / 新增 / 编辑 / 逻辑删除 ===
+   [PASS] 新增词条 code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 新增后库内存在且 delete_flag=0
+   [PASS] 重复新增返回 2704 | (400, {'code': 2704, 'message': '词条已存在', 'data': None})
+   [PASS] 编辑词条（改级别/状态）code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 编辑已落库 level=2 status=0
+   [PASS] 编辑改名撞同名存活词条返回 2704 | (400, {'code': 2704, 'message': '词条已存在', 'data': None})
+   [PASS] 编辑不存在的词条返回 2705 | (400, {'code': 2705, 'message': '词条不存在', 'data': None})
+   [PASS] 删除不存在的词条返回 2705 | (400, {'code': 2705, 'message': '词条不存在', 'data': None})
+   [PASS] 筛选 keyword+level+status 命中编辑后的 w1 | 1
+   [PASS] 列表只含 delete_flag=0 行（无 delete_flag 字段泄漏）
+
+=== 2. C5 删后重新增 / 删后重导入 ===
+   [PASS] 删除存活词条 code=0 | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 删除为逻辑删除（行仍在、delete_flag>0）
+   [PASS] 删除后不再计入存活
+   [PASS] 删后重新新增同名词 code=0（唯一索引不被已删行占用） | (200, {'code': 0, 'message': 'success', 'data': None})
+   [PASS] 重新增后存活 1 行
+
+=== 3. C2 批量导入（txt / csv / 超限 / 格式） ===
+   [PASS] txt 导入 code=0 | {'code': 0, 'message': 'success', 'data': {'success': 3, 'skipped': 1, 'failed': 1}}
+   [PASS] txt 三态计数 success=3 skipped=1 failed=1 | {'success': 3, 'skipped': 1, 'failed': 1}
+   [PASS] 导入词已入库且同词不重复
+   [PASS] csv 导入 code=0（含表头） | {'code': 0, 'message': 'success', 'data': {'success': 2, 'skipped': 1, 'failed': 2}}
+   [PASS] csv 三态计数 success=2 skipped=1 failed=2 | {'success': 2, 'skipped': 1, 'failed': 2}
+   [PASS] csv 级别/状态按列落库
+   [PASS] 超过 5000 行返回 1001 | {'code': 1001, 'message': '导入行数不能超过 5000 行', 'data': None}
+   [PASS] 不支持的扩展名返回 1001 | {'code': 1001, 'message': '仅支持 .txt / .csv 文件', 'data': None}
+   [PASS] 超过 2MB 返回 1001 | {'code': 1001, 'message': '导入文件不能超过 2MB', 'data': None}
+
+=== 4. C3 导出 CSV（BOM + 公式注入防护）与往返 ===
+   [PASS] 导出 HTTP 200 | 200
+   [PASS] 导出含 UTF-8 BOM | b'\xef\xbb\xbfwor'
+   [PASS] 导出表头 word,level,status | ['word,level,status']
+   [PASS] 已删词条不在导出中
+   [PASS] 存活词条（含重新新增的 w1）只出现一行 | ['SMOKESW-BAN,3,1']
+   [PASS] 公式注入防护：= 开头词被前置单引号 | ["'=SMOKESW-SUM,1,1"]
+   [PASS] 导出列数固定为 3（无 delete_flag 字段） | ['word,level,status', '代开发票,3,1', '博彩投注,3,1']
+   [PASS] 导出文件原样导回 success=0（全部 skipped） | {'success': 0, 'skipped': 16, 'failed': 0}
+   [PASS] 往返后存活词数不变 | 16 -> 16
+
+=== 5. C4 写后自动热更（拦截 / 替换 / 删除失效） ===
+   [PASS] 新增 level3 词后发送含该词消息被拦截 2701 | {'code': 2701, 'message': '内容包含敏感词，禁止发送', 'data': None}
+   [PASS] 被拦截内容未入库
+   [PASS] 新增 level2 词后发布 code=0 | {'code': 0, 'message': 'success', 'data': {'id': 15, 'userId': 'U04259455805', 'nickName': 'test', 'content': 'SMOKESW-MOMENT *** 可发内容', 'mediaType': 0, 'location': None, 'visibility': 0, 'createTime': 1790428600331, 'likedByMe': False, 'mediaList': [], 'likeList': [], 'commentList': []}}
+   [PASS] 命中词被替换为 *** | SMOKESW-MOMENT *** 可发内容
+   [PASS] 删除 level3 词后立即失效（发布 code=0） | {'code': 0, 'message': 'success', 'data': {'id': 16, 'userId': 'U04259455805', 'nickName': 'test', 'content': 'SMOKESW-MOMENT SMOKESW-HOTBAN 删除后可发', 'mediaType': 0, 'location': None, 'visibility': 0, 'createTime': 1790428600598, 'likedByMe': False, 'mediaList': [], 'likeList': [], 'commentList': []}}
+   [PASS] 导入后新词立即生效（拦截 2701） | {'code': 2701, 'message': '内容包含敏感词，禁止发送', 'data': None}
+
+=== 6. 权限隔离（404 / 901） ===
+   [PASS] 非管理员被 checkAdmin 拦截返回 404 | (400, {'code': 404, 'message': '请求地址不存在', 'data': None})
+   [PASS] 无 token 返回 901 | (400, {'code': 901, 'message': '登录超时', 'data': None})
+   [PASS] 无 token 导出返回 901 | b'{"code":901,"message":"\xe7\x99\xbb\xe5\xbd\x95\xe8\xb6\x85\xe6\x97\xb6","data":null}'
+   [PASS] 非管理员删除被拦截 404 | (400, {'code': 404, 'message': '请求地址不存在', 'data': None})
+
+=== 7. fixture 清理 ===
+   [PASS] fixture 词已清理 | 0
+   [PASS] fixture 朋友圈已清理 | 0
+
+===== 结果: 49/49 PASS =====

@@ -1,0 +1,40 @@
+===== group-file 活体冒烟 =====
+时间: 2026-09-26T21:13:40
+BASE=http://localhost:5050/api  user=karina7710@test.com  group=G08427252986
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] 群 G08427252986 存在
+   [PASS] 已将 karina 临时加为群成员
+   [PASS] karina 登录成功
+
+=== 1. 分片上传 + 合并入库 ===
+   [PASS] uploadChunk code=0 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] 分片已注册（checkChunks 返回 [0]） | {'code': 0, 'message': 'success', 'data': [0]}
+   [PASS] 合并上传 code=0 | {'code': 0, 'message': 'success', 'data': {'id': None, 'groupId': 'G08427252986', 'fileName': 'smoke-test.txt', 'filePath': '78428793992e46df8b8430c5da961ce4.txt', 'fileSize': 29, 'fileType': 2, 'coverPath': None, 'uploadUserId': 'U04259455805', 'uploadUserNickName': None, 'createTime': 1790428421463, 'status': 1}}
+   [PASS] 合并落库（DB 有记录） | 4
+   [PASS] 响应含文件记录(filePath 非空) | 78428793992e46df8b8430c5da961ce4.txt
+   [PASS] DB 群文件行已写入 status=1
+   [PASS] DB 存储文件名 = fileId.txt（合并规则） | 78428793992e46df8b8430c5da961ce4.txt
+
+=== 2. 列表 ===
+   [PASS] 列表 code=0 | {'code': 0, 'message': 'success', 'data': {'totalCount': 1, 'pageSize': 20, 'pageNo': 1, 'pageTotal': 1, 'list': [{'id': 4, 'groupId': 'G08427252986', 'fileName': 'smoke-test.txt', 'filePath': '78428793992e46df8b8430c5da961ce4.txt', 'fileSize': 29, 'fileType': 2, 'coverPath': None, 'uploadUserId': 'U04259455805', 'uploadUserNickName': 'test', 'createTime': 1790428421463, 'status': 1}]}}
+   [PASS] 列表 totalCount >= 1 | 1
+   [PASS] 列表含刚上传文件 | found=True
+   [PASS] 列表项含上传人昵称 | test
+   [PASS] 列表项 fileType=2（文件） | 2
+
+=== 3. 删除 ===
+   [PASS] 删除 code=0 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] DB 逻辑删除 status=0
+   [PASS] 删除后列表不再出现该文件
+
+=== 4. 权限：非成员 2304 ===
+   [PASS] 非成员列文件 -> 2304 | 2304
+   [PASS] 非成员上传 -> 2304 | 2304
+
+=== 5. 清理 ===
+   [PASS] 成员行已清理
+   [PASS] 群文件行已清理
+
+===== 结果: 23/23 PASS =====
