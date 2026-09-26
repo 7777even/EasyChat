@@ -79,12 +79,15 @@
           <el-button size="small" type="danger" @click="deleteSelected">删除</el-button>
           <el-button size="small" @click="exitMultiSelect">退出多选</el-button>
         </div>
-        <div class="message-panel" id="message-panel">
-          <div
-            class="message-item"
-            v-for="(data, index) in messageList"
-            :id="'message' + data.messageId"
-          >
+        <MessageVirtualList
+          ref="messageListRef"
+          class="message-panel"
+          :list="messageList"
+          @scroll="onMessageListScroll"
+          @load-more="loadChatMessage"
+        >
+          <template #default="{ item: data, index }">
+            <div class="message-item" :id="'message' + data.messageId">
             <template
               v-if="
                 index > 1 &&
@@ -124,8 +127,9 @@
                 @reportMessage="reportMessageHandler"
               ></ChatMessage>
             </template>
-          </div>
-        </div>
+            </div>
+          </template>
+        </MessageVirtualList>
         <MessageSend
           ref="messageSendRef"
           :currentChatSession="currentChatSession"
@@ -163,6 +167,7 @@ import ContextMenu from '@imengyu/vue3-context-menu'
 import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 
 import SearchResult from './SearchResult.vue'
+import MessageVirtualList from './MessageVirtualList.vue'
 import MessageSearch from './MessageSearch.vue'
 import ChatGroupDetail from './ChatGroupDetail.vue'
 import GroupFile from './GroupFile.vue'
@@ -249,9 +254,28 @@ const remoteHistory = reactive({
 
 //消息列表
 const messageList = ref([])
+//虚拟列表组件实例（滚动定位 / 置底 / 重置）
+const messageListRef = ref()
 //是否自动滚动到底部
 let distanceBottom = 0
 const messageSendRef = ref()
+
+//虚拟列表滚动回调：维护距底距离，供「新消息是否自动置底」判断
+const onMessageListScroll = ({ distanceBottom: db }) => {
+  distanceBottom = db
+}
+
+//按消息 ID 定位（搜索结果 / 引用跳转 / 新消息置底）
+//虚拟滚动下不可见项没有真实 DOM，故不能再 querySelector().scrollIntoView()
+const scrollToMessage = (messageId, align = 'center') => {
+  const idx = messageList.value.findIndex((item) => item.messageId === messageId)
+  if (idx < 0) return false
+  if (messageListRef.value) {
+    messageListRef.value.scrollToIndex(idx, align)
+    return true
+  }
+  return false
+}
 //是否正在加载消息
 const loadingMessage = ref(false)
 
@@ -337,19 +361,12 @@ const loadRemoteHistoryMessage = async () => {
     if (appendList.length == 0) {
       return
     }
-    const scrollAnchorId = messageList.value.length > 0 ? messageList.value[0].messageId : null
+    // 头部插入后的滚动位置保持由 MessageVirtualList 内部处理（含新项实测后的二次校正），
+    // 不再用 querySelector + scrollIntoView（虚拟滚动下不可见项没有真实 DOM）
     messageList.value = appendList.concat(messageList.value)
     // 同时回写本地 SQLite，下次进入直接从本地读
     appendList.forEach((item) => {
       window.ipcRenderer.send('saveOrUpdateMessage', {message: item})
-    })
-    nextTick(() => {
-      if (scrollAnchorId != null) {
-        const anchor = document.querySelector('#message' + scrollAnchorId)
-        if (anchor) {
-          anchor.scrollIntoView()
-        }
-      }
     })
   } catch (e) {
     console.warn('云端漫游拉取失败', e)
@@ -491,8 +508,6 @@ const onLoadChatMessage = () => {
       return a.messageId - b.messageId
     })
 
-    const lastMessage = messageList.value[0]
-
     messageList.value = dataList.concat(messageList.value)
     messageCountInfo.pageTotal = pageTotal
     messageCountInfo.pageNo = pageNo
@@ -503,11 +518,9 @@ const onLoadChatMessage = () => {
     }
     if (pageNo == 1) {
       gotoBottom()
-    } else {
-      nextTick(() => {
-        document.querySelector('#message' + lastMessage.messageId).scrollIntoView()
-      })
     }
+    // pageNo > 1（上翻加载历史）的滚动位置保持：由 MessageVirtualList 在头部插入时
+    // 自动按新增高度补偿 scrollTop，并在新项实测完成后二次校正，此处无需再手动定位
   })
 }
 
@@ -786,12 +799,13 @@ const gotoBottom = () => {
     if (distanceBottom > 200) {
       return
     }
-    const feedItems = document.querySelectorAll('.message-item')
-    if (feedItems.length > 0) {
-      setTimeout(() => {
-        feedItems[feedItems.length - 1].scrollIntoView()
-      }, 100)
-    }
+    // 虚拟滚动只渲染可见项，「最后一个 .message-item DOM」并不等于最后一条消息，
+    // 故改为调用组件置底 API（按估算总高定位）
+    setTimeout(() => {
+      if (messageListRef.value) {
+        messageListRef.value.scrollToBottom()
+      }
+    }, 100)
   })
 }
 
@@ -852,18 +866,8 @@ onMounted(() => {
   //重新加载已删除的会话
   onReloadChatSession()
 
-  nextTick(() => {
-    const messagePanel = document.querySelector('#message-panel')
-    messagePanel.addEventListener('scroll', (e) => {
-      const scrollTop = e.target.scrollTop
-      //计算距离底部的距离
-      distanceBottom = e.target.scrollHeight - e.target.clientHeight - scrollTop
-      //滚动到顶部，开始分页查询
-      if (scrollTop == 0 && messageList.value.length > 0) {
-        loadChatMessage()
-      }
-    })
-  })
+  // 滚动监听已下沉到 MessageVirtualList：@scroll 维护 distanceBottom、@load-more 触顶加载历史
+  //（原 #message-panel 直接监听已移除——虚拟滚动下该元素不再是滚动容器）
   //设置选中session为空
   setSessionSelect({})
 })
@@ -1145,14 +1149,24 @@ const jumpMessageFromSearch = ({contactId, contactType, messageId}) => {
 const jumpToMessage = async (messageId) => {
   const scrollToTarget = () => {
     nextTick(() => {
-      const messageElement = document.getElementById('message' + messageId)
-      if (messageElement) {
-        messageElement.scrollIntoView({behavior: 'smooth', block: 'center'})
-        messageElement.classList.add('highlight-message')
-        setTimeout(() => {
-          messageElement.classList.remove('highlight-message')
-        }, 2000)
+      // 虚拟滚动：先按 index 定位（组件按偏移表滚动，不要求目标已有 DOM）
+      const ok = scrollToMessage(messageId, 'center')
+      if (!ok) {
+        return
       }
+      // 滚动后目标才进入可见窗口被渲染，需再等一帧才能取到 DOM 加高亮
+      nextTick(() => {
+        setTimeout(() => {
+          const messageElement = document.getElementById('message' + messageId)
+          if (!messageElement) {
+            return
+          }
+          messageElement.classList.add('highlight-message')
+          setTimeout(() => {
+            messageElement.classList.remove('highlight-message')
+          }, 2000)
+        }, 50)
+      })
     })
   }
   const exists = messageList.value.some((item) => item.messageId == messageId)
