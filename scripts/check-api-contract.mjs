@@ -79,15 +79,60 @@ function scanFrontendCalls() {
   }
 }
 
+// ── 主进程（Electron main）调用扫描：补盲区，避免孤儿路由误报 ──
+function walkJs(dir, acc = []) {
+  let entries = [];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (_) {
+    return acc;
+  }
+  for (const e of entries) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) walkJs(p, acc);
+    else if (e.isFile() && e.name.endsWith('.js')) acc.push(p);
+  }
+  return acc;
+}
+
+// 主进程直接拼 URL 调后端（如 src/main/file.js 的 /api/chat/downloadFile、
+// /api/update/download），不走 Api.js，门禁需认识这类调用方。
+function scanMainProcessCalls() {
+  const calls = [];
+  let files = [];
+  try {
+    files = walkJs(join(ROOT, 'easychat-front/src/main'));
+  } catch (_) {
+    return calls;
+  }
+  const urlRe = /['"`][^'"`]*\/api\/([\w/{}:.\-]+)['"`]/g;
+  for (const f of files) {
+    let content;
+    try {
+      content = readFileSync(f, 'utf-8');
+    } catch (_) {
+      continue;
+    }
+    let m;
+    while ((m = urlRe.exec(content)) !== null) {
+      const path = '/' + m[1];
+      const lineNo = content.slice(0, m.index).split('\n').length;
+      calls.push({ path, method: 'ANY', source: `${f}:${lineNo}` });
+    }
+  }
+  return calls;
+}
+
 // ── 入口 ──────────────────────────────────────────────────
 const backendRoutes = scanBackendRoutes();
 const frontendCalls = scanFrontendCalls();
+const mainCalls = scanMainProcessCalls();
 
 const warnings = [];
 const infos = [];
 
 // 找「孤儿路由」：后端有但前端没调
-const fcPaths = new Set(frontendCalls.map(c => c.path));
+const fcPaths = new Set([...frontendCalls, ...mainCalls].map(c => c.path));
 for (const r of backendRoutes) {
   const matched = [...fcPaths].some(fp => fp === r.path || fp.startsWith(r.path + '/'));
   if (!matched) {
@@ -115,7 +160,7 @@ for (const m of warnings) log('WARN', m);
 
 const summary =
   `[api-contract] 后端路由 ${backendRoutes.length} 项；` +
-  `前端调用 ${frontendCalls.length} 项；` +
+  `前端调用 ${frontendCalls.length} 项；主进程调用 ${mainCalls.length} 项；` +
   `${infos.length} 个潜在孤儿 / ${warnings.length} 个潜在漂移`;
 
 if (warnings.length > 0 && STRICT) {
