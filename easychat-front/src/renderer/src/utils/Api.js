@@ -56,6 +56,11 @@ const api = {
     loadBeautyAccount: "/admin/loadBeautyAccountList",//靓号列表
     saveBeautAccount: "/admin/saveBeautAccount",//保存靓号
     delBeautAccount: "/admin/delBeautAccount",//删除靓号
+    //举报处理与审计
+    loadReport: "/admin/report/loadReport",//后台举报列表
+    getReportDetail: "/admin/report/getReportDetail",//后台举报详情
+    dealReport: "/admin/report/dealReport",//后台处置举报
+    loadReportAudit: "/admin/report/loadAuditLog",//后台处置审计日志
     checkVersion: "/update/checkVersion",//更新检测
     //朋友圈
     publishMoment: "/moment/publish",

@@ -69,6 +69,13 @@ const menuList = ref([
     icon: 'icon-refresh',
     path: '/admin/update',
     iconBgColor: '#07c160'
+  },
+  {
+    name: '举报管理',
+    routeName: '举报管理',
+    icon: 'icon-warning',
+    path: '/admin/reportList',
+    iconBgColor: '#ff976a'
   }
 ])
 

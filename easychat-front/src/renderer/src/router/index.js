@@ -44,6 +44,10 @@ const router = createRouter({
         path: "update",
         name: "版本管理",
         component: () => import('@/views/admin/Update.vue'),
+      }, {
+        path: "reportList",
+        name: "举报管理",
+        component: () => import('@/views/admin/ReportList.vue'),
       }]
     },
     {
