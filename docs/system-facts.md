@@ -165,6 +165,7 @@
 | 评论删除 | `POST /moment/deleteComment`（`commentId`），动态发布者与评论者本人可删 |
 | 消息扩展 | `chat_message.extra_data`（JSON：引用/转发）、`at_user_ids`（@ 提及）、`duration`（语音时长） |
 | 聊天记录导出 | 会话右键菜单「导出聊天记录（TXT / CSV）」→ IPC `exportChatRecord` → 主进程 `src/main/exportChat.js` 读本地 SQLite 全量 → `dialog.showSaveDialog` → 落盘。**只导本地已持久化消息，不拉云端**；CSV 带 UTF-8 BOM 且对 `=+-@` 开头值前置单引号防 Excel 公式注入 |
+| 深色模式 | 账号设置「外观主题」浅色/深色单选 → IPC `updateSysSetting` 合入 `user_setting.sysSetting.theme`（主进程键白名单已含 `theme`，不覆盖既有键）；`<html>.dark` 激活 Element Plus 暗色 css-vars（`element-plus/theme-chalk/dark/css-vars.css`）+ 自定义外壳 `--ec-*` 变量（`base.scss` 定义，`Layout`/`ContentPanel`/`Main`/`Setting`/`Chat` 引用）。仅本地持久化，不依赖后端；启动时由 `Main.vue` 读本地设置应用 |
 
 ## 13. 前端主进程约定（易踩）
 
@@ -191,3 +192,4 @@
 > | 2026-09-26 | 登录策略改为默认多端在线（`single-device` 开关时挤下线而非拒绝） | 与 multi-device-sync 规格对齐 |
 > | 2026-09-26 | 新增聊天记录导出（TXT/CSV，仅本地数据） | openspec 2026-09-26-chat-record-export |
 > | 2026-09-26 | 修复 5 个 IPC 通道漏注册导致功能静默失效；新增 `check-ipc-registration.mjs` 门禁 | 同上的 QA 附带发现 |
+> | 2026-09-26 | 新增深色模式（浅色/深色切换，本地持久化 + Element Plus 暗色主题 + 自定义外壳 `--ec-*` 变量） | 四·新增能力（从简单项续做） |
