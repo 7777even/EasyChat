@@ -250,10 +250,13 @@ const onUpdateSysSetting = () => {
                     sysSetting = {};
                 }
             }
-            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch）
+            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch / theme）
             if (patch && typeof patch === "object") {
                 if ("notifySwitch" in patch) {
                     sysSetting.notifySwitch = Boolean(patch.notifySwitch);
+                }
+                if ("theme" in patch) {
+                    sysSetting.theme = patch.theme === "dark" ? "dark" : "light";
                 }
             }
             await updateSysSetting(JSON.stringify(sysSetting));
