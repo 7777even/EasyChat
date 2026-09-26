@@ -343,7 +343,7 @@ public class UserInfoServiceImpl implements UserInfoService {
     public void updateUserStatus(Integer status, String userId) {
         UserStatusEnum userStatusEnum = UserStatusEnum.getByStatus(status);
         if (userStatusEnum == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         UserInfo updateInfo = new UserInfo();
         updateInfo.setStatus(userStatusEnum.getStatus());

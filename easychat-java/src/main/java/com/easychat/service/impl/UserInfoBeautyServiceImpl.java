@@ -190,7 +190,7 @@ public class UserInfoBeautyServiceImpl implements UserInfoBeautyService {
             UserInfoBeauty dbInfo = this.userInfoBeautyMapper.selectById(beauty.getId());
             if (BeautyAccountStatusEnum.USEED.getStatus().equals(dbInfo.getStatus())) {
                 //已经使用的不允许修改
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
         }
         //判断邮箱是否已经存在
