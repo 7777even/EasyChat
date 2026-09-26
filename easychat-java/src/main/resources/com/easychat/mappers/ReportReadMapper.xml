@@ -36,8 +36,8 @@
                mr.create_time,
                LEFT(COALESCE(m.content, mc.content), 120) AS content_excerpt
         FROM moment_report mr
-                 LEFT JOIN moment m ON mr.moment_id = m.moment_id
-                 LEFT JOIN moment_comment mc ON mr.comment_id = mc.comment_id
+                 LEFT JOIN moment m ON m.id = mr.moment_id
+                 LEFT JOIN moment_comment mc ON mc.id = mr.comment_id
                  LEFT JOIN user_info ru ON mr.report_user_id = ru.user_id
         UNION ALL
         SELECT msgr.id,
