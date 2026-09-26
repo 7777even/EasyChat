@@ -20,31 +20,32 @@
         id, moment_id, comment_id, report_user_id, reason, description, status, handle_user_id, create_time, handle_time
     </sql>
 
-    <insert id="insert" parameterType="com.easychat.entity.po.MomentReport" keyProperty="id" useGeneratedKeys="true">
+    <insert id="insert" parameterType="com.easychat.entity.po.MomentReport" keyProperty="bean.id" useGeneratedKeys="true">
         INSERT INTO moment_report
+        <!-- 接口方法为 insert(@Param("bean"))，参数须用 bean. 前缀，否则运行时 BindingException -->
         <trim prefix="(" suffix=")" suffixOverrides=",">
-            <if test="id != null">id,</if>
-            <if test="momentId != null">moment_id,</if>
-            <if test="commentId != null">comment_id,</if>
-            <if test="reportUserId != null">report_user_id,</if>
-            <if test="reason != null">reason,</if>
-            <if test="description != null">description,</if>
-            <if test="status != null">status,</if>
-            <if test="handleUserId != null">handle_user_id,</if>
-            <if test="createTime != null">create_time,</if>
-            <if test="handleTime != null">handle_time,</if>
+            <if test="bean.id != null">id,</if>
+            <if test="bean.momentId != null">moment_id,</if>
+            <if test="bean.commentId != null">comment_id,</if>
+            <if test="bean.reportUserId != null">report_user_id,</if>
+            <if test="bean.reason != null">reason,</if>
+            <if test="bean.description != null">description,</if>
+            <if test="bean.status != null">status,</if>
+            <if test="bean.handleUserId != null">handle_user_id,</if>
+            <if test="bean.createTime != null">create_time,</if>
+            <if test="bean.handleTime != null">handle_time,</if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
-            <if test="id != null">#{id},</if>
-            <if test="momentId != null">#{momentId},</if>
-            <if test="commentId != null">#{commentId},</if>
-            <if test="reportUserId != null">#{reportUserId},</if>
-            <if test="reason != null">#{reason},</if>
-            <if test="description != null">#{description},</if>
-            <if test="status != null">#{status},</if>
-            <if test="handleUserId != null">#{handleUserId},</if>
-            <if test="createTime != null">#{createTime},</if>
-            <if test="handleTime != null">#{handleTime},</if>
+            <if test="bean.id != null">#{bean.id},</if>
+            <if test="bean.momentId != null">#{bean.momentId},</if>
+            <if test="bean.commentId != null">#{bean.commentId},</if>
+            <if test="bean.reportUserId != null">#{bean.reportUserId},</if>
+            <if test="bean.reason != null">#{bean.reason},</if>
+            <if test="bean.description != null">#{bean.description},</if>
+            <if test="bean.status != null">#{bean.status},</if>
+            <if test="bean.handleUserId != null">#{bean.handleUserId},</if>
+            <if test="bean.createTime != null">#{bean.createTime},</if>
+            <if test="bean.handleTime != null">#{bean.handleTime},</if>
         </trim>
     </insert>
 

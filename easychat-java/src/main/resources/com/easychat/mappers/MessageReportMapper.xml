@@ -17,25 +17,26 @@
         id, message_id, report_user_id, reason, description, status, create_time
     </sql>
 
-    <insert id="insert" parameterType="com.easychat.entity.po.MessageReport" keyProperty="id" useGeneratedKeys="true">
+    <insert id="insert" parameterType="com.easychat.entity.po.MessageReport" keyProperty="bean.id" useGeneratedKeys="true">
         INSERT INTO message_report
+        <!-- 接口方法为 insert(@Param("bean"))，参数须用 bean. 前缀，否则运行时 BindingException -->
         <trim prefix="(" suffix=")" suffixOverrides=",">
-            <if test="id != null">id,</if>
-            <if test="messageId != null">message_id,</if>
-            <if test="reportUserId != null">report_user_id,</if>
-            <if test="reason != null">reason,</if>
-            <if test="description != null">description,</if>
-            <if test="status != null">status,</if>
-            <if test="createTime != null">create_time,</if>
+            <if test="bean.id != null">id,</if>
+            <if test="bean.messageId != null">message_id,</if>
+            <if test="bean.reportUserId != null">report_user_id,</if>
+            <if test="bean.reason != null">reason,</if>
+            <if test="bean.description != null">description,</if>
+            <if test="bean.status != null">status,</if>
+            <if test="bean.createTime != null">create_time,</if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
-            <if test="id != null">#{id},</if>
-            <if test="messageId != null">#{messageId},</if>
-            <if test="reportUserId != null">#{reportUserId},</if>
-            <if test="reason != null">#{reason},</if>
-            <if test="description != null">#{description},</if>
-            <if test="status != null">#{status},</if>
-            <if test="createTime != null">#{createTime},</if>
+            <if test="bean.id != null">#{bean.id},</if>
+            <if test="bean.messageId != null">#{bean.messageId},</if>
+            <if test="bean.reportUserId != null">#{bean.reportUserId},</if>
+            <if test="bean.reason != null">#{bean.reason},</if>
+            <if test="bean.description != null">#{bean.description},</if>
+            <if test="bean.status != null">#{bean.status},</if>
+            <if test="bean.createTime != null">#{bean.createTime},</if>
         </trim>
     </insert>
 
