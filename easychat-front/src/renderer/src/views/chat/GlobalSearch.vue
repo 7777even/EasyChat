@@ -246,7 +246,7 @@ defineExpose({ show })
   display: flex;
   gap: 6px;
   padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ec-divider-soft);
   margin-bottom: 8px;
 
   .scope-tab {
@@ -279,7 +279,7 @@ defineExpose({ show })
     font-size: 12px;
     color: #999;
     padding: 6px 8px;
-    background: #fafafa;
+    background: var(--ec-surface-softer);
   }
 }
 
@@ -292,7 +292,7 @@ defineExpose({ show })
   transition: background 0.2s;
 
   &:hover {
-    background: #f7f7f7;
+    background: var(--ec-surface-soft);
   }
 
   .result-body {

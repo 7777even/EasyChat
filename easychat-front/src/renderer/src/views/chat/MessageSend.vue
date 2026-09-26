@@ -703,7 +703,7 @@ onUnmounted(() => {
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid var(--ec-divider);
 
     span {
       font-size: 14px;

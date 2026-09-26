@@ -28,7 +28,7 @@ const props = defineProps({
 .file-panel {
   display: flex;
   padding: 10px 15px;
-  background: #fff;
+  background: var(--ec-card-bg);
   align-items: center;
   .file-info {
     width: 150px;

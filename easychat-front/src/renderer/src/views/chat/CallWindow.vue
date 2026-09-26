@@ -98,7 +98,7 @@ onMounted(() => {
 }
 .call-window {
   width: 440px;
-  background: #fff;
+  background: var(--ec-card-bg);
   border-radius: 10px;
   padding: 22px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);

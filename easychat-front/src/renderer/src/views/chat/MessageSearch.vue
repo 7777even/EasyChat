@@ -243,12 +243,12 @@ defineExpose({ show })
       .result-list {
         .result-item {
           padding: 15px;
-          border-bottom: 1px solid #f0f0f0;
+          border-bottom: 1px solid var(--ec-divider-soft);
           cursor: pointer;
           transition: background-color 0.2s;
 
           &:hover {
-            background-color: #f5f5f5;
+            background-color: var(--ec-surface-soft);
           }
 
           .message-info {

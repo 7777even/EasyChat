@@ -223,10 +223,10 @@ defineExpose({ show })
       display: flex;
       align-items: center;
       padding: 10px 8px;
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid var(--ec-divider-soft);
 
       &:hover {
-        background: #f7f7f7;
+        background: var(--ec-surface-soft);
       }
 
       .file-thumb {
@@ -236,7 +236,7 @@ defineExpose({ show })
         align-items: center;
         justify-content: center;
         margin-right: 12px;
-        background: #f0f0f0;
+        background: var(--ec-divider-soft);
         border-radius: 4px;
         overflow: hidden;
 
