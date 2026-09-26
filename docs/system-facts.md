@@ -167,6 +167,8 @@
 | 聊天记录导出 | 会话右键菜单「导出聊天记录（TXT / CSV）」→ IPC `exportChatRecord` → 主进程 `src/main/exportChat.js` 读本地 SQLite 全量 → `dialog.showSaveDialog` → 落盘。**只导本地已持久化消息，不拉云端**；CSV 带 UTF-8 BOM 且对 `=+-@` 开头值前置单引号防 Excel 公式注入 |
 | 深色模式 | 账号设置「外观主题」浅色/深色单选 → IPC `updateSysSetting` 合入 `user_setting.sysSetting.theme`（主进程键白名单已含 `theme`，不覆盖既有键）；`<html>.dark` 激活 Element Plus 暗色 css-vars（`element-plus/theme-chalk/dark/css-vars.css`）+ 自定义外壳 `--ec-*` 变量（`base.scss` 定义，`Layout`/`ContentPanel`/`Main`/`Setting`/`Chat` 引用）。仅本地持久化，不依赖后端；启动时由 `Main.vue` 读本地设置应用 |
 | 群文件 | 群聊会话头部「群文件」图标 → `GroupFile.vue` 面板。上传走既有分片 `/upload/uploadChunk`+`/upload/checkChunks`，合并落盘 `file/group/<fileId>.<ext>`（新增 `Constants.FILE_FOLDER_GROUP`）并写 `group_file`（`status=1`，`file_type` 0图片/1视频/2文件）；列表 `POST /group/file/list`（分页、`create_time desc`、含上传人昵称）；删除 `POST /group/file/delete`（上传者本人或群主/管理员可删，逻辑删除 `status=0`）。**所有接口前置 `groupInfoService.checkGroupRole(MEMBER)`**（非成员抛 `CODE_2304`）。预览/下载复用本地文件服务 `getLocalFilePath` 的 `group` 分支 + 后端 `ChatController.downloadFile` 的 `partType=group` 分支，零新增下载路由 |
+| 敏感词过滤 | 发送链路（聊天消息 / 朋友圈发布 / 评论）注入 `SensitiveWordService.filter`：命中 `level=3` 抛 `CODE_2701` 拒绝写入（不入库不推送）；命中 `level1/2` 替换为 `***` 后继续；词库取自 `sensitive_word` 表 `status=1`，`@PostConstruct` 启动加载到内存，`reload()` 可热更新；空词库无副作用 |
+| 内容举报 | `POST /report/moment`（`momentId`/`commentId` + `reason` + `description`）、`POST /report/chat`（`messageId` + `reason` + `description`），均 `@GlobalInterceptor`；落 `moment_report`/`message_report`（`status=0` 待处理，**仅落库不处理**，无管理端审核闭环）；同人同对象 `status=0` 幂等（已存在直接返回成功）；对象不存在返回 `CODE_2501`（动态/评论）/`CODE_2201`（消息）。`reason` 语义：0色情 / 1暴力 / 2诈骗 / 3侵权 / 4其他。前端入口：聊天消息右键「举报」、朋友圈他人动态下拉「举报」、他人评论「举报」→ 通用 `ReportDialog.vue`（理由单选 + 选填说明） |
 
 ## 13. 前端主进程约定（易踩）
 
@@ -195,3 +197,4 @@
 > | 2026-09-26 | 修复 5 个 IPC 通道漏注册导致功能静默失效；新增 `check-ipc-registration.mjs` 门禁 | 同上的 QA 附带发现 |
 > | 2026-09-26 | 新增深色模式（浅色/深色切换，本地持久化 + Element Plus 暗色主题 + 自定义外壳 `--ec-*` 变量） | 四·新增能力（从简单项续做） |
 > | 2026-09-26 | 新增群文件（上传/列表/删除/下载，复用分片与本地文件服务，全接口 `checkGroupRole(MEMBER)` 最小权限） | openspec 2026-09-26-group-file |
+> | 2026-09-26 | 新增内容治理：敏感词实时过滤（level3 拦截 `CODE_2701` / level1-2 替换 `***`，词库 `sensitive_word` 内存加载）+ 举报（动态/评论/消息，幂等落 `moment_report`/`message_report`，仅落库不处理） | openspec 2026-09-26-content-moderation |

@@ -1,0 +1,7 @@
+[ipc-registration] ipc.js 注册函数 33 个 / export 33 个 / index.js 调用 35 个
+[ipc-registration] ℹ index.js 调用了 on，但 ipc.js 未导出（若来自其他模块请忽略）
+[ipc-registration] ℹ index.js 调用了 once，但 ipc.js 未导出（若来自其他模块请忽略）
+[ipc-registration] ✓ 全部 IPC 通道均已注册
+[api-contract] ℹ 后端路由 POST /chat/downloadFile 在 Api.js 中未找到调用方 (ChatController.java:103)
+[api-contract] ℹ 后端路由 POST /update/download 在 Api.js 中未找到调用方 (UpdateController.java:60)
+[api-contract] 后端路由 88 项；前端调用 86 项；2 个潜在孤儿 / 0 个潜在漂移（非阻断，仅提示）
