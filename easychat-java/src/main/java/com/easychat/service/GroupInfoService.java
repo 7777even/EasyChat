@@ -111,4 +111,9 @@ public interface GroupInfoService {
      * 校验群成员是否被禁言；若是则抛出业务异常（供消息发送前调用）
      */
     void checkMuted(String userId, String groupId);
+
+    /**
+     * 校验用户群角色：非成员抛 CODE_2304；角色超过 minRole 权限则抛 CODE_2305；通过则返回成员关系（含 role）
+     */
+    UserContact checkGroupRole(String userId, String groupId, GroupMemberRoleEnum minRole);
 }

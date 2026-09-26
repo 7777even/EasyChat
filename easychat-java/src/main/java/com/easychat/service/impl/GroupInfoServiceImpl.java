@@ -405,7 +405,8 @@ public class GroupInfoServiceImpl implements GroupInfoService {
     /**
      * 校验当前用户在该群的角色是否满足最低角色要求
      */
-    private UserContact checkGroupRole(String userId, String groupId, GroupMemberRoleEnum minRole) {
+    @Override
+    public UserContact checkGroupRole(String userId, String groupId, GroupMemberRoleEnum minRole) {
         UserContact userContact = userContactMapper.selectByUserIdAndContactId(userId, groupId);
         if (userContact == null || !UserContactStatusEnum.FRIEND.getStatus().equals(userContact.getStatus())) {
             throw new BusinessException(ResponseCodeEnum.CODE_2304);

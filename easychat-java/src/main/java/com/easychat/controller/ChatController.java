@@ -137,6 +137,14 @@ public class ChatController extends ABaseController {
                 if (!file.exists()) {
                     throw new BusinessException(ResponseCodeEnum.CODE_602);
                 }
+            } else if ("group".equals(partType)) {
+                // 处理群文件
+                String groupFolderName = Constants.FILE_FOLDER_FILE + Constants.FILE_FOLDER_GROUP;
+                String groupPath = appConfig.getProjectFolder() + groupFolderName + fileId;
+                file = new File(groupPath);
+                if (!file.exists()) {
+                    throw new BusinessException(ResponseCodeEnum.CODE_2601);
+                }
             } else {
                 // 处理聊天消息文件
                 file = chatMessageService.downloadFile(userInfoDto, Long.parseLong(fileId), showCover);

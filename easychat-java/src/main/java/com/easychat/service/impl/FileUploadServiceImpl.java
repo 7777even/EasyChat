@@ -138,6 +138,54 @@ public class FileUploadServiceImpl implements FileUploadService {
         return uploadedChunks;
     }
 
+    @Override
+    public String mergeGroupFile(String fileId, String fileName, Integer totalChunks, TokenUserInfoDto userInfoDto) {
+        File chunkFolder = getChunkTempFolder(fileId, userInfoDto.getUserId());
+        try {
+            // 验证所有分片是否存在
+            for (int i = 0; i < totalChunks; i++) {
+                File chunkFile = new File(chunkFolder, i + ".chunk");
+                if (!chunkFile.exists()) {
+                    throw new BusinessException("分片" + i + "不存在，无法合并");
+                }
+            }
+
+            String fileExtName = fileName.substring(fileName.lastIndexOf("."));
+            String storedFileName = fileId + fileExtName;
+            File targetFolder = new File(appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE + Constants.FILE_FOLDER_GROUP);
+            if (!targetFolder.exists()) {
+                targetFolder.mkdirs();
+            }
+            File targetFile = new File(targetFolder, storedFileName);
+
+            // 合并分片
+            try (FileOutputStream fos = new FileOutputStream(targetFile);
+                 BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+                for (int i = 0; i < totalChunks; i++) {
+                    File chunkFile = new File(chunkFolder, i + ".chunk");
+                    try (FileInputStream fis = new FileInputStream(chunkFile);
+                         BufferedInputStream bis = new BufferedInputStream(fis)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = bis.read(buffer)) != -1) {
+                            bos.write(buffer, 0, len);
+                        }
+                    }
+                }
+                bos.flush();
+            }
+
+            logger.info("群文件分片合并成功: fileId={}, targetFile={}", fileId, targetFile.getAbsolutePath());
+            return storedFileName;
+        } catch (Exception e) {
+            logger.error("群文件分片合并失败", e);
+            throw new BusinessException("群文件合并失败: " + e.getMessage());
+        } finally {
+            // 清理临时分片文件
+            deleteChunkFolder(chunkFolder);
+        }
+    }
+
     /**
      * 删除分片临时文件夹
      */
