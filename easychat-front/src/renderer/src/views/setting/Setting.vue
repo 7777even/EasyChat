@@ -40,6 +40,12 @@ const settingMenuList = ref([
     bgColor: '#ffd04f'
   },
   {
+    name: '数据备份',
+    icon: 'icon-download',
+    path: '/setting/dataBackup',
+    bgColor: '#7c5cff'
+  },
+  {
     name: '关于EasyChat',
     icon: 'icon-about',
     path: '/setting/about',

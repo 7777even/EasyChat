@@ -115,6 +115,10 @@ const router = createRouter({
           name: "文件管理",
           component: () => import('@/views/setting/FileManage.vue'),
         }, {
+          path: "/setting/dataBackup",
+          name: "数据备份",
+          component: () => import('@/views/setting/DataBackup.vue'),
+        }, {
           path: "/setting/about",
           name: "关于",
           component: () => import('@/views/setting/About.vue'),

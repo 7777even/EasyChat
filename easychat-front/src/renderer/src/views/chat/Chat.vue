@@ -184,6 +184,7 @@ import {useMessageCountStore} from '@/stores/MessageCountStore'
 import {useContactStateStore} from '@/stores/ContactStateStore'
 import {useSysSettingStore} from '@/stores/SysSettingStore'
 import {useCallStore} from '@/stores/useCallStore'
+import {pullCloudHistory} from '@/utils/cloudBackup'
 import {Phone, VideoCamera} from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -1002,50 +1003,7 @@ const doExportChat = (session, format) => {
 
 // ===== 云端全量漫游导出 =====
 // 本地 SQLite 只是近期缓存（新设备尤其不全），云端版以服务端为数据源：
-// 复用 loadHistoryMessage 按 lastMessageId 游标往更早翻页，直到无数据，再交主进程落盘。
-const CLOUD_PAGE_SIZE = 100
-const CLOUD_MAX_PAGES = 5000
-
-const pullCloudHistory = async (sessionId) => {
-  const all = []
-  const seen = new Set()
-  let lastMessageId = null
-  for (let page = 0; page < CLOUD_MAX_PAGES; page++) {
-    const result = await proxy.Request({
-      url: proxy.Api.loadHistoryMessage,
-      showLoading: false,
-      showError: false,
-      params: { sessionId, lastMessageId, pageSize: CLOUD_PAGE_SIZE }
-    })
-    const list = (result && result.data && result.data.list) || []
-    if (list.length == 0) {
-      break
-    }
-    let added = 0
-    list.forEach((item) => {
-      if (!seen.has(item.messageId)) {
-        seen.add(item.messageId)
-        all.push(item)
-        added++
-      }
-    })
-    // 服务端按 messageId desc 返回，取本页最小 messageId 作为「更早一页」的游标
-    const pageIds = list.map((item) => Number(item.messageId)).filter((id) => !isNaN(id))
-    if (pageIds.length == 0) {
-      break
-    }
-    const nextCursor = Math.min(...pageIds)
-    // 无新增或游标未往前推进即停止，避免死循环
-    if (added == 0) {
-      break
-    }
-    if (lastMessageId != null && nextCursor >= lastMessageId) {
-      break
-    }
-    lastMessageId = nextCursor
-  }
-  return all
-}
+// 翻页取数统一收在 utils/cloudBackup.js，跨会话备份与单会话导出共用同一实现。
 
 const doExportCloudChat = async (session, format) => {
   if (!session || !session.sessionId) {
