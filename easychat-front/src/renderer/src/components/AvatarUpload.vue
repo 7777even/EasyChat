@@ -100,7 +100,7 @@ onUnmounted(() => {
   align-items: end;
   line-height: normal;
   .avatar-show {
-    background: #ededed;
+    background: var(--ec-surface-soft);
     width: 60px;
     height: 60px;
     display: flex;

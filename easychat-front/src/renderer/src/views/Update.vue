@@ -150,7 +150,7 @@ defineExpose({
     min-height: 400px;
     .update-content {
       margin-top: 230px;
-      background: #fff;
+      background: var(--ec-card-bg);
       padding: 15px;
       .update-content-title {
         font-size: 18px;
@@ -163,7 +163,7 @@ defineExpose({
       }
     }
     .download-progress {
-      background: #fff;
+      background: var(--ec-card-bg);
       padding: 10px;
       border-radius: 0px 0px 10px 10px;
       .download-tips {
@@ -174,7 +174,7 @@ defineExpose({
       }
     }
     .op-btn {
-      background: #fff;
+      background: var(--ec-card-bg);
       border-radius: 0px 0px 10px 10px;
       border-top: 1px solid #ddd;
       display: flex;

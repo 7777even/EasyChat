@@ -190,8 +190,8 @@ const closeWin = () => {
 .media-window {
   padding: 0px;
   height: calc(100vh);
-  border: 1px solid #ddd;
-  background: #fff;
+  border: 1px solid var(--ec-border);
+  background: var(--ec-card-bg);
   position: relative;
   overflow: hidden;
   .win-title {
@@ -231,7 +231,7 @@ const closeWin = () => {
     justify-content: center;
     overflow: hidden;
     :deep(.viewer-backdrop) {
-      background: #f5f5f5;
+      background: var(--ec-surface-soft);
     }
 
     .file-panel {

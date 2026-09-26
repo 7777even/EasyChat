@@ -448,7 +448,7 @@ const selectEmail = (email) => {
   }
 }
 .login-panel {
-  background: #fff;
+  background: var(--ec-card-bg);
   border-radius: 3px;
   border: 1px solid #ddd;
   .title {

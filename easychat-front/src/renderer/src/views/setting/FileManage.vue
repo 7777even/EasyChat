@@ -67,7 +67,7 @@ const openLocalFolder = () => {
     display: block;
   }
   .file-input {
-    background: #fff;
+    background: var(--ec-card-bg);
     padding: 0px 5px;
     overflow: hidden;
     text-overflow: ellipsis;
