@@ -29,6 +29,7 @@ import com.easychat.mappers.MomentMediaMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.MomentNotifyService;
+import com.easychat.service.SensitiveWordService;
 import com.easychat.service.MomentService;
 import com.easychat.utils.StringTools;
 import org.slf4j.Logger;
@@ -54,6 +55,8 @@ public class MomentServiceImpl implements MomentService {
     @Resource
     private MomentMapper<Moment, MomentQuery> momentMapper;
     @Resource
+    private SensitiveWordService sensitiveWordService;
+    @Resource
     private MomentMediaMapper<MomentMedia, MomentMediaQuery> momentMediaMapper;
     @Resource
     private MomentLikeMapper<MomentLike, MomentLikeQuery> momentLikeMapper;
@@ -74,6 +77,8 @@ public class MomentServiceImpl implements MomentService {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
         Integer safeVisibility = visibility == null ? 0 : visibility;
+        // 敏感词过滤：level3 命中抛 CODE_2701 阻断发布；level1/2 命中替换为 ***
+        content = sensitiveWordService.filter(content);
         if (safeVisibility < 0 || safeVisibility > 4) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
@@ -189,6 +194,8 @@ public class MomentServiceImpl implements MomentService {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
         Moment moment = momentMapper.selectById(momentId);
+        // 敏感词过滤：level3 命中抛 CODE_2701 阻断评论；level1/2 命中替换为 ***
+        content = sensitiveWordService.filter(content);
         if (moment == null || moment.getStatus() == null || moment.getStatus() == 0) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }

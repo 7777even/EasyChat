@@ -26,6 +26,7 @@ import com.easychat.mappers.UserContactMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.ChatMessageService;
 import com.easychat.service.GroupInfoService;
+import com.easychat.service.SensitiveWordService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.DateUtil;
 import com.easychat.utils.StringTools;
@@ -56,6 +57,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Resource
     private ChatMessageMapper<ChatMessage, ChatMessageQuery> chatMessageMapper;
+
+    @Resource
+    private SensitiveWordService sensitiveWordService;
 
     @Resource
     private ChatSessionMapper<ChatSession, ChatSessionQuery> chatSessionMapper;
@@ -215,6 +219,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(chatMessage.getMessageType());
         String lastMessage = chatMessage.getMessageContent();
         String messageContent = StringTools.resetMessageContent(chatMessage.getMessageContent());
+        // 敏感词过滤：level3 命中抛 CODE_2701 阻断发送；level1/2 命中替换为 ***
+        messageContent = sensitiveWordService.filter(messageContent);
         chatMessage.setMessageContent(messageContent);
         Integer status = MessageTypeEnum.MEDIA_CHAT == messageTypeEnum ? MessageStatusEnum.SENDING.getStatus() : MessageStatusEnum.SENDED.getStatus();
         // ===== 消息可靠性：提前声明 clientId，供 insert 回写 + ACK 使用 =====

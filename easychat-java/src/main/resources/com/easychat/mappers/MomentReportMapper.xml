@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.MomentReportMapper">
+
+    <resultMap id="base_result_map" type="com.easychat.entity.po.MomentReport">
+        <result column="id" property="id"/>
+        <result column="moment_id" property="momentId"/>
+        <result column="comment_id" property="commentId"/>
+        <result column="report_user_id" property="reportUserId"/>
+        <result column="reason" property="reason"/>
+        <result column="description" property="description"/>
+        <result column="status" property="status"/>
+        <result column="handle_user_id" property="handleUserId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="handle_time" property="handleTime"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id, moment_id, comment_id, report_user_id, reason, description, status, handle_user_id, create_time, handle_time
+    </sql>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.MomentReport" keyProperty="id" useGeneratedKeys="true">
+        INSERT INTO moment_report
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="momentId != null">moment_id,</if>
+            <if test="commentId != null">comment_id,</if>
+            <if test="reportUserId != null">report_user_id,</if>
+            <if test="reason != null">reason,</if>
+            <if test="description != null">description,</if>
+            <if test="status != null">status,</if>
+            <if test="handleUserId != null">handle_user_id,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="handleTime != null">handle_time,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="momentId != null">#{momentId},</if>
+            <if test="commentId != null">#{commentId},</if>
+            <if test="reportUserId != null">#{reportUserId},</if>
+            <if test="reason != null">#{reason},</if>
+            <if test="description != null">#{description},</if>
+            <if test="status != null">#{status},</if>
+            <if test="handleUserId != null">#{handleUserId},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="handleTime != null">#{handleTime},</if>
+        </trim>
+    </insert>
+
+    <select id="countPending" resultType="java.lang.Integer">
+        SELECT count(1) FROM moment_report
+        WHERE report_user_id = #{reportUserId}
+          AND status = 0
+          AND ((#{commentId} IS NOT NULL AND comment_id = #{commentId})
+               OR (#{commentId} IS NULL AND moment_id = #{momentId}))
+    </select>
+
+</mapper>
