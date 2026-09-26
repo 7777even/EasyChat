@@ -59,6 +59,13 @@
     --ec-recalled-text: #999999;
     --ec-card-bg: #ffffff; // 卡片/面板背景（朋友圈卡片等）
     --ec-card-text: #333333; // 卡片正文主色
+
+    // ===== 深层嵌套表面（朋友圈交互面板/评论框/群文件行/文件卡片等）=====
+    --ec-surface-soft: #f7f7f7; // 次级浅灰面板（interaction-panel / 选中行）
+    --ec-surface-softer: #fafafa; // 更浅面板
+    --ec-divider: #e8e8e8; // 次级分隔线
+    --ec-divider-soft: #f0f0f0; // 更浅分隔线
+    --ec-chip-green-bg: #f2f9f5; // 绿色选中/成功浅底
 }
 
 // ===== 深色模式：覆盖自定义外壳变量（Element Plus 组件由 dark/css-vars.css 自动接管）=====
@@ -91,6 +98,13 @@ html.dark {
     --ec-recalled-text: #888888;
     --ec-card-bg: #2b2b2b; // 卡片/面板背景（深色）
     --ec-card-text: #d2d2d2; // 卡片正文主色（深色）
+
+    // ===== 深层嵌套表面深色覆盖 =====
+    --ec-surface-soft: #2a2a2a;
+    --ec-surface-softer: #262626;
+    --ec-divider: #3a3a3a;
+    --ec-divider-soft: #303030;
+    --ec-chip-green-bg: rgba(7, 193, 96, 0.14);
 }
 
 body {
