@@ -74,13 +74,13 @@ public class MomentServiceImpl implements MomentService {
     @Override
     public MomentVO publish(String content, Integer visibility, String visibleList, String invisibleList, String location, TokenUserInfoDto tokenUserInfoDto) {
         if (StringTools.isEmpty(content)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Integer safeVisibility = visibility == null ? 0 : visibility;
         // 敏感词过滤：level3 命中抛 CODE_2701 阻断发布；level1/2 命中替换为 ***
         content = sensitiveWordService.filter(content);
         if (safeVisibility < 0 || safeVisibility > 4) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Long now = System.currentTimeMillis();
         Moment moment = new Moment();
@@ -159,12 +159,12 @@ public class MomentServiceImpl implements MomentService {
     public MomentLikeResultVO likeOrCancel(Long momentId, boolean cancel, TokenUserInfoDto tokenUserInfoDto) {
         Moment moment = momentMapper.selectById(momentId);
         if (moment == null || moment.getStatus() == null || moment.getStatus() == 0) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         //校验可见
         Map<String, Set<String>> contactCache = new HashMap<>();
         if (!canView(moment, tokenUserInfoDto.getUserId(), contactCache)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         MomentLikeQuery query = new MomentLikeQuery();
@@ -191,17 +191,17 @@ public class MomentServiceImpl implements MomentService {
     @Override
     public MomentCommentVO addComment(Long momentId, String content, Long parentId, String replyToUserId, TokenUserInfoDto tokenUserInfoDto) {
         if (StringTools.isEmpty(content)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Moment moment = momentMapper.selectById(momentId);
         // 敏感词过滤：level3 命中抛 CODE_2701 阻断评论；level1/2 命中替换为 ***
         content = sensitiveWordService.filter(content);
         if (moment == null || moment.getStatus() == null || moment.getStatus() == 0) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Map<String, Set<String>> contactCache = new HashMap<>();
         if (!canView(moment, tokenUserInfoDto.getUserId(), contactCache)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Long now = System.currentTimeMillis();
         MomentComment comment = new MomentComment();
@@ -433,13 +433,13 @@ public class MomentServiceImpl implements MomentService {
         logger.info("开始上传朋友圈媒体文件, momentId: {}, mediaType: {}, fileName: {}", momentId, mediaType, file.getOriginalFilename());
         
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         
         Moment moment = momentMapper.selectById(momentId);
         if (moment == null || !moment.getUserId().equals(tokenUserInfoDto.getUserId())) {
             logger.error("朋友圈不存在或无权限, momentId: {}, userId: {}", momentId, tokenUserInfoDto.getUserId());
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         
         try {
@@ -484,12 +484,12 @@ public class MomentServiceImpl implements MomentService {
     public void deleteMoment(Long momentId, TokenUserInfoDto tokenUserInfoDto) {
         Moment moment = momentMapper.selectById(momentId);
         if (moment == null || moment.getStatus() == 0) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         
         // 只有作者本人可以删除
         if (!moment.getUserId().equals(tokenUserInfoDto.getUserId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         
         // 软删除：更新状态为0
@@ -581,7 +581,7 @@ public class MomentServiceImpl implements MomentService {
                     fileId, chunkIndex, totalChunks, chunk.getSize());
         } catch (Exception e) {
             logger.error("朋友圈媒体分片上传失败", e);
-            throw new BusinessException(ResponseCodeEnum.CODE_500);
+            throw new BusinessException(ResponseCodeEnum.CODE_1002);
         }
     }
 
