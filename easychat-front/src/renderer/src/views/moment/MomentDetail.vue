@@ -415,7 +415,7 @@ defineExpose({
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
-    background: #f7f7f7;
+    background: var(--ec-surface-soft);
     border-radius: 20px;
 
     .name {
@@ -430,7 +430,7 @@ defineExpose({
     display: flex;
     gap: 10px;
     padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--ec-divider-soft);
 
     &:last-child {
       border-bottom: none;
@@ -495,7 +495,7 @@ defineExpose({
 .comment-input {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ec-divider-soft);
 
   .input-actions {
     margin-top: 10px;

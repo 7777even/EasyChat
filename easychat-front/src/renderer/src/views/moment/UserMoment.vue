@@ -191,7 +191,7 @@ defineExpose({ show })
   display: flex;
   align-items: center;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ec-divider-soft);
   margin-bottom: 10px;
 
   .user-meta {
@@ -217,7 +217,7 @@ defineExpose({ show })
 
 .moment-item {
   padding: 12px 8px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--ec-surface-soft);
 
   .moment-time {
     font-size: 12px;

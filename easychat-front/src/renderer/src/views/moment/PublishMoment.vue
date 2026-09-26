@@ -348,7 +348,7 @@ defineExpose({
     padding-bottom: 100%;
     border-radius: 4px;
     overflow: hidden;
-    background: #f5f5f5;
+    background: var(--ec-surface-soft);
 
     img,
     video {
@@ -436,7 +436,7 @@ defineExpose({
   .action-item {
     flex: 1;
     padding: 20px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--ec-divider);
     border-radius: 4px;
     display: flex;
     flex-direction: column;
@@ -457,7 +457,7 @@ defineExpose({
 
     &:hover {
       border-color: #07c160;
-      background: #f0fdf4;
+      background: var(--ec-chip-green-bg);
     }
   }
 }
@@ -481,9 +481,9 @@ defineExpose({
 .uploading-panel {
   margin-top: 20px;
   padding: 15px;
-  background: #f8f9fa;
+  background: var(--ec-surface-softer);
   border-radius: 8px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--ec-divider);
 
   .uploading-title {
     font-size: 14px;

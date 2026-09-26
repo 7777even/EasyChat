@@ -991,7 +991,7 @@ onMounted(() => {
 .moment-footer {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ec-divider-soft);
   
   .action-bar {
     display: flex;
@@ -1023,7 +1023,7 @@ onMounted(() => {
 
 .interaction-panel {
   margin-top: 10px;
-  background: #f7f7f7;
+  background: var(--ec-surface-soft);
   border-radius: 4px;
   padding: 10px 12px;
   font-size: 13px;
@@ -1055,7 +1055,7 @@ onMounted(() => {
 .moment-comments {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid var(--ec-divider);
   
   .comment-line {
     line-height: 1.8;
@@ -1092,7 +1092,7 @@ onMounted(() => {
 .comment-box {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ec-divider-soft);
   
   .comment-actions {
     margin-top: 8px;

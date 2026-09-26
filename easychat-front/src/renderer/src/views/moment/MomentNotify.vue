@@ -242,7 +242,7 @@ defineExpose({ show })
 .notify-tabs {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ec-divider-soft);
   padding-bottom: 8px;
   margin-bottom: 8px;
 
@@ -284,11 +284,11 @@ defineExpose({ show })
   transition: background 0.2s;
 
   &:hover {
-    background: #f7f7f7;
+    background: var(--ec-surface-soft);
   }
 
   &.unread {
-    background: #f2f9f5;
+    background: var(--ec-chip-green-bg);
   }
 
   .notify-body {
