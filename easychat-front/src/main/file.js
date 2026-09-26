@@ -267,6 +267,12 @@ const getLocalFilePath = async (partType, showCover, fileId) => {
                 mkdirs(localFolder);
             }
             localPath = localFolder + "/" + fileId
+        } else if (partType == "group") { //群文件
+            localFolder = localFolder + "/group/"
+            if (!fs.existsSync(localFolder)) {
+                mkdirs(localFolder);
+            }
+            localPath = localFolder + fileId
         } else {
             localPath = localFolder + "/" + fileId
         }
