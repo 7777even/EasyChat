@@ -315,7 +315,7 @@ const submitDeal = () => {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  background: #f7f7f7;
+  background: var(--ec-surface-soft);
   padding: 8px;
   border-radius: 4px;
 }

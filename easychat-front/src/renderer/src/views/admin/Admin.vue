@@ -131,7 +131,7 @@ onUnmounted(() => {
 .admin-window {
   padding: 0px;
   border: 1px solid #ddd;
-  background: #fff;
+  background: var(--ec-card-bg);
   position: relative;
   overflow: hidden;
   width: 100%;
