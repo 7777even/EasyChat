@@ -195,7 +195,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
             }
             //新增头像必须传
             if (null == avatarFile) {
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
             groupInfo.setCreateTime(curDate);
             groupInfo.setGroupId(StringTools.getGroupId());
@@ -258,7 +258,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         } else {
             GroupInfo dbInfo = this.groupInfoMapper.selectByGroupId(groupInfo.getGroupId());
             if (!dbInfo.getGroupOwnerId().equals(groupInfo.getGroupOwnerId())) {
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
             this.groupInfoMapper.updateByGroupId(groupInfo, groupInfo.getGroupId());
 
@@ -294,7 +294,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
     public void dissolutionGroup(String userId, String groupId) {
         GroupInfo dbInfo = this.groupInfoMapper.selectByGroupId(groupId);
         if (null == groupId || !dbInfo.getGroupOwnerId().equals(userId)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         //删除群组
         GroupInfo updateInfo = new GroupInfo();
@@ -341,15 +341,15 @@ public class GroupInfoServiceImpl implements GroupInfoService {
     public void leaveGroup(String userId, String groupId, MessageTypeEnum messageTypeEnum) {
         GroupInfo groupInfo = groupInfoMapper.selectByGroupId(groupId);
         if (groupInfo == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         //创建者不能退出群聊，只能解散群
         if (userId.equals(groupInfo.getGroupOwnerId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         Integer count = userContactMapper.deleteByUserIdAndContactId(userId, groupId);
         if (count == 0) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         UserInfo userInfo = userInfoMapper.selectByUserId(userId);
@@ -428,7 +428,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         // 仅群主可操作
         checkGroupRole(tokenUserInfoDto.getUserId(), groupId, GroupMemberRoleEnum.OWNER);
         if (tokenUserInfoDto.getUserId().equals(newOwnerUserId)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         // 新群主必须是群成员
         UserContact newOwnerContact = checkGroupRole(newOwnerUserId, groupId, GroupMemberRoleEnum.MEMBER);
