@@ -19,6 +19,9 @@ const api = {
     muteMember: "/group/muteMember",//禁言/解除禁言群成员
     editNotice: "/group/editNotice",//编辑群公告
     memberList: "/group/memberList",//群成员列表
+    groupFileUpload: "/group/file/upload",//群文件：合并分片并入库
+    groupFileList: "/group/file/list",//群文件列表
+    groupFileDelete: "/group/file/delete",//群文件删除
     search: "/contact/search",//搜索好友
     applyAdd: "/contact/applyAdd",//申请加入
     loadApply: "/contact/loadApply",//获取申请列表

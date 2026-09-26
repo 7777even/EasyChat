@@ -44,6 +44,12 @@
         <div class="title-actions">
           <span
             v-if="currentChatSession.contactType == 1"
+            class="iconfont icon-folder no-drag"
+            title="群文件"
+            @click="showGroupFile"
+          ></span>
+          <span
+            v-if="currentChatSession.contactType == 1"
             class="iconfont icon-more no-drag"
             @click="showGroupDetail"
           ></span>
@@ -120,6 +126,7 @@
     ref="chatGroupDetailRef"
     @delChatSessionCallback="delChatSession"
   ></ChatGroupDetail>
+  <GroupFile ref="groupFileRef"></GroupFile>
   <MessageSearch ref="messageSearchRef" @jumpToMessage="jumpToMessage"></MessageSearch>
   <ForwardSelect ref="forwardSelectRef"></ForwardSelect>
   <GlobalSearch
@@ -140,6 +147,7 @@ import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 import SearchResult from './SearchResult.vue'
 import MessageSearch from './MessageSearch.vue'
 import ChatGroupDetail from './ChatGroupDetail.vue'
+import GroupFile from './GroupFile.vue'
 import {getFileType} from '@/utils/Constants.js'
 import Blank from '@/components/Blank.vue'
 import ChatSession from './ChatSession.vue'
@@ -995,6 +1003,12 @@ const showMediaDetailHandler = (messageId) => {
 const chatGroupDetailRef = ref()
 const showGroupDetail = () => {
   chatGroupDetailRef.value.show(currentChatSession.value.contactId)
+}
+
+//群文件
+const groupFileRef = ref()
+const showGroupFile = () => {
+  groupFileRef.value.show(currentChatSession.value.contactId)
 }
 
 //消息搜索
