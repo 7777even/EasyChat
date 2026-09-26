@@ -26,7 +26,7 @@ public class JsonUtils {
             return JSONObject.parseObject(json, classz);
         } catch (Exception e) {
             logger.error("convertJson2Obj异常，json:{}", json);
-            throw new BusinessException(ResponseCodeEnum.CODE_601);
+            throw new BusinessException(ResponseCodeEnum.CODE_2102);
         }
     }
 
@@ -35,7 +35,7 @@ public class JsonUtils {
             return JSONArray.parseArray(json, classz);
         } catch (Exception e) {
             logger.error("convertJsonArray2List,json:{}", json, e);
-            throw new BusinessException(ResponseCodeEnum.CODE_601);
+            throw new BusinessException(ResponseCodeEnum.CODE_2102);
         }
     }
 }

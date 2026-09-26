@@ -140,7 +140,7 @@ public class AppUpdateServiceImpl implements AppUpdateService {
     public Integer deleteAppUpdateById(Integer id) {
         AppUpdate dbInfo = this.getAppUpdateById(id);
         if (!AppUpdateSatusEnum.INIT.getStatus().equals(dbInfo.getStatus())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         return this.appUpdateMapper.deleteById(id);
     }
@@ -150,13 +150,13 @@ public class AppUpdateServiceImpl implements AppUpdateService {
     public void saveUpdate(AppUpdate appUpdate, MultipartFile file) throws IOException {
         AppUpdateFileTypeEnum fileTypeEnum = AppUpdateFileTypeEnum.getByType(appUpdate.getFileType());
         if (null == fileTypeEnum) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         if (appUpdate.getId() != null) {
             AppUpdate dbInfo = this.getAppUpdateById(appUpdate.getId());
             if (!AppUpdateSatusEnum.INIT.getStatus().equals(dbInfo.getStatus())) {
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
         }
         AppUpdateQuery updateQuery = new AppUpdateQuery();
@@ -200,10 +200,10 @@ public class AppUpdateServiceImpl implements AppUpdateService {
     public void postUpdate(Integer id, Integer status, String grayscaleUid) {
         AppUpdateSatusEnum satusEnum = AppUpdateSatusEnum.getByStatus(status);
         if (status == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         if (AppUpdateSatusEnum.GRAYSCALE == satusEnum && StringTools.isEmpty(grayscaleUid)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         if (AppUpdateSatusEnum.GRAYSCALE != satusEnum) {
             grayscaleUid = "";

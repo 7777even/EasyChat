@@ -50,10 +50,10 @@ public class GlobalOperationAspect {
             throw e;
         } catch (Exception e) {
             logger.error("全局拦截器异常", e);
-            throw new BusinessException(ResponseCodeEnum.CODE_500);
+            throw new BusinessException(ResponseCodeEnum.CODE_1002);
         } catch (Throwable e) {
             logger.error("全局拦截器异常", e);
-            throw new BusinessException(ResponseCodeEnum.CODE_500);
+            throw new BusinessException(ResponseCodeEnum.CODE_1002);
         }
     }
 
@@ -63,10 +63,10 @@ public class GlobalOperationAspect {
         String token = request.getHeader("token");
         TokenUserInfoDto tokenUserInfoDto = (TokenUserInfoDto) redisUtils.get(Constants.REDIS_KEY_WS_TOKEN + token);
         if (tokenUserInfoDto == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_901);
+            throw new BusinessException(ResponseCodeEnum.CODE_2001);
         }
         if (checkAdmin && !tokenUserInfoDto.getAdmin()) {
-            throw new BusinessException(ResponseCodeEnum.CODE_404);
+            throw new BusinessException(ResponseCodeEnum.CODE_1003);
         }
     }
 }

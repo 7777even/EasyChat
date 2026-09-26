@@ -22,7 +22,7 @@ import javax.validation.constraints.NotNull;
 
 /**
  * 敏感词库管理端（管理员专属）
- * - 五端点均 checkAdmin，非管理员 -> CODE_404
+ * - 五端点均 checkAdmin，非管理员 -> CODE_1003
  * - 写操作（保存/删除/导入）由 Service 侧自动 reload 热更
  */
 @Validated

@@ -69,33 +69,7 @@ public enum ResponseCodeEnum {
     CODE_2702(2702, "举报记录不存在或已处理"),
     CODE_2703(2703, "举报处理动作不合法"),
     CODE_2704(2704, "词条已存在"),
-    CODE_2705(2705, "词条不存在"),
-
-    // ======================== 向后兼容（旧码，逐步废弃） ========================
-    /** @deprecated 使用 CODE_1003 替代 */
-    @Deprecated
-    CODE_404(404, "请求地址不存在"),
-    /** @deprecated 使用 CODE_1002 替代 */
-    @Deprecated
-    CODE_500(500, "服务器返回错误，请联系管理员"),
-    /** @deprecated 使用 CODE_1001 替代 */
-    @Deprecated
-    CODE_600(600, "请求参数错误"),
-    /** @deprecated 使用 CODE_2102 替代 */
-    @Deprecated
-    CODE_601(601, "信息已经存在"),
-    /** @deprecated 使用 CODE_2104 替代 */
-    @Deprecated
-    CODE_602(602, "文件不存在"),
-    /** @deprecated 使用 CODE_2001 替代 */
-    @Deprecated
-    CODE_901(901, "登录超时"),
-    /** @deprecated 使用 CODE_2301 替代 */
-    @Deprecated
-    CODE_902(902, "您不是对方的好友，请先向好友发送朋友验证申请"),
-    /** @deprecated 使用 CODE_2302 替代 */
-    @Deprecated
-    CODE_903(903, "你已经不在群聊，请重新加入群聊");
+    CODE_2705(2705, "词条不存在");
 
     private final Integer code;
     private final String msg;
