@@ -7,7 +7,7 @@
         </encoder>
     </appender>
 
-    <springProperty scope="context" name="log.path" source="project.folder"/>
+    <springProperty scope="context" name="log.path" source="project.folder" defaultValue="./logs"/>
     <springProperty scope="context" name="log.root.level" source="log.root.level"/>
 
     <property name="LOG_FOLDER" value="logs"/>
