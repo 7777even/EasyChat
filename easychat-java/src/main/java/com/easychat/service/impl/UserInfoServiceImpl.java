@@ -293,7 +293,9 @@ public class UserInfoServiceImpl implements UserInfoService {
         tokenUserInfoDto.setUserId(userInfo.getUserId());
         tokenUserInfoDto.setNickName(userInfo.getNickName());
 
-        String adminEmails = appConfig.getAdminEmails();
+        // 管理员白名单统一读 easychat.admin-emails（EasyChatProperties）；
+        // AppConfig 读的是不存在的 admin.emails，会导致 admin 恒为 false、管理端全部 404
+        String adminEmails = easyChatProperties.getAdminEmails();
         if (!StringTools.isEmpty(adminEmails) && ArrayUtils.contains(adminEmails.split(","), userInfo.getEmail())) {
             tokenUserInfoDto.setAdmin(true);
         } else {

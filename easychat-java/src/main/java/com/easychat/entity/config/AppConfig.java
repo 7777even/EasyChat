@@ -21,18 +21,11 @@ public class AppConfig {
     @Value("${project.folder:}")
     private String projectFolder;
 
-    @Value("${admin.emails:}")
-    private String adminEmails;
-
     public String getProjectFolder() {
         if (!StringTools.isEmpty(projectFolder) && !projectFolder.endsWith("/")) {
             projectFolder = projectFolder + "/";
         }
         return projectFolder;
-    }
-
-    public String getAdminEmails() {
-        return adminEmails;
     }
 
     public Integer getWsPort() {
