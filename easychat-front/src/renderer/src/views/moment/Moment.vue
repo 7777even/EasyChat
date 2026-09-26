@@ -687,21 +687,21 @@ onMounted(() => {
   flex-direction: column;
   padding: 15px;
   box-sizing: border-box;
-  background: #f5f5f5;
+  background: var(--ec-chat-bg);
 }
 
 .moment-notify-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #fff;
+  background: var(--ec-card-bg);
   border-radius: 8px;
   padding: 10px 16px;
   margin-bottom: 12px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   font-size: 14px;
-  color: #333;
+  color: var(--ec-card-text);
   transition: all 0.2s;
 
   &:hover {
@@ -751,7 +751,7 @@ onMounted(() => {
 }
 
 .moment-editor {
-  background: #fff;
+  background: var(--ec-card-bg);
   padding: 16px;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -834,7 +834,7 @@ onMounted(() => {
   margin-top: 15px;
   
   .moment-item {
-    background: #fff;
+    background: var(--ec-card-bg);
     padding: 16px;
     border-radius: 8px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -863,7 +863,7 @@ onMounted(() => {
     
     .name {
       font-weight: 600;
-      color: #1a1a1a;
+      color: var(--ec-card-text);
       font-size: 15px;
       cursor: pointer;
       
@@ -907,7 +907,7 @@ onMounted(() => {
     padding: 4px;
     
     &:hover {
-      color: #333;
+      color: var(--ec-card-text);
     }
   }
 }
@@ -917,7 +917,7 @@ onMounted(() => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #333;
+  color: var(--ec-card-text);
   font-size: 14px;
 }
 
@@ -1084,7 +1084,7 @@ onMounted(() => {
     }
     
     .content {
-      color: #333;
+      color: var(--ec-card-text);
     }
   }
 }

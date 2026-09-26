@@ -44,6 +44,21 @@
     --ec-body-text: #636d7e; // 正文基础色
     --ec-scrollbar-track: rgb(239, 239, 239);
     --ec-scrollbar-thumb: #bfbfbf;
+
+    // ===== 深层自定义视图（聊天气泡 / 引用 / 撤回 / 输入区）主题变量 =====
+    --ec-bubble-self-bg: #95ec69; // 自己发送气泡（微信绿，深浅模式一致）
+    --ec-bubble-self-text: #474747;
+    --ec-bubble-other-bg: #ffffff; // 对方气泡
+    --ec-bubble-other-text: #474747;
+    --ec-msg-text: #474747; // 消息正文基础色
+    --ec-input-bg: #f5f5f5; // 输入区背景
+    --ec-quote-bg: rgba(0, 0, 0, 0.06); // 引用块背景
+    --ec-quote-text: #6b6b6b;
+    --ec-quote-border: #b6b6b6;
+    --ec-recalled-bg: #e5e5e5; // 撤回消息块
+    --ec-recalled-text: #999999;
+    --ec-card-bg: #ffffff; // 卡片/面板背景（朋友圈卡片等）
+    --ec-card-text: #333333; // 卡片正文主色
 }
 
 // ===== 深色模式：覆盖自定义外壳变量（Element Plus 组件由 dark/css-vars.css 自动接管）=====
@@ -61,6 +76,21 @@ html.dark {
     --ec-body-text: #b0b0b0;
     --ec-scrollbar-track: #2a2a2a;
     --ec-scrollbar-thumb: #4a4a4a;
+
+    // ===== 深层自定义视图深色覆盖 =====
+    --ec-bubble-self-bg: #95ec69; // 绿泡泡深浅一致
+    --ec-bubble-self-text: #474747;
+    --ec-bubble-other-bg: #2b2b2b;
+    --ec-bubble-other-text: #d2d2d2;
+    --ec-msg-text: #c8c8c8;
+    --ec-input-bg: #2a2a2a;
+    --ec-quote-bg: rgba(255, 255, 255, 0.08);
+    --ec-quote-text: #aaaaaa;
+    --ec-quote-border: #555555;
+    --ec-recalled-bg: #2a2a2a;
+    --ec-recalled-text: #888888;
+    --ec-card-bg: #2b2b2b; // 卡片/面板背景（深色）
+    --ec-card-text: #d2d2d2; // 卡片正文主色（深色）
 }
 
 body {

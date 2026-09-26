@@ -300,7 +300,7 @@ const copyText = async (text) => {
 .content {
   display: inline-block;
   padding: 8px;
-  color: #474747;
+  color: var(--ec-msg-text);
   border-radius: 5px;
   text-align: left;
   font-size: 14px;
@@ -318,7 +318,7 @@ const copyText = async (text) => {
     display: block;
     width: 10px;
     height: 10px;
-    background: #95ec69;
+    background: var(--ec-bubble-self-bg);
     transform: rotate(45deg);
     border-radius: 2px;
     top: 13px;
@@ -344,7 +344,7 @@ const copyText = async (text) => {
     text-align: right;
     padding-left: 32%;
     .content {
-      background: #95ec69;
+      background: var(--ec-bubble-self-bg);
     }
     &::after {
       right: -4px;
@@ -369,14 +369,15 @@ const copyText = async (text) => {
       color: #b2b2b2;
     }
     .content {
-      background: #fff;
+      background: var(--ec-bubble-other-bg);
+      color: var(--ec-bubble-other-text);
     }
     .sending {
       float: left;
     }
     &::after {
       left: -4px;
-      background: #fff;
+      background: var(--ec-bubble-other-bg);
     }
   }
   .content-panel-media {
@@ -391,7 +392,7 @@ const copyText = async (text) => {
   &::after {
     left: -4px;
     top: 35px;
-    background: #fff;
+    background: var(--ec-bubble-other-bg);
   }
 }
 
@@ -401,12 +402,12 @@ const copyText = async (text) => {
   max-width: 100%;
   margin-bottom: 4px;
   padding: 4px 8px;
-  border-left: 3px solid #b6b6b6;
-  background: rgba(0, 0, 0, 0.06);
+  border-left: 3px solid var(--ec-quote-border);
+  background: var(--ec-quote-bg);
   border-radius: 3px;
   text-align: left;
   font-size: 12px;
-  color: #6b6b6b;
+  color: var(--ec-quote-text);
   .quote-name {
     display: block;
     font-weight: 500;
@@ -423,8 +424,8 @@ const copyText = async (text) => {
 
 .recalled-message {
   .recalled-content {
-    background: #e5e5e5 !important;
-    color: #999;
+    background: var(--ec-recalled-bg) !important;
+    color: var(--ec-recalled-text);
     font-style: italic;
     padding: 8px 12px;
     .recall-text {

@@ -57,7 +57,7 @@
         maxlength="500"
         show-word-limit
         spellcheck="false"
-        input-style="background:#f5f5f5;border:none;"
+        input-style="background:var(--ec-input-bg);border:none;"
         @keydown.enter="sendMessage"
         @paste="pasteFile"
       />
