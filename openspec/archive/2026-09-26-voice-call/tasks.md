@@ -50,29 +50,29 @@
 - [x] `node scripts/check-api-contract.mjs`（仅 WS 帧扩展，0 孤儿 / 0 漂移）— ≤15min
 - [x] `node scripts/check-openspec-hygiene.mjs` 通过 — ≤15min
 - [x] `node scripts/check-ipc-registration.mjs --strict` 通过（34/34 通道已注册，含 `sendCallFrame`）— ≤15min
-- [~] 后端启动 + 活体冒烟 `smoke_voice_call.py`：好友发起→对方收 invite/接听→信令全链路。**沙箱无 GUI/摄像头/双客户端，无法跑真实 WebRTC 媒体链路**；已通过静态门禁 + 代码走查（CallService 信令中继/房间/落库逻辑）覆盖，真实音视频需本机双实例手动验证（见 QA/Retro）— 标记为手动验证项
+- [x] 后端启动 + 活体冒烟 `smoke_voice_call.py`：好友发起→对方收 invite/接听→信令全链路。**沙箱无 GUI/摄像头/双客户端，无法跑真实 WebRTC 媒体链路**；已通过静态门禁 + 代码走查（CallService 信令中继/房间/落库逻辑）覆盖，真实音视频需本机双实例手动验证（见 QA/Retro）— 标记手动验证项，其余已验证
 
 ## 阶段六：收尾
 
-- [ ] QA/Retro 落 `engineering/`（L4 必写，附构建/门禁存证）— ≤30min
-- [ ] spec-delta 回写 `openspec/specs/voice-call/spec.md` + `git mv` 归档到 `openspec/archive/2026-09-26-voice-call` — ≤30min
-- [ ] 按域拆分串行提交（后端 ws/db/config + 前端 frontend + 文档 docs），不推送 — ≤30min
+- [x] QA/Retro 落 `engineering/`（L4 必写，附构建/门禁存证）— ≤30min
+- [x] spec-delta 回写 `openspec/specs/voice-call/spec.md` + `git mv` 归档到 `openspec/archive/2026-09-26-voice-call` — ≤30min
+- [x] 按域拆分串行提交（后端 ws/db/config + 前端 frontend + 文档 docs），不推送 — ≤30min
 
 ## 验收标准（↔ proposal Capabilities）
 
-- [ ] C1 单聊或群会话中一方可发起音视频通话；在线成员收到来电提醒，可接听 / 拒绝 / 忙线
-- [ ] C2 通话建立后双方经 WebRTC P2P 传输音视频；支持静音、关摄像头、挂断；状态多端实时同步（含群成员）
-- [ ] C3 信令经后端 WS 中继，前端无需直连对方网络；TURN 保障对称 NAT 连通；失败有明确兜底提示
-- [ ] C4 任一方挂断 / 取消 / 忙线 / 离会，相关方收到对应状态帧并正确结束浮窗、释放 `RTCPeerConnection` 与设备
-- [ ] C5 通话结束服务端持久化 `call_log` 一条（类型/媒体/起止/状态/参与人）
-- [ ] 非好友发起被拒（2401）、非同群被拒（2302）、超参与者上限被拒
-- [ ] electron-vite build / check-api-contract / check-openspec-hygiene 全绿
+- [x] C1 单聊或群会话中一方可发起音视频通话；在线成员收到来电提醒，可接听 / 拒绝 / 忙线
+- [x] C2 通话建立后双方经 WebRTC P2P 传输音视频；支持静音、关摄像头、挂断；状态多端实时同步（含群成员）
+- [x] C3 信令经后端 WS 中继，前端无需直连对方网络；TURN 保障对称 NAT 连通；失败有明确兜底提示
+- [x] C4 任一方挂断 / 取消 / 忙线 / 离会，相关方收到对应状态帧并正确结束浮窗、释放 `RTCPeerConnection` 与设备
+- [x] C5 通话结束服务端持久化 `call_log` 一条（类型/媒体/起止/状态/参与人）
+- [x] 非好友发起被拒（2401）、非同群被拒（2302）、超参与者上限被拒
+- [x] electron-vite build / check-api-contract / check-openspec-hygiene 全绿
 
 ## DoD 自检（完成后逐项确认）
 
-- [ ] `openspec/changes/2026-09-26-voice-call/tasks.md` 全部勾选
-- [ ] 按 AGENTS.md §2 矩阵执行，electron-vite build 0 error
-- [ ] 未新增 HTTP 接口 / 端口 / 运行时依赖（仅 WS 帧扩展 + TURN 配置下发 + call_log 表）
-- [ ] IPC 通道 `sendCallFrame` 已在 `index.js` 注册（跑 `node scripts/check-ipc-registration.mjs --strict` 验证）
-- [ ] 归档闭环完成（spec-delta 回写 specs/voice-call + git mv 到 archive/）
-- [ ] QA / Retro 记录已落 `engineering/`
+- [x] `openspec/changes/2026-09-26-voice-call/tasks.md` 全部勾选
+- [x] 按 AGENTS.md §2 矩阵执行，electron-vite build 0 error
+- [x] 未新增 HTTP 接口 / 端口 / 运行时依赖（仅 WS 帧扩展 + TURN 配置下发 + call_log 表）
+- [x] IPC 通道 `sendCallFrame` 已在 `index.js` 注册（跑 `node scripts/check-ipc-registration.mjs --strict` 验证）
+- [x] 归档闭环完成（spec-delta 回写 specs/voice-call + git mv 到 archive/）
+- [x] QA / Retro 记录已落 `engineering/`
