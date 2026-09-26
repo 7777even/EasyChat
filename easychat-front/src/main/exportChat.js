@@ -151,6 +151,113 @@ const exportChatRecord = async (params) => {
     }
 }
 
+/** 群聊 / 单聊标签（contactType：0 单聊 1 群聊） */
+const contactTypeLabel = (contactType) => (Number(contactType) === 1 ? '群聊' : '单聊')
+
+/** 备份默认文件名：EasyChat-备份-YYYYMMDD.<ext> */
+const buildBackupDefaultPath = (format) => {
+    const d = new Date()
+    const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+    return `EasyChat-备份-${date}.${format === 'csv' ? 'csv' : 'txt'}`
+}
+
+/** 跨会话 TXT：文件头 + 每个会话一段分隔块 */
+const buildBackupTxt = (groups, totalCount) => {
+    const lines = []
+    lines.push(`EasyChat 聊天记录备份（跨会话全量）`)
+    lines.push(`备份时间：${formatTime(Date.now())}`)
+    lines.push(`会话数：${groups.length}`)
+    lines.push(`消息条数：${totalCount}`)
+    lines.push('========================================')
+    groups.forEach((g) => {
+        lines.push('')
+        lines.push(`会话：${g.title || g.sessionId || ''}（${contactTypeLabel(g.contactType)}）`)
+        lines.push(`消息数：${g.rows.length}`)
+        lines.push('----------------------------------------')
+        g.rows.forEach((row) => {
+            const name = row.send_user_nick_name || row.send_user_id || ''
+            lines.push(`[${formatTime(row.send_time)}] ${name}: ${buildContent(row)}`)
+        })
+    })
+    return lines.join('\n')
+}
+
+/** 跨会话 CSV：在既有列基础上增加首列「会话」「会话类型」 */
+const buildBackupCsv = (groups) => {
+    const header = ['会话', '会话类型', '消息ID', '时间', '发送人ID', '昵称', '消息类型', '内容', '文件名']
+    const rows = [header.map(csvCell).join(',')]
+    groups.forEach((g) => {
+        g.rows.forEach((row) => {
+            rows.push([
+                g.title || g.sessionId || '',
+                contactTypeLabel(g.contactType),
+                row.message_id,
+                formatTime(row.send_time),
+                row.send_user_id,
+                row.send_user_nick_name,
+                Number(row.message_type) === 5 ? (FILE_TYPE_LABEL[Number(row.file_type)] || '文件') : '文本',
+                buildContent(row),
+                row.file_name
+            ].map(csvCell).join(','))
+        })
+    })
+    return '\uFEFF' + rows.join('\r\n')
+}
+
+/**
+ * 跨会话全量备份：把渲染层已取全的多个会话消息导出为单个文件。
+ * @param {{format:'txt'|'csv', groups:Array<{sessionId:string, title:string, contactType:number, messages:Array}>}} params
+ * @returns {Promise<{success:boolean, canceled:boolean, path:string, count:number, sessionCount:number, error?:string}>}
+ */
+const exportChatBackup = async (params) => {
+    const { format, groups } = params || {}
+    const useCsv = format === 'csv'
+    const list = Array.isArray(groups) ? groups : []
+    try {
+        // 归一化 + 每个会话内按时间升序；丢弃无消息的会话（如已清空历史）
+        const normalized = list
+            .map((g) => ({
+                sessionId: g.sessionId,
+                title: g.title,
+                contactType: g.contactType,
+                rows: (Array.isArray(g.messages) ? g.messages : [])
+                    .map(normalizeCloudRow)
+                    .sort((a, b) => Number(a.send_time) - Number(b.send_time))
+            }))
+            .filter((g) => g.rows.length > 0)
+
+        if (normalized.length === 0) {
+            return { success: false, canceled: false, path: '', count: 0, sessionCount: 0, error: '没有可备份的消息' }
+        }
+        const totalCount = normalized.reduce((sum, g) => sum + g.rows.length, 0)
+        const content = useCsv ? buildBackupCsv(normalized) : buildBackupTxt(normalized, totalCount)
+        const result = await dialog.showSaveDialog({
+            title: '备份全部会话聊天记录',
+            defaultPath: buildBackupDefaultPath(format),
+            filters: useCsv
+                ? [{ name: 'CSV 表格', extensions: ['csv'] }]
+                : [{ name: '文本文件', extensions: ['txt'] }]
+        })
+        if (result.canceled || !result.filePath) {
+            return { success: false, canceled: true, path: '', count: 0, sessionCount: 0 }
+        }
+        fs.writeFileSync(result.filePath, content, { encoding: 'utf8' })
+        console.log('跨会话备份成功 path=' + result.filePath + ' count=' + totalCount +
+            ' sessions=' + normalized.length + ' userId=' + store.getUserId())
+        return {
+            success: true,
+            canceled: false,
+            path: result.filePath,
+            count: totalCount,
+            sessionCount: normalized.length
+        }
+    } catch (e) {
+        console.warn('跨会话备份失败', e)
+        return { success: false, canceled: false, path: '', count: 0, sessionCount: 0, error: (e && e.message) || '备份失败' }
+    }
+}
+
 export {
-    exportChatRecord
+    exportChatRecord,
+    exportChatBackup
 }

@@ -11,7 +11,7 @@ import {
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck,
   onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
-  onExportChatRecord, onSendCallFrame
+  onExportChatRecord, onExportChatBackup, onSendCallFrame
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 import { stopBlink } from './notification'
@@ -263,6 +263,9 @@ function createWindow() {
 
   //导出会话聊天记录
   onExportChatRecord();
+
+  //跨会话全量备份
+  onExportChatBackup();
 
   //获取设置信息
   onGetSettingInfo();
