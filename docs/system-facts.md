@@ -207,6 +207,8 @@
 > | 2026-09-26 | 群文件列表修复：`GroupFile` PO 补 `uploadUserNickName` 字段 + Mapper `resultMap` 补映射（原先子查询带出昵称但被静默丢弃）；列表现正确返回上传人昵称，活体冒烟 23/23 通过 | 遗留项清理 |
 > | 2026-09-26 | 深色模式 v2：聊天气泡（接收白底/发送绿底）、消息输入区、朋友圈卡片主背景与正文色改用 `--ec-*` 变量（base.scss 新增 bubble/card/quote/recalled/input 系列），深色下不再刺眼；品牌强调色与次级灰有意保留 | 遗留项清理 |
 > | 2026-09-26 | 契约门禁升级：扩展扫描 Electron 主进程 `src/main` 的 `/api/*` 调用，消除 `/chat/downloadFile`、`/update/download` 两个历史误报孤儿路由（现 0 孤儿 / 0 漂移） | 遗留项清理 |
-> | 2026-09-26 | 聊天记录导出明确为 local-only 设计边界（仅读本地 SQLite），云端全量漫游导出归入后续独立「备份/迁移」专项，不再作为遗留缺口 | 遗留项清理 |
+> | 2026-09-26 | 聊天记录导出现有两种数据源：本地 SQLite（原 local-only）+ **云端全量漫游**（渲染层用 `loadHistoryMessage` 按 `lastMessageId` 游标翻页取全，主进程 `exportChat.js` 归一化 camelCase→snake_case 后复用同一套 TXT/CSV 格式化落盘）。右键会话新增「导出云端全量（TXT/CSV）」。原记「云端导出归入后续专项」已作废 | 遗留项清理 |
 > | 2026-09-26 | 敏感词种子 migration-005 已对 easychat 库执行（9 条 level2/3 示例词），内容治理正式生效；3 个回归脚本归位 `scripts/smoke/` | 遗留项清理 |
+> | 2026-09-26 | 迁移脚本核对：migration-003 编号缺口系**有意保留**——原 `message-read-status` 随已读回执特性下线被删除（提交 400a054），新增 `easychat-migration-003-retired.sql` 纯注释占位说明，避免复用撞号；migration-007（`delete_flag` 列 + `uk_word_flag` 唯一索引）**已对 easychat 库执行**，基线 `easychat.sql` 已同步 | 遗留项清理 |
+> | 2026-09-26 | 深色模式 v2 收尾：朋友圈/聊天深层视图的硬编码浅色背景（`#f7f7f7`/`#fafafa`/`#ededed`/`#fff` 等）与浅色描边（`#f0f0f0`/`#e8e8e8`）统一换为 `--ec-surface-*`/`--ec-divider*`/`--ec-card-bg` 变量，深色下不再出现浅色块；强调色与白字有意保留 | 遗留项清理 |
 > | 2026-09-26 | 语音/视频通话**仅后端半截落地（前端缺失，特性不可用）**：Netty WS 信令中继（`CALL_*` 帧）+ `CallRoomRegistry` + TURN 配置随信令下发 + `call_log` 表（migration-008）已在工作区实现但**尚未提交**；前端 `WebRTC.js`/`CallWindow.vue`/`useCallStore`/入口按钮均未实现。openspec 未闭环（tasks 全未勾、未归档、缺 QA/Retro、specs 无 voice-call）。原记「L4 已通过」与事实不符，已更正 | openspec 2026-09-26-voice-call |
