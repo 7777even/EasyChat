@@ -1,0 +1,22 @@
+=== 后端编译 (mvn compile) ===
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 155 source files to D:\qd\EasyChat\easychat-java\target\classes
+[INFO] BUILD SUCCESS
+[INFO] Total time:  14.511 s
+
+=== 前端构建 (electron-vite build) ===
+✓ built in 24.46s
+(Exit Code: 0)
+
+=== IPC 注册门禁 ===
+[ipc-registration] ipc.js 注册函数 33 个 / export 33 个 / index.js 调用 35 个
+[ipc-registration] ✓ 全部 IPC 通道均已注册
+
+=== 接口契约门禁 ===
+[api-contract] ℹ 后端路由 POST /chat/downloadFile 在 Api.js 中未找到调用方 (ChatController.java:103)
+[api-contract] ℹ 后端路由 POST /update/download 在 Api.js 中未找到调用方 (UpdateController.java:60)
+[api-contract] 后端路由 86 项；前端调用 84 项；2 个潜在孤儿 / 0 个潜在漂移（非阻断，仅提示）
+
+=== openspec 卫生门禁 ===
+[openspec-hygiene] 结论：0 错误 / 0 警告 / 0 信息
+[openspec-hygiene] ✓ 通过
