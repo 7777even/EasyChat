@@ -46,4 +46,16 @@
           AND message_id = #{messageId}
     </select>
 
+    <update id="updateById" parameterType="com.easychat.entity.po.MessageReport">
+        UPDATE message_report
+        <set>
+            <if test="bean.status != null">status = #{bean.status},</if>
+            <if test="bean.handleUserId != null">handle_user_id = #{bean.handleUserId},</if>
+            <if test="bean.handleTime != null">handle_time = #{bean.handleTime},</if>
+            <if test="bean.handleNote != null">handle_note = #{bean.handleNote},</if>
+            <if test="bean.handleAction != null">handle_action = #{bean.handleAction},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
 </mapper>

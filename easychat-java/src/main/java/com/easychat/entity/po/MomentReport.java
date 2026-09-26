@@ -136,4 +136,30 @@ public class MomentReport implements Serializable {
     public Long getHandleTime() {
         return this.handleTime;
     }
+
+    /**
+     * 处理备注
+     */
+    private String handleNote;
+
+    /**
+     * 处置动作 0仅记录 1删内容 2封禁发布者
+     */
+    private Integer handleAction;
+
+    public void setHandleNote(String handleNote) {
+        this.handleNote = handleNote;
+    }
+
+    public String getHandleNote() {
+        return this.handleNote;
+    }
+
+    public void setHandleAction(Integer handleAction) {
+        this.handleAction = handleAction;
+    }
+
+    public Integer getHandleAction() {
+        return this.handleAction;
+    }
 }

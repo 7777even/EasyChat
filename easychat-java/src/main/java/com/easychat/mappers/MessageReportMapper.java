@@ -17,4 +17,9 @@ public interface MessageReportMapper {
      * 插入举报记录
      */
     Integer insert(@Param("bean") MessageReport report);
+
+    /**
+     * 按ID更新处理字段（status/handle_user_id/handle_time/handle_note/handle_action）
+     */
+    Integer updateById(@Param("bean") MessageReport report, @Param("id") Long id);
 }

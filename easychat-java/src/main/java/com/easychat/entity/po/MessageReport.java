@@ -97,4 +97,56 @@ public class MessageReport implements Serializable {
     public Long getCreateTime() {
         return this.createTime;
     }
+
+    /**
+     * 处理人
+     */
+    private String handleUserId;
+
+    /**
+     * 处理时间毫秒
+     */
+    private Long handleTime;
+
+    /**
+     * 处理备注
+     */
+    private String handleNote;
+
+    /**
+     * 处置动作 0仅记录 1删内容 2封禁发布者
+     */
+    private Integer handleAction;
+
+    public void setHandleUserId(String handleUserId) {
+        this.handleUserId = handleUserId;
+    }
+
+    public String getHandleUserId() {
+        return this.handleUserId;
+    }
+
+    public void setHandleTime(Long handleTime) {
+        this.handleTime = handleTime;
+    }
+
+    public Long getHandleTime() {
+        return this.handleTime;
+    }
+
+    public void setHandleNote(String handleNote) {
+        this.handleNote = handleNote;
+    }
+
+    public String getHandleNote() {
+        return this.handleNote;
+    }
+
+    public void setHandleAction(Integer handleAction) {
+        this.handleAction = handleAction;
+    }
+
+    public Integer getHandleAction() {
+        return this.handleAction;
+    }
 }

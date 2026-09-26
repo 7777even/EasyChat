@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.ReportReadMapper">
+
+    <resultMap id="admin_report_map" type="com.easychat.entity.vo.AdminReportVO">
+        <result column="id" property="id"/>
+        <result column="report_type" property="reportType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="report_user_id" property="reportUserId"/>
+        <result column="report_user_name" property="reportUserName"/>
+        <result column="reason" property="reason"/>
+        <result column="description" property="description"/>
+        <result column="status" property="status"/>
+        <result column="handle_user_id" property="handleUserId"/>
+        <result column="handle_time" property="handleTime"/>
+        <result column="handle_note" property="handleNote"/>
+        <result column="handle_action" property="handleAction"/>
+        <result column="create_time" property="createTime"/>
+        <result column="content_excerpt" property="contentExcerpt"/>
+    </resultMap>
+
+    <sql id="report_union">
+        SELECT mr.id,
+               (CASE WHEN mr.comment_id IS NOT NULL THEN 2 ELSE 1 END) AS report_type,
+               (CASE WHEN mr.comment_id IS NOT NULL THEN mr.comment_id ELSE mr.moment_id END) AS target_id,
+               mr.report_user_id,
+               ru.nick_name AS report_user_name,
+               mr.reason,
+               mr.description,
+               mr.status,
+               mr.handle_user_id,
+               mr.handle_time,
+               mr.handle_note,
+               mr.handle_action,
+               mr.create_time,
+               LEFT(COALESCE(m.content, mc.content), 120) AS content_excerpt
+        FROM moment_report mr
+                 LEFT JOIN moment m ON mr.moment_id = m.moment_id
+                 LEFT JOIN moment_comment mc ON mr.comment_id = mc.comment_id
+                 LEFT JOIN user_info ru ON mr.report_user_id = ru.user_id
+        UNION ALL
+        SELECT msgr.id,
+               3 AS report_type,
+               msgr.message_id AS target_id,
+               msgr.report_user_id,
+               ru2.nick_name AS report_user_name,
+               msgr.reason,
+               msgr.description,
+               msgr.status,
+               msgr.handle_user_id,
+               msgr.handle_time,
+               msgr.handle_note,
+               msgr.handle_action,
+               msgr.create_time,
+               LEFT(cm.message_content, 120) AS content_excerpt
+        FROM message_report msgr
+                 LEFT JOIN chat_message cm ON msgr.message_id = cm.message_id
+                 LEFT JOIN user_info ru2 ON msgr.report_user_id = ru2.user_id
+    </sql>
+
+    <sql id="report_where">
+        <if test="query.reportType != null">
+            AND report_type = #{query.reportType}
+        </if>
+        <if test="query.status != null">
+            AND status = #{query.status}
+        </if>
+        <if test="query.reason != null">
+            AND reason = #{query.reason}
+        </if>
+        <if test="query.startTime != null">
+            AND create_time &gt;= #{query.startTime}
+        </if>
+        <if test="query.endTime != null">
+            AND create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <select id="selectReportCount" resultType="java.lang.Integer">
+        SELECT count(1)
+        FROM (
+                 <include refid="report_union"/>
+             ) t
+        WHERE 1 = 1
+        <include refid="report_where"/>
+    </select>
+
+    <select id="selectReportList" resultMap="admin_report_map">
+        SELECT *
+        FROM (
+                 <include refid="report_union"/>
+             ) t
+        WHERE 1 = 1
+        <include refid="report_where"/>
+        ORDER BY create_time DESC
+        <if test="query.simplePage != null">
+            LIMIT #{query.simplePage.start}, #{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectReportById" resultMap="admin_report_map">
+        SELECT *
+        FROM (
+                 <include refid="report_union"/>
+             ) t
+        WHERE id = #{reportId}
+          AND report_type = #{reportType}
+    </select>
+
+</mapper>

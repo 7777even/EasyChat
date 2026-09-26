@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.ReportAuditLogMapper">
+
+    <resultMap id="audit_log_map" type="com.easychat.entity.vo.ReportAuditLogVO">
+        <result column="id" property="id"/>
+        <result column="report_id" property="reportId"/>
+        <result column="report_type" property="reportType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="admin_id" property="adminId"/>
+        <result column="action" property="action"/>
+        <result column="handle_action" property="handleAction"/>
+        <result column="handle_note" property="handleNote"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="base_column_list">
+        id, report_id, report_type, target_id, admin_id, action, handle_action, handle_note, create_time
+    </sql>
+
+    <sql id="audit_where">
+        <if test="query.reportId != null">
+            AND report_id = #{query.reportId}
+        </if>
+        <if test="query.reportType != null">
+            AND report_type = #{query.reportType}
+        </if>
+        <if test="query.adminId != null and query.adminId != ''">
+            AND admin_id = #{query.adminId}
+        </if>
+        <if test="query.action != null">
+            AND action = #{query.action}
+        </if>
+        <if test="query.startTime != null">
+            AND create_time &gt;= #{query.startTime}
+        </if>
+        <if test="query.endTime != null">
+            AND create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.ReportAuditLog" keyProperty="id" useGeneratedKeys="true">
+        INSERT INTO report_audit_log
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="reportId != null">report_id,</if>
+            <if test="reportType != null">report_type,</if>
+            <if test="targetId != null">target_id,</if>
+            <if test="adminId != null">admin_id,</if>
+            <if test="action != null">action,</if>
+            <if test="handleAction != null">handle_action,</if>
+            <if test="handleNote != null">handle_note,</if>
+            <if test="createTime != null">create_time,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="reportId != null">#{reportId},</if>
+            <if test="reportType != null">#{reportType},</if>
+            <if test="targetId != null">#{targetId},</if>
+            <if test="adminId != null">#{adminId},</if>
+            <if test="action != null">#{action},</if>
+            <if test="handleAction != null">#{handleAction},</if>
+            <if test="handleNote != null">#{handleNote},</if>
+            <if test="createTime != null">#{createTime},</if>
+        </trim>
+    </insert>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        SELECT count(1)
+        FROM report_audit_log
+        WHERE 1 = 1
+        <include refid="audit_where"/>
+    </select>
+
+    <select id="selectList" resultMap="audit_log_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM report_audit_log
+        WHERE 1 = 1
+        <include refid="audit_where"/>
+        ORDER BY create_time DESC
+        <if test="query.simplePage != null">
+            LIMIT #{query.simplePage.start}, #{query.simplePage.end}
+        </if>
+    </select>
+
+</mapper>
