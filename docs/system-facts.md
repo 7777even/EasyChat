@@ -164,7 +164,7 @@
 | 朋友圈个人主页 | `POST /moment/userMomentList`（`targetUserId`） |
 | 评论删除 | `POST /moment/deleteComment`（`commentId`），动态发布者与评论者本人可删 |
 | 消息扩展 | `chat_message.extra_data`（JSON：引用/转发）、`at_user_ids`（@ 提及）、`duration`（语音时长） |
-| 聊天记录导出 | 会话右键菜单「导出聊天记录（TXT / CSV）」→ IPC `exportChatRecord` → 主进程 `src/main/exportChat.js` 读本地 SQLite 全量 → `dialog.showSaveDialog` → 落盘。**只导本地已持久化消息，不拉云端**；CSV 带 UTF-8 BOM 且对 `=+-@` 开头值前置单引号防 Excel 公式注入 |
+| 聊天记录导出 | 会话右键菜单「导出聊天记录（TXT / CSV）」→ IPC `exportChatRecord` → 主进程 `src/main/exportChat.js` 读本地 SQLite 全量 → `dialog.showSaveDialog` → 落盘。**只导本地已持久化消息，不拉云端**——此为有意识的设计边界（local-only）：`exportChat.js` 仅读本地 SQLite，云端全量漫游导出归入后续独立的「备份/迁移」专项，不在本导出能力范围内；CSV 带 UTF-8 BOM 且对 `=+-@` 开头值前置单引号防 Excel 公式注入 |
 | 深色模式 | 账号设置「外观主题」浅色/深色单选 → IPC `updateSysSetting` 合入 `user_setting.sysSetting.theme`（主进程键白名单已含 `theme`，不覆盖既有键）；`<html>.dark` 激活 Element Plus 暗色 css-vars（`element-plus/theme-chalk/dark/css-vars.css`）+ 自定义外壳 `--ec-*` 变量（`base.scss` 定义，`Layout`/`ContentPanel`/`Main`/`Setting`/`Chat` 引用）。仅本地持久化，不依赖后端；启动时由 `Main.vue` 读本地设置应用 |
 | 群文件 | 群聊会话头部「群文件」图标 → `GroupFile.vue` 面板。上传走既有分片 `/upload/uploadChunk`+`/upload/checkChunks`，合并落盘 `file/group/<fileId>.<ext>`（新增 `Constants.FILE_FOLDER_GROUP`）并写 `group_file`（`status=1`，`file_type` 0图片/1视频/2文件）；列表 `POST /group/file/list`（分页、`create_time desc`、含上传人昵称）；删除 `POST /group/file/delete`（上传者本人或群主/管理员可删，逻辑删除 `status=0`）。**所有接口前置 `groupInfoService.checkGroupRole(MEMBER)`**（非成员抛 `CODE_2304`）。预览/下载复用本地文件服务 `getLocalFilePath` 的 `group` 分支 + 后端 `ChatController.downloadFile` 的 `partType=group` 分支，零新增下载路由 |
 | 敏感词过滤 | 发送链路（聊天消息 / 朋友圈发布 / 评论）注入 `SensitiveWordService.filter`：命中 `level=3` 抛 `CODE_2701` 拒绝写入（不入库不推送）；命中 `level1/2` 替换为 `***` 后继续；词库取自 `sensitive_word` 表 `status=1 AND delete_flag=0`，`@PostConstruct` 启动加载到内存，管理端每次写变更后自动 `reload()` 热更新；空词库无副作用 |
@@ -202,3 +202,8 @@
 > | 2026-09-26 | 新增内容治理：敏感词实时过滤（level3 拦截 `CODE_2701` / level1-2 替换 `***`，词库 `sensitive_word` 内存加载）+ 举报（动态/评论/消息，幂等落 `moment_report`/`message_report`，仅落库不处理） | openspec 2026-09-26-content-moderation |
 > | 2026-09-26 | 新增举报处理与管理端审计：管理端 `/admin/report/*`（checkAdmin）四接口（列表/详情/处置/审计日志），UNION 读视图 + `report_audit_log` 不可变审计；补齐举报表 `handle_*` 字段、新增审计表（migration-006）；前端 `ReportList.vue` + 菜单「举报管理」 | openspec 2026-09-26-report-admin |
 > | 2026-09-26 | 新增敏感词库管理端：`/admin/sensitiveWord/*` 五接口（增改删/导入/导出，写后自动 `reload()` 热更），错误码 `2704`/`2705`；`sensitive_word` 加 `delete_flag BIGINT` + `uk_word_flag(word,delete_flag)`（旧 `uk_word` 移除），引擎加载范围改 `status=1 AND delete_flag=0`；前端 `SensitiveWord.vue` + 菜单「敏感词管理」 | openspec 2026-09-26-sensitive-word-admin |
+> | 2026-09-26 | 群文件列表修复：`GroupFile` PO 补 `uploadUserNickName` 字段 + Mapper `resultMap` 补映射（原先子查询带出昵称但被静默丢弃）；列表现正确返回上传人昵称，活体冒烟 23/23 通过 | 遗留项清理 |
+> | 2026-09-26 | 深色模式 v2：聊天气泡（接收白底/发送绿底）、消息输入区、朋友圈卡片主背景与正文色改用 `--ec-*` 变量（base.scss 新增 bubble/card/quote/recalled/input 系列），深色下不再刺眼；品牌强调色与次级灰有意保留 | 遗留项清理 |
+> | 2026-09-26 | 契约门禁升级：扩展扫描 Electron 主进程 `src/main` 的 `/api/*` 调用，消除 `/chat/downloadFile`、`/update/download` 两个历史误报孤儿路由（现 0 孤儿 / 0 漂移） | 遗留项清理 |
+> | 2026-09-26 | 聊天记录导出明确为 local-only 设计边界（仅读本地 SQLite），云端全量漫游导出归入后续独立「备份/迁移」专项，不再作为遗留缺口 | 遗留项清理 |
+> | 2026-09-26 | 敏感词种子 migration-005 已对 easychat 库执行（9 条 level2/3 示例词），内容治理正式生效；3 个回归脚本归位 `scripts/smoke/` | 遗留项清理 |
