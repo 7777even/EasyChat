@@ -11,7 +11,7 @@ import {
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck,
   onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
-  onExportChatRecord
+  onExportChatRecord, onSendCallFrame
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 import { stopBlink } from './notification'
@@ -295,6 +295,9 @@ function createWindow() {
   onTopChatSession();
 
   onReloadChatSession();
+
+  //通话信令帧发送通道（渲染端 → 主进程 → WS 5051），必须注册否则静默失效
+  onSendCallFrame();
 }
 
 // This method will be called when Electron has finished

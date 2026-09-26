@@ -44,6 +44,12 @@ const sendSyncFrame = () => {
     }
 }
 
+const sendCallFrame = (frame) => {
+    if (ws != null && ws.readyState === 1) {
+        ws.send(JSON.stringify(frame));
+    }
+}
+
 const registerPendingAck = (clientId, messageObj) => {
     if (pendingMap.has(clientId)) {
         clearTimeout(pendingMap.get(clientId).timer);
@@ -188,6 +194,18 @@ const createWs = () => {
             }
             case -8: { // 朋友圈未读通知数变化：实时点亮/消除朋友圈红点
                 sender.send("momentUnread", message.extendData || {});
+                break;
+            }
+            case -10: // CALL_INVITE
+            case -11: // CALL_ACCEPT
+            case -12: // CALL_REJECT
+            case -13: // CALL_SIGNAL
+            case -14: // CALL_HANGUP
+            case -15: // CALL_CANCEL
+            case -16: // CALL_BUSY
+            case -17: { // CALL_JOIN
+                // 通话信令帧：整帧转发渲染进程（不落库、不触发普通消息逻辑，媒体 P2P 不经服务器）
+                sender.send("callMessage", message);
                 break;
             }
             case 2://聊条消息
@@ -336,5 +354,6 @@ export {
     initWs,
     closeWs,
     registerPendingAck,
-    sendSyncFrame
+    sendSyncFrame,
+    sendCallFrame
 }

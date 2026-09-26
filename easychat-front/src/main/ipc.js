@@ -2,7 +2,7 @@ import { shell, BrowserWindow, ipcMain, clipboard } from 'electron';
 const NODE_ENV = process.env.NODE_ENV
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { initWs, closeWs, registerPendingAck } from './wsClient';
+import { initWs, closeWs, registerPendingAck, sendCallFrame } from './wsClient';
 import { initNotifySwitch, setNotifySwitch } from './notification';
 import { exportChatRecord } from './exportChat';
 import { selectMessageList, saveMessage, updateMessage, existsMessage, delMessage } from "./db/ChatMessageModel";
@@ -124,6 +124,13 @@ const onUpdateContactNoReadCount = () => {
 const onRegisterPendingAck = () => {
     ipcMain.on("registerPendingAck", (e, { clientId, messageObj }) => {
         registerPendingAck(clientId, messageObj);
+    });
+}
+
+//发送通话信令帧（渲染端 → 主进程 → WS 5051 信令中继，媒体 P2P 不经服务器）
+const onSendCallFrame = () => {
+    ipcMain.on("sendCallFrame", (e, frame) => {
+        sendCallFrame(frame);
     });
 }
 
@@ -439,5 +446,6 @@ export {
     onDelChatSession,
     onTopChatSession,
     onReloadChatSession,
-    onRegisterPendingAck
+    onRegisterPendingAck,
+    onSendCallFrame
 }
