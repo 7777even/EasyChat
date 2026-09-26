@@ -316,6 +316,8 @@ CREATE TABLE `moment_report` (
   `handle_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理人',
   `create_time` bigint(20) NULL DEFAULT NULL COMMENT '举报时间毫秒',
   `handle_time` bigint(20) NULL DEFAULT NULL COMMENT '处理时间毫秒',
+  `handle_note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理备注',
+  `handle_action` tinyint(1) NULL DEFAULT NULL COMMENT '0仅记录 1删内容 2封禁发布者',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_status`(`status`, `create_time`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '内容举报';
@@ -331,10 +333,33 @@ CREATE TABLE `message_report` (
   `reason` tinyint(1) NULL DEFAULT 0 COMMENT '0色情 1暴力 2诈骗 3侵权 4其他',
   `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '补充说明',
   `status` tinyint(1) NULL DEFAULT 0 COMMENT '0待处理 1已处理 2已驳回',
+  `handle_user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理人',
+  `handle_time` bigint(20) NULL DEFAULT NULL COMMENT '处理时间毫秒',
+  `handle_note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理备注',
+  `handle_action` tinyint(1) NULL DEFAULT NULL COMMENT '0仅记录 1删内容 2封禁发布者',
   `create_time` bigint(20) NULL DEFAULT NULL COMMENT '举报时间毫秒',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_status`(`status`, `create_time`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '消息举报';
+
+-- ----------------------------
+-- Table structure for report_audit_log
+-- ----------------------------
+DROP TABLE IF EXISTS `report_audit_log`;
+CREATE TABLE `report_audit_log` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `report_id` bigint(20) NOT NULL COMMENT '关联举报记录ID（moment_report/message_report 的 id）',
+  `report_type` tinyint(1) NOT NULL COMMENT '1动态 2评论 3消息',
+  `target_id` bigint(20) NULL DEFAULT NULL COMMENT '被举报对象ID',
+  `admin_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理管理员ID',
+  `action` tinyint(1) NULL DEFAULT NULL COMMENT '1已处理 2已驳回',
+  `handle_action` tinyint(1) NULL DEFAULT NULL COMMENT '0仅记录 1删内容 2封禁发布者',
+  `handle_note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '处理备注',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '处理时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_report`(`report_id`, `report_type`) USING BTREE,
+  INDEX `idx_admin`(`admin_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '举报处置审计日志';
 
 -- ----------------------------
 -- Table structure for sensitive_word
