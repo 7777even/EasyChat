@@ -1,6 +1,6 @@
 # Spec — 内容治理（content-moderation）
 
-> 能力来源：openspec/changes/2026-09-26-content-moderation（已归档）
+> 能力来源：openspec/changes/2026-09-26-content-moderation（已归档）、openspec/changes/2026-09-26-sensitive-word-admin（已归档，新增「词库管理」子能力并修改敏感词加载范围）
 
 ## Requirement: 敏感词实时过滤（C1）
 
@@ -8,7 +8,7 @@
 
 - 命中 `level=3`（禁止发送）的敏感词时，系统 SHALL 拒绝写入并返回错误码 `CODE_2701`，内容不入库、不发送；
 - 命中 `level=1/2`（提醒/替换）的敏感词时，系统 SHALL 将内容中的该词替换为 `***` 后继续；
-- 敏感词库来自 `sensitive_word` 表 `status=1` 的记录，应用启动时加载到内存；空词库时不产生任何拦截或替换。
+- 敏感词库来自 `sensitive_word` 表 `status=1 AND delete_flag=0` 的记录，应用启动时加载到内存，且管理端每次词库写变更（保存/删除/导入）后自动 `reload()` 热更；空词库时不产生任何拦截或替换。
 
 #### Scenario: 发送含禁止词的消息被拦截
 
@@ -108,3 +108,121 @@
 
 - **WHEN** 普通用户调用 `/admin/report/loadReport`
 - **THEN** 返回 `CODE_404`
+
+---
+
+## Requirement: 词库筛选与维护（word-admin-crud，C1）
+
+管理员（token `admin=true`）SHALL 能够分页筛选（`keyword`/`level`/`status`）并维护敏感词库，列表仅返回 `delete_flag=0` 的存活词条。
+
+- `POST /admin/sensitiveWord/saveWord`：新增或编辑词条（带 `id` 即编辑），`level∈{1,2,3}`、`status∈{0,1}` 由 `@Valid` 强制；新增或编辑改名遇同名存活词条 SHALL 返回 `CODE_2704`；编辑不存在的词条 SHALL 返回 `CODE_2705`。
+- `POST /admin/sensitiveWord/deleteWord`：逻辑删除（`delete_flag` 置当前时间戳 ms，不物理删除），词条不存在或已删除 SHALL 返回 `CODE_2705`。
+- 保存/删除成功后 SHALL 自动 `reload()` 生效。
+
+#### Scenario: 管理员分页筛选词库
+
+- **WHEN** 调用 `POST /admin/sensitiveWord/loadWord`（可选 `keyword/level/status` + `pageNo/pageSize`）
+- **THEN** 返回 `Result<PaginationResultVO<SensitiveWordVO>>`，只含 `delete_flag=0` 的存活词条
+
+#### Scenario: 新增重复词条被拒
+
+- **WHEN** 新增的 `word` 已存在存活词条（或命中唯一索引）
+- **THEN** 返回 `CODE_2704`，不落库不 reload
+
+#### Scenario: 删除不存在的词条
+
+- **WHEN** 调用 `deleteWord`，`id` 不存在或已删除
+- **THEN** 返回 `CODE_2705`
+
+---
+
+## Requirement: 批量导入（word-bulk-import，C2）
+
+管理员 SHALL 能够批量导入词条：`.txt`（一行一词，使用请求指定的统一 `level`/`status`）或 `.csv`（三列 `word,level,status`，可带表头），按扩展名识别。系统 SHALL 逐行容错并返回三态计数 `ImportResultVO{success, skipped, failed}`；重复词条（含文件内重复与库内存活重复）计入 `skipped` 且不重复入库；空行、列数不符、长度超 50、`level/status` 越界计入 `failed`。文件 >2MB、>5000 行或扩展名非 `.txt`/`.csv` SHALL 返回 `CODE_1001`。有新增成功行时 SHALL 自动 `reload()`。
+
+#### Scenario: 导入 txt / csv
+
+- **WHEN** 上传 ≤5000 行、≤2MB 的 `.txt` 或 `.csv`
+- **THEN** 返回三态计数，成功行入库并触发一次 `reload()`
+
+#### Scenario: 重复词条跳过
+
+- **WHEN** 导入行的 `word` 已存在存活词条或在文件内重复
+- **THEN** 该行计入 `skipped`，不报错、不整体失败、不产生重复行
+
+#### Scenario: 文件超限或格式不支持
+
+- **WHEN** 文件 >2MB、>5000 行，或扩展名非 `.txt`/`.csv`
+- **THEN** 返回 `CODE_1001`，不解析
+
+---
+
+## Requirement: 词库导出与往返（word-export-roundtrip，C3）
+
+管理员 SHALL 能够将当前词库导出为 CSV，且导出文件可原样导回。
+
+- `GET /admin/sensitiveWord/exportWords` 返回 `text/csv` 文件流（UTF-8 BOM，列 `word,level,status`），仅含存活词条；对 `=+-@` 开头的值前置单引号防 Excel 公式注入。
+- 导入侧 SHALL 对 `'` + `=+-@` 开头的值剥离该防护引号，保证往返等价。
+
+#### Scenario: 导出
+
+- **WHEN** 调用 `GET /admin/sensitiveWord/exportWords`
+- **THEN** 返回带 BOM 的 CSV 文件流，已删词条不出现
+
+#### Scenario: 往返等价
+
+- **WHEN** 将导出文件原样通过 `importWords` 重新上传
+- **THEN** 全部行计入 `skipped`（`success=0`），词库内容与级别/状态不发生变化
+
+---
+
+## Requirement: 变更即时生效（word-hot-reload，C4）
+
+词库任意写变更（保存/删除/导入）后 SHALL 即时生效于发送链路过滤。
+
+#### Scenario: 新词即刻拦截
+
+- **WHEN** 新增一条 `level=3` 词条并保存成功
+- **THEN** 随后发送的含该词消息被拦截返回 `CODE_2701`（不入库不推送）
+
+#### Scenario: level2 替换即刻生效
+
+- **WHEN** 新增一条 `level=2` 词条并保存成功
+- **THEN** 随后发送的含该词消息内容被替换为 `***` 后正常送达
+
+#### Scenario: 删除即刻失效
+
+- **WHEN** 管理员删除某词条
+- **THEN** reload 后该词不再参与过滤（加载 SQL 限定 `delete_flag=0`）
+
+---
+
+## Requirement: 逻辑删除与唯一性共存（word-softdelete-unique，C5）
+
+`sensitive_word` SHALL 以 `delete_flag BIGINT`（0=存活，非0=删除时间戳 ms）实现逻辑删除，并以唯一索引 `uk_word_flag(word, delete_flag)` 保证：存活行同词唯一，已删行不占用 `word` 唯一位。
+
+#### Scenario: 删后重导
+
+- **WHEN** 某存活词条被逻辑删除后，再次导入含同一 `word` 的文件
+- **THEN** 该行计入 `success` 正常入库（删除行时间戳互异，不冲突）
+
+#### Scenario: 删后重新新增
+
+- **WHEN** 词条被逻辑删除后，通过 `saveWord` 新增同一 `word`
+- **THEN** 保存成功，返回 `code=0`
+
+---
+
+## Requirement: 词库管理端权限隔离（word-admin-only）
+
+所有 `/admin/sensitiveWord/*` 接口 SHALL 使用 `@GlobalInterceptor(checkAdmin = true)`；非管理员调用 SHALL 被拦截返回 `CODE_404`，无 token SHALL 返回 `CODE_901`（含导出文件流）。
+
+#### Scenario: 非管理员调用
+
+- **WHEN** 普通用户调用 `/admin/sensitiveWord/loadWord` 或 `deleteWord`
+- **THEN** 返回 `CODE_404`
+
+#### Scenario: 无 token 调用
+
+- **WHEN** 无 token 调用 `loadWord` 或 `exportWords`
+- **THEN** 返回 `CODE_901`
