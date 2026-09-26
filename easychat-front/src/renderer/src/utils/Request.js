@@ -28,10 +28,6 @@ export const ErrorCode = {
     USER_EXISTS: 2102,
     PASSWORD_ERROR: 2103,
     FILE_NOT_FOUND: 2104,
-    // 向后兼容旧码
-    LEGACY_TOKEN_EXPIRED: 901,
-    LEGACY_NOT_FRIEND: 902,
-    LEGACY_NOT_IN_GROUP: 903,
 };
 
 // ======================== 请求前拦截器 ========================
@@ -72,7 +68,7 @@ instance.interceptors.response.use(
             return responseData;
         }
         // Token 过期 -> 跳转登录
-        else if (responseData.code == ErrorCode.TOKEN_EXPIRED || responseData.code == ErrorCode.LEGACY_TOKEN_EXPIRED) {
+        else if (responseData.code == ErrorCode.TOKEN_EXPIRED) {
             setTimeout(() => {
                 window.ipcRenderer.send('reLogin')
             }, 2000);
@@ -94,7 +90,7 @@ instance.interceptors.response.use(
         // 按业务错误处理，避免把真实错误信息误报为网络异常
         const responseData = error.response && error.response.data;
         if (responseData && responseData.code !== undefined) {
-            if (responseData.code == ErrorCode.TOKEN_EXPIRED || responseData.code == ErrorCode.LEGACY_TOKEN_EXPIRED) {
+            if (responseData.code == ErrorCode.TOKEN_EXPIRED) {
                 setTimeout(() => {
                     window.ipcRenderer.send('reLogin')
                 }, 2000);
