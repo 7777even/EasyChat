@@ -28,6 +28,11 @@ public class SensitiveWord implements Serializable {
     private Integer status;
 
     /**
+     * 逻辑删除标记：0=存活，非0=删除时间戳毫秒
+     */
+    private Long deleteFlag;
+
+    /**
      * 创建时间毫秒
      */
     private Long createTime;
@@ -62,6 +67,14 @@ public class SensitiveWord implements Serializable {
 
     public Integer getStatus() {
         return this.status;
+    }
+
+    public void setDeleteFlag(Long deleteFlag) {
+        this.deleteFlag = deleteFlag;
+    }
+
+    public Long getDeleteFlag() {
+        return this.deleteFlag;
     }
 
     public void setCreateTime(Long createTime) {

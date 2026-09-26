@@ -370,9 +370,10 @@ CREATE TABLE `sensitive_word` (
   `word` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '敏感词',
   `level` tinyint(1) NULL DEFAULT 1 COMMENT '1提醒 2替换 3禁止发送',
   `status` tinyint(1) NULL DEFAULT 1 COMMENT '1启用 0停用',
+  `delete_flag` bigint(20) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0=存活，非0=删除时间戳毫秒',
   `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_word`(`word`) USING BTREE
+  UNIQUE INDEX `uk_word_flag`(`word`, `delete_flag`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '敏感词';
 
 SET FOREIGN_KEY_CHECKS = 1;

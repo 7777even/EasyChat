@@ -8,18 +8,126 @@
         <result column="word" property="word"/>
         <result column="level" property="level"/>
         <result column="status" property="status"/>
+        <result column="delete_flag" property="deleteFlag"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <resultMap id="word_vo_map" type="com.easychat.entity.vo.SensitiveWordVO">
+        <result column="id" property="id"/>
+        <result column="word" property="word"/>
+        <result column="level" property="level"/>
+        <result column="status" property="status"/>
         <result column="create_time" property="createTime"/>
     </resultMap>
 
     <sql id="base_column_list">
-        id, word, level, status, create_time
+        id, word, level, status, delete_flag, create_time
     </sql>
 
+    <!-- 管理端列表过滤：仅存活行 + 关键词/级别/状态 -->
+    <sql id="query_where">
+        AND delete_flag = 0
+        <if test="query.keyword != null and query.keyword != ''">
+            AND word LIKE CONCAT('%', #{query.keyword}, '%')
+        </if>
+        <if test="query.level != null">
+            AND level = #{query.level}
+        </if>
+        <if test="query.status != null">
+            AND status = #{query.status}
+        </if>
+    </sql>
+
+    <!-- 引擎加载：仅存活且启用（status + delete_flag 双条件） -->
     <select id="selectByStatus" resultMap="base_result_map">
         SELECT
         <include refid="base_column_list"/>
         FROM sensitive_word
         WHERE status = #{status}
+        AND delete_flag = 0
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer">
+        SELECT count(1)
+        FROM sensitive_word
+        WHERE 1 = 1
+        <include refid="query_where"/>
+    </select>
+
+    <select id="selectList" resultMap="word_vo_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM sensitive_word
+        WHERE 1 = 1
+        <include refid="query_where"/>
+        ORDER BY id DESC
+        <if test="query.simplePage != null">
+            LIMIT #{query.simplePage.start}, #{query.simplePage.end}
+        </if>
+    </select>
+
+    <select id="selectAliveByWord" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM sensitive_word
+        WHERE word = #{word}
+        AND delete_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectAliveById" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM sensitive_word
+        WHERE id = #{id}
+        AND delete_flag = 0
+    </select>
+
+    <!-- 注意：带 @Param("bean") 的语句必须用 bean. 前缀访问属性 -->
+    <insert id="insert" parameterType="com.easychat.entity.po.SensitiveWord" keyProperty="bean.id" useGeneratedKeys="true">
+        INSERT INTO sensitive_word (word, level, status, delete_flag, create_time)
+        VALUES (#{bean.word}, #{bean.level}, #{bean.status}, 0, #{bean.createTime})
+    </insert>
+
+    <!-- 批量插入（导入用），不回填自增ID -->
+    <insert id="insertBatch">
+        INSERT INTO sensitive_word (word, level, status, delete_flag, create_time) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.word}, #{item.level}, #{item.status}, 0, #{item.createTime})
+        </foreach>
+    </insert>
+
+    <update id="updateById">
+        UPDATE sensitive_word
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="bean.word != null and bean.word != ''">
+                word = #{bean.word},
+            </if>
+            <if test="bean.level != null">
+                level = #{bean.level},
+            </if>
+            <if test="bean.status != null">
+                status = #{bean.status},
+            </if>
+        </trim>
+        WHERE id = #{id}
+        AND delete_flag = 0
+    </update>
+
+    <!-- 逻辑删除：置删除时间戳，仅存活行生效 -->
+    <update id="deleteById">
+        UPDATE sensitive_word
+        SET delete_flag = #{deleteFlag}
+        WHERE id = #{id}
+        AND delete_flag = 0
+    </update>
+
+    <select id="selectAllAlive" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM sensitive_word
+        WHERE delete_flag = 0
+        ORDER BY id ASC
     </select>
 
 </mapper>
