@@ -4,8 +4,11 @@ import { selectAllMessageList } from './db/ChatMessageModel'
 import store from './store'
 
 // ===== 聊天记录导出（openspec/changes/2026-09-26-chat-record-export） =====
-// 数据源：本地 SQLite 已持久化的消息（只读）。云端全量漫游归入后续「备份迁移」专项。
-// 职责：全量读库 → 组装文本 → 保存对话框选路径 → 落盘 → 回传结果。
+// 数据源二选一：
+//   1) 本地 SQLite 已持久化的消息（只读）；
+//   2) 云端漫游全量：渲染进程用 loadHistoryMessage 翻页拉全后传入 list（camelCase），
+//      此处归一化为本地行形状（snake_case），复用同一套格式化与落盘逻辑。
+// 职责：取数 → 归一化 → 组装文本 → 保存对话框选路径 → 落盘 → 回传结果。
 
 /** 文件类型：0图片 1视频 2文件（与渲染层 Constants.File_TYPE 对齐） */
 const FILE_TYPE_LABEL = { 0: '图片', 1: '视频', 2: '文件' }
@@ -90,20 +93,42 @@ const buildDefaultPath = (sessionTitle, format) => {
 }
 
 /**
+ * 云端漫游行归一化：服务端下发 camelCase，本地 SQLite 行是 snake_case。
+ * 统一成本地行形状后，buildTxt / buildCsv 可无差别复用。
+ */
+const normalizeCloudRow = (row) => ({
+    message_id: row.messageId,
+    message_type: row.messageType,
+    message_content: row.messageContent,
+    send_user_id: row.sendUserId,
+    send_user_nick_name: row.sendUserNickName,
+    send_time: row.sendTime,
+    file_type: row.fileType,
+    file_name: row.fileName
+})
+
+/**
  * 导出单个会话的聊天记录。
- * @param {{sessionId:string, contactName:string, format:'txt'|'csv'}} params
+ * 传入 list 时走云端漫游全量（渲染层已翻页取全），否则读本地 SQLite。
+ * @param {{sessionId:string, contactName:string, format:'txt'|'csv', list?:Array}} params
  * @returns {Promise<{success:boolean, canceled:boolean, path:string, count:number, error?:string}>}
  */
 const exportChatRecord = async (params) => {
-    const { sessionId, contactName, format } = params || {}
+    const { sessionId, contactName, format, list: cloudList } = params || {}
     if (!sessionId) {
         return { success: false, canceled: false, path: '', count: 0, error: '缺少会话ID' }
     }
     const useCsv = format === 'csv'
     try {
-        const list = await selectAllMessageList({ sessionId })
+        let list
+        if (Array.isArray(cloudList) && cloudList.length > 0) {
+            // 云端全量：归一化 + 按发送时间升序（服务端是 messageId desc 分页返回）
+            list = cloudList.map(normalizeCloudRow).sort((a, b) => Number(a.send_time) - Number(b.send_time))
+        } else {
+            list = await selectAllMessageList({ sessionId })
+        }
         if (!list || list.length === 0) {
-            return { success: false, canceled: false, path: '', count: 0, error: '该会话没有可导出的本地消息' }
+            return { success: false, canceled: false, path: '', count: 0, error: '该会话没有可导出的消息' }
         }
         const content = useCsv ? buildCsv(list) : buildTxt(list, contactName)
         const result = await dialog.showSaveDialog({
