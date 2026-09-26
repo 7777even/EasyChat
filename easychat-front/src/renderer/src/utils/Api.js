@@ -61,6 +61,12 @@ const api = {
     getReportDetail: "/admin/report/getReportDetail",//后台举报详情
     dealReport: "/admin/report/dealReport",//后台处置举报
     loadReportAudit: "/admin/report/loadAuditLog",//后台处置审计日志
+    //敏感词库管理
+    loadSensitiveWord: "/admin/sensitiveWord/loadWord",//敏感词分页列表
+    saveSensitiveWord: "/admin/sensitiveWord/saveWord",//新增/编辑词条
+    deleteSensitiveWord: "/admin/sensitiveWord/deleteWord",//逻辑删除词条
+    importSensitiveWord: "/admin/sensitiveWord/importWords",//批量导入词条
+    exportSensitiveWord: "/admin/sensitiveWord/exportWords",//导出词库CSV
     checkVersion: "/update/checkVersion",//更新检测
     //朋友圈
     publishMoment: "/moment/publish",

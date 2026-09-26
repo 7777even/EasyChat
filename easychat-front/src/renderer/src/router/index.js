@@ -48,6 +48,10 @@ const router = createRouter({
         path: "reportList",
         name: "举报管理",
         component: () => import('@/views/admin/ReportList.vue'),
+      }, {
+        path: "sensitiveWord",
+        name: "敏感词管理",
+        component: () => import('@/views/admin/SensitiveWord.vue'),
       }]
     },
     {

@@ -76,6 +76,13 @@ const menuList = ref([
     icon: 'icon-warning',
     path: '/admin/reportList',
     iconBgColor: '#ff976a'
+  },
+  {
+    name: '敏感词管理',
+    routeName: '敏感词管理',
+    icon: 'icon-file',
+    path: '/admin/sensitiveWord',
+    iconBgColor: '#8a63d2'
   }
 ])
 
