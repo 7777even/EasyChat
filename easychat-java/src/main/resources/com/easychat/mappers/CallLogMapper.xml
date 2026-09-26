@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.CallLogMapper">
+
+    <!--实体映射-->
+    <resultMap id="base_result_map" type="com.easychat.entity.po.CallLog">
+        <result column="id" property="id"/>
+        <result column="caller_id" property="callerId"/>
+        <result column="call_type" property="callType"/>
+        <result column="peer_id" property="peerId"/>
+        <result column="group_id" property="groupId"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="status" property="status"/>
+        <result column="participant_count" property="participantCount"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 通用查询结果列-->
+    <sql id="base_column_list">
+        id
+        ,caller_id,call_type,peer_id,group_id,media_type,start_time,end_time,status,participant_count,create_time
+    </sql>
+
+    <sql id="base_condition_filed">
+        <if test="query.id != null">
+            and id = #{query.id}
+        </if>
+        <if test="query.callerId != null and query.callerId!=''">
+            and caller_id = #{query.callerId}
+        </if>
+        <if test="query.callType != null">
+            and call_type = #{query.callType}
+        </if>
+        <if test="query.peerId != null and query.peerId!=''">
+            and peer_id = #{query.peerId}
+        </if>
+        <if test="query.groupId != null and query.groupId!=''">
+            and group_id = #{query.groupId}
+        </if>
+        <if test="query.mediaType != null">
+            and media_type = #{query.mediaType}
+        </if>
+        <if test="query.status != null">
+            and status = #{query.status}
+        </if>
+    </sql>
+
+    <sql id="query_condition">
+        <where>
+            <include refid="base_condition_filed"/>
+        </where>
+    </sql>
+
+    <!-- 查询集合-->
+    <select id="selectList" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM call_log
+        <include refid="query_condition"/>
+        <if test="query.orderBy!=null">
+            order by ${query.orderBy}
+        </if>
+        <if test="query.simplePage!=null">
+            limit #{query.simplePage.start},#{query.simplePage.end}
+        </if>
+    </select>
+
+    <!-- 查询数量-->
+    <select id="selectCount" resultType="java.lang.Integer">
+        SELECT count(1) FROM call_log
+        <include refid="query_condition"/>
+    </select>
+
+    <!-- 根据ID获取对象-->
+    <select id="selectById" resultMap="base_result_map">
+        select
+        <include refid="base_column_list"/>
+        from call_log where id = #{id}
+    </select>
+
+    <!-- 插入 （匹配有值的字段）-->
+    <insert id="insert" parameterType="com.easychat.entity.po.CallLog" keyProperty="id" useGeneratedKeys="true">
+        INSERT INTO call_log
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.callerId != null">
+                caller_id,
+            </if>
+            <if test="bean.callType != null">
+                call_type,
+            </if>
+            <if test="bean.peerId != null">
+                peer_id,
+            </if>
+            <if test="bean.groupId != null">
+                group_id,
+            </if>
+            <if test="bean.mediaType != null">
+                media_type,
+            </if>
+            <if test="bean.startTime != null">
+                start_time,
+            </if>
+            <if test="bean.endTime != null">
+                end_time,
+            </if>
+            <if test="bean.status != null">
+                status,
+            </if>
+            <if test="bean.participantCount != null">
+                participant_count,
+            </if>
+            <if test="bean.createTime != null">
+                create_time,
+            </if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="bean.callerId!=null">
+                #{bean.callerId},
+            </if>
+            <if test="bean.callType!=null">
+                #{bean.callType},
+            </if>
+            <if test="bean.peerId!=null">
+                #{bean.peerId},
+            </if>
+            <if test="bean.groupId!=null">
+                #{bean.groupId},
+            </if>
+            <if test="bean.mediaType!=null">
+                #{bean.mediaType},
+            </if>
+            <if test="bean.startTime!=null">
+                #{bean.startTime},
+            </if>
+            <if test="bean.endTime!=null">
+                #{bean.endTime},
+            </if>
+            <if test="bean.status!=null">
+                #{bean.status},
+            </if>
+            <if test="bean.participantCount!=null">
+                #{bean.participantCount},
+            </if>
+            <if test="bean.createTime!=null">
+                #{bean.createTime},
+            </if>
+        </trim>
+    </insert>
+
+</mapper>

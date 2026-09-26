@@ -189,6 +189,21 @@ public class ChannelContextUtils {
         }
     }
 
+    /**
+     * 直推原始 WS 帧给指定用户（不重复序列化、不做联系人转换、不进离线缓冲）。
+     * 用于实时性要求高的信令帧（如语音/视频通话），目标离线则静默丢弃。
+     */
+    public void sendRawToUser(String userId, String json) {
+        if (StringTools.isEmpty(userId) || json == null) {
+            return;
+        }
+        ChannelGroup userGroup = USER_CONTEXT_MAP.get(userId);
+        if (userGroup == null || userGroup.isEmpty()) {
+            return;
+        }
+        userGroup.writeAndFlush(new TextWebSocketFrame(json));
+    }
+
     public void sendMessage(MessageSendDto messageSendDto) {
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(messageSendDto.getContactId());
         switch (contactTypeEnum) {

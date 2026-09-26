@@ -376,4 +376,26 @@ CREATE TABLE `sensitive_word` (
   UNIQUE INDEX `uk_word_flag`(`word`, `delete_flag`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '敏感词';
 
+-- ----------------------------
+-- Table structure for call_log
+-- ----------------------------
+DROP TABLE IF EXISTS `call_log`;
+CREATE TABLE `call_log`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+  `caller_id` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '发起方 userId',
+  `call_type` tinyint(4) NOT NULL COMMENT '1=单聊 2=群呼',
+  `peer_id` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '单聊对方 userId',
+  `group_id` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '群呼群组 ID',
+  `media_type` tinyint(4) NOT NULL COMMENT '1=音频 2=音视频',
+  `start_time` bigint(20) NULL DEFAULT NULL COMMENT '通话开始时间(ms)',
+  `end_time` bigint(20) NULL DEFAULT NULL COMMENT '通话结束时间(ms)',
+  `status` tinyint(4) NOT NULL COMMENT '1已接 2未接 3拒接 4取消 5忙线',
+  `participant_count` int(11) NULL DEFAULT NULL COMMENT '参与人数',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '记录创建时间(ms)',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_caller`(`caller_id`) USING BTREE,
+  INDEX `idx_group`(`group_id`) USING BTREE,
+  INDEX `idx_peer`(`peer_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '通话记录';
+
 SET FOREIGN_KEY_CHECKS = 1;

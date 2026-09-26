@@ -11,6 +11,7 @@ import com.easychat.mappers.ChatMessageMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
+import com.easychat.websocket.CallService;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -45,6 +46,9 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
     @Resource
     private ChatMessageMapper<ChatMessage, ChatMessageQuery> chatMessageMapper;
 
+    @Resource
+    private CallService callService;
+
     /**
      * 当通道就绪后会调用此方法，通常我们会在这里做一些初始化操作
      *
@@ -66,6 +70,13 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         logger.info("有连接已经断开。。。");
+        Channel channel = ctx.channel();
+        Attribute<String> attribute = channel.attr(AttributeKey.valueOf(channel.id().toString()));
+        String userId = attribute.get();
+        if (userId != null && callService != null) {
+            // 通话中断线：视为挂断，清理对方浮窗与房间
+            callService.onUserDisconnect(userId);
+        }
         channelContextUtils.removeContext(ctx.channel());
     }
 
@@ -93,6 +104,9 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             if (messageType != null && Constants.WS_SYNC_MESSAGE_TYPE.equals(messageType)) {
                 // 客户端请求补推：按 sessionId 传 lastSeq，服务端查询 seq > lastSeq 的消息推回
                 handleSync(userId, json.getJSONObject("extendData"));
+            } else if (messageType != null && isCallMessageType(messageType)) {
+                // 语音/视频通话信令帧：交由 CallService 中继（不落库、不触发普通消息逻辑）
+                callService.handleCallFrame(userId, json);
             } else {
                 // 心跳或其他未知类型（含旧客户端残留的 -3 回执帧）：仅刷新心跳，静默忽略
                 redisComponet.saveUserHeartBeat(userId);
@@ -107,6 +121,20 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
      * 处理客户端 SYNC 帧：按 sessionId 下发 seq > lastSeq 的消息
      * extendData 格式: { "sync": { "sessionId1": lastSeq1, "sessionId2": lastSeq2 } }
      */
+    /**
+     * 判断是否为语音/视频通话信令帧（负区间，与聊天消息类型 0~19 不冲突）
+     */
+    private boolean isCallMessageType(Integer messageType) {
+        return Constants.WS_CALL_INVITE.equals(messageType)
+                || Constants.WS_CALL_ACCEPT.equals(messageType)
+                || Constants.WS_CALL_REJECT.equals(messageType)
+                || Constants.WS_CALL_SIGNAL.equals(messageType)
+                || Constants.WS_CALL_HANGUP.equals(messageType)
+                || Constants.WS_CALL_CANCEL.equals(messageType)
+                || Constants.WS_CALL_BUSY.equals(messageType)
+                || Constants.WS_CALL_JOIN.equals(messageType);
+    }
+
     private void handleSync(String userId, JSONObject extendData) {
         redisComponet.saveUserHeartBeat(userId);
         if (extendData == null) {

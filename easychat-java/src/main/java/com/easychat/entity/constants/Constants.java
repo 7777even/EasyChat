@@ -122,6 +122,16 @@ public class Constants {
      */
     public static final Integer WS_MOMENT_UNREAD_MESSAGE_TYPE = -8;
 
+    // ===== 语音/视频通话信令帧（WS 控制帧，负区间，避免与聊天消息类型 0~19 冲突） =====
+    public static final Integer WS_CALL_INVITE = -10;
+    public static final Integer WS_CALL_ACCEPT = -11;
+    public static final Integer WS_CALL_REJECT = -12;
+    public static final Integer WS_CALL_SIGNAL = -13;
+    public static final Integer WS_CALL_HANGUP = -14;
+    public static final Integer WS_CALL_CANCEL = -15;
+    public static final Integer WS_CALL_BUSY = -16;
+    public static final Integer WS_CALL_JOIN = -17;
+
     public static final String APP_UPDATE_FOLDER = "/app/";
 
     public static final String APP_NAME = "EasyChatSetup.";
