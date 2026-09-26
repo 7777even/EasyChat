@@ -53,7 +53,7 @@ public class FileUploadServiceImpl implements FileUploadService {
                     fileId, chunkIndex, totalChunks, chunk.getSize());
         } catch (Exception e) {
             logger.error("分片上传失败", e);
-            throw new BusinessException(ResponseCodeEnum.CODE_500);
+            throw new BusinessException(ResponseCodeEnum.CODE_1002);
         }
     }
 

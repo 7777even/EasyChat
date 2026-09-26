@@ -201,9 +201,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             if (!contactList.contains(chatMessage.getContactId())) {
                 UserContactTypeEnum userContactTypeEnum = UserContactTypeEnum.getByPrefix(chatMessage.getContactId());
                 if (UserContactTypeEnum.USER == userContactTypeEnum) {
-                    throw new BusinessException(ResponseCodeEnum.CODE_902);
+                    throw new BusinessException(ResponseCodeEnum.CODE_2301);
                 } else {
-                    throw new BusinessException(ResponseCodeEnum.CODE_903);
+                    throw new BusinessException(ResponseCodeEnum.CODE_2302);
                 }
             }
             // 群聊禁言校验：被群主/管理员禁言的成员不允许发言
@@ -361,10 +361,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     public void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile cover) {
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
         if (null == message) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         if (!message.getSendUserId().equals(userId)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         SysSettingDto sysSettingDto = redisComponet.getSysSetting();
@@ -409,7 +409,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         String contactId = message.getContactId();
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(contactId);
         if (UserContactTypeEnum.USER.getType().equals(contactTypeEnum) && !userInfoDto.getUserId().equals(message.getContactId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         if (UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)) {
             UserContactQuery userContactQuery = new UserContactQuery();
@@ -419,7 +419,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             userContactQuery.setStatus(UserContactStatusEnum.FRIEND.getStatus());
             Integer contactCount = userContactMapper.selectCount(userContactQuery);
             if (contactCount == 0) {
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
         }
         String month = DateUtil.format(new Date(message.getSendTime()), DateTimePatternEnum.YYYYMM.getPattern());
@@ -437,7 +437,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         File file = new File(folder.getPath() + "/" + fileRealName);
         if (!file.exists()) {
             logger.info("文件不存在");
-            throw new BusinessException(ResponseCodeEnum.CODE_602);
+            throw new BusinessException(ResponseCodeEnum.CODE_2104);
         }
         return file;
     }
@@ -447,12 +447,12 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // 查询消息
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
         if (message == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         // 检查是否是发送者本人
         if (!message.getSendUserId().equals(tokenUserInfoDto.getUserId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         // 检查消息类型，只有普通聊天消息和媒体消息可以撤回
@@ -460,14 +460,14 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 MessageTypeEnum.CHAT.getType(),
                 MessageTypeEnum.MEDIA_CHAT.getType()
         }, message.getMessageType())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         // 检查是否在2分钟内（120000毫秒）
         long currentTime = System.currentTimeMillis();
         long timeDiff = currentTime - message.getSendTime();
         if (timeDiff > 120000) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         // 更新消息类型为撤回消息

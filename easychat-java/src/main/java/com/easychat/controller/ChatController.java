@@ -70,7 +70,7 @@ public class ChatController extends ABaseController {
                                               Integer duration) {
         MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(messageType);
         if (null == messageTypeEnum || !ArrayUtils.contains(new Integer[]{MessageTypeEnum.CHAT.getType(), MessageTypeEnum.MEDIA_CHAT.getType()}, messageType)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         ChatMessage chatMessage = new ChatMessage();
@@ -124,7 +124,7 @@ public class ChatController extends ABaseController {
                 file = new File(momentPath);
                 if (!file.exists()) {
                     logger.error("朋友圈文件不存在: {}", momentPath);
-                    throw new BusinessException(ResponseCodeEnum.CODE_602);
+                    throw new BusinessException(ResponseCodeEnum.CODE_2104);
                 }
             } else if (!StringTools.isNumber(fileId)) {
                 // 处理头像文件
@@ -135,7 +135,7 @@ public class ChatController extends ABaseController {
                 }
                 file = new File(avatarPath);
                 if (!file.exists()) {
-                    throw new BusinessException(ResponseCodeEnum.CODE_602);
+                    throw new BusinessException(ResponseCodeEnum.CODE_2104);
                 }
             } else if ("group".equals(partType)) {
                 // 处理群文件
