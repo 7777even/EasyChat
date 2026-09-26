@@ -399,7 +399,7 @@ watch(
     align-items: center;
     gap: 10px;
     padding: 6px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--ec-divider-soft);
     .member-name {
       flex: 1;
       font-size: 14px;

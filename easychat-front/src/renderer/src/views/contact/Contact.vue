@@ -275,11 +275,11 @@ watch(
 <style lang="scss" scoped>
 .drag-panel {
   height: 25px;
-  background: #f7f7f7;
+  background: var(--ec-surface-soft);
 }
 .top-search {
   padding: 0px 10px 9px 10px;
-  background: #f7f7f7;
+  background: var(--ec-surface-soft);
   display: flex;
   align-items: center;
   .iconfont {

@@ -33,7 +33,7 @@ const props = defineProps({
     }
   }
   &:hover {
-    background: #ededed;
+    background: var(--ec-surface-soft);
   }
 }
 </style>

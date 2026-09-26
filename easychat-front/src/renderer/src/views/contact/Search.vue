@@ -190,7 +190,7 @@ const sendMessage2Contact = (item) => {
 .search-result-panel {
   .search-result {
     padding: 30px 20px 20px 20px;
-    background: #fff;
+    background: var(--ec-card-bg);
     border-radius: 5px;
     margin-top: 10px;
     position: relative;
@@ -209,7 +209,7 @@ const sendMessage2Contact = (item) => {
     border-radius: 5px;
     margin-top: 10px;
     padding: 10px;
-    background: #fff;
+    background: var(--ec-card-bg);
     text-align: center;
   }
 }
@@ -240,7 +240,7 @@ const sendMessage2Contact = (item) => {
 
   .keyword-result {
     margin-top: 10px;
-    background: #fff;
+    background: var(--ec-card-bg);
     border-radius: 5px;
     padding: 10px;
 
@@ -258,7 +258,7 @@ const sendMessage2Contact = (item) => {
       cursor: pointer;
 
       &:hover {
-        background: #f7f7f7;
+        background: var(--ec-surface-soft);
       }
 
       .keyword-meta {
