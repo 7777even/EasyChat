@@ -4,21 +4,21 @@
 }
 
 ::-webkit-scrollbar-track {
-    background: rgb(239, 239, 239);
+    background: var(--ec-scrollbar-track);
     border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #bfbfbf;
+    background: var(--ec-scrollbar-thumb);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #bfbfbf;
+    background: var(--ec-scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-corner {
-    background: #bfbfbf;
+    background: var(--ec-scrollbar-thumb);
 }
 
 :root {
@@ -29,12 +29,44 @@
     --blue: #007fff;
     --tag: #7BCDEF;
     --pink: #FF6699;
+
+    // ===== 自定义外壳主题变量（随 html.dark 联动，见文件底部 html.dark 块）=====
+    --ec-bg: #f5f5f5; // 主区域背景
+    --ec-sider-bg: #2e2e2e; // 左侧品牌栏（浅色模式下也偏深）
+    --ec-left-bg: #e6e5e5; // 布局左侧栏
+    --ec-right-bg: #f5f5f5; // 布局右侧内容区
+    --ec-border: #e5e5e5; // 通用描边
+    --ec-title-bg: #f7f7f7; // 标题栏/面板头背景
+    --ec-title-text: #161616; // 标题文字
+    --ec-hover: #d6d6d7; // 菜单项悬停
+    --ec-active: #c4c4c4; // 菜单项选中
+    --ec-chat-bg: #f5f5f5; // 聊天消息区背景
+    --ec-body-text: #636d7e; // 正文基础色
+    --ec-scrollbar-track: rgb(239, 239, 239);
+    --ec-scrollbar-thumb: #bfbfbf;
+}
+
+// ===== 深色模式：覆盖自定义外壳变量（Element Plus 组件由 dark/css-vars.css 自动接管）=====
+html.dark {
+    --ec-bg: #1e1e1e;
+    --ec-sider-bg: #161616;
+    --ec-left-bg: #202020;
+    --ec-right-bg: #1e1e1e;
+    --ec-border: #333333;
+    --ec-title-bg: #2a2a2a;
+    --ec-title-text: #e8e8e8;
+    --ec-hover: #383838;
+    --ec-active: #404040;
+    --ec-chat-bg: #1e1e1e;
+    --ec-body-text: #b0b0b0;
+    --ec-scrollbar-track: #2a2a2a;
+    --ec-scrollbar-thumb: #4a4a4a;
 }
 
 body {
     margin: 0px;
     padding: 0px;
-    color: #636d7e;
+    color: var(--ec-body-text);
     font-size: 14px;
 }
 

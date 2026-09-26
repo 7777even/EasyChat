@@ -17,15 +17,15 @@
   display: flex;
   .left-side-inner {
     width: 250px;
-    background: #e6e5e5;
-    border-color: #ddd;
+    background: var(--ec-left-bg);
+    border-color: var(--ec-border);
     border-style: solid;
     border-width: 0px 1px 0px 0px;
   }
   .right-content {
     flex: 1;
     height: calc(100vh - 2px);
-    background: #f5f5f5;
+    background: var(--ec-right-bg);
     width: 100%;
   }
 }

@@ -34,6 +34,15 @@
           <div class="tips">关闭后收到新消息将不再闪烁任务栏图标</div>
         </div>
       </div>
+      <div class="part-item">
+        <div class="part-title">外观主题</div>
+        <div class="part-content">
+          <el-radio-group v-model="theme" @change="themeChange">
+            <el-radio label="light">浅色</el-radio>
+            <el-radio label="dark">深色</el-radio>
+          </el-radio-group>
+        </div>
+      </div>
       <div class="logout">
         <el-button @click="logout">退出登录</el-button>
       </div>
@@ -54,6 +63,7 @@ import { ref, reactive, getCurrentInstance, nextTick, watch, computed, onMounted
 const { proxy } = getCurrentInstance()
 import { useRoute } from 'vue-router'
 const route = useRoute()
+import { applyTheme } from '@/utils/theme'
 
 const userInfo = ref({})
 
@@ -74,6 +84,16 @@ const showType = ref(0)
 // 默认开；挂载时经主进程 getSysSetting 读 user_setting.sysSetting.notifySwitch（缺失视为开）
 const notifySwitch = ref(true)
 
+// ===== 外观主题：浅色/深色（本地 user_setting.sysSetting.theme，缺失视为浅色）=====
+const theme = ref('light')
+const themeBeforeSave = ref('light')
+const themeChange = (value) => {
+  themeBeforeSave.value = theme.value
+  theme.value = value
+  applyTheme(value)
+  window.ipcRenderer.send('updateSysSetting', { theme: value })
+}
+
 const notifySwitchChange = (value) => {
   window.ipcRenderer.send('updateSysSetting', { notifySwitch: value })
 }
@@ -87,15 +107,21 @@ onMounted(() => {
     try {
       const parsed = JSON.parse(sysSetting)
       notifySwitch.value = parsed.notifySwitch === undefined ? true : Boolean(parsed.notifySwitch)
+      theme.value = parsed.theme === 'dark' ? 'dark' : 'light'
+      applyTheme(theme.value)
     } catch (error) {
       notifySwitch.value = true
+      theme.value = 'light'
+      applyTheme('light')
     }
   })
   //保存失败回弹原值
   window.ipcRenderer.on('updateSysSettingCallback', (e, result) => {
     if (!result || result.status !== 1) {
       notifySwitch.value = !notifySwitch.value
-      proxy.$message ? proxy.$message.error('提醒设置保存失败') : null
+      theme.value = themeBeforeSave.value
+      applyTheme(theme.value)
+      proxy.$message ? proxy.$message.error('设置保存失败') : null
     }
   })
 })

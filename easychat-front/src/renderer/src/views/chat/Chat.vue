@@ -1183,12 +1183,12 @@ const recallMessageHandler = async (messageId) => {
 <style lang="scss" scoped>
 .drag-panel {
   height: 25px;
-  background: #f7f7f7;
+  background: var(--ec-title-bg);
 }
 
 .top-search {
   padding: 0px 10px 9px 10px;
-  background: #f7f7f7;
+  background: var(--ec-title-bg);
   display: flex;
   align-items: center;
 
@@ -1208,7 +1208,7 @@ const recallMessageHandler = async (messageId) => {
 .chat-session-list {
   height: calc(100vh - 62px);
   overflow: hidden;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--ec-border);
 
   &:hover {
     overflow: auto;
@@ -1217,7 +1217,7 @@ const recallMessageHandler = async (messageId) => {
 
 .search-list {
   height: calc(100vh - 62px);
-  background: #f7f7f7;
+  background: var(--ec-title-bg);
   overflow: hidden;
 
   &:hover {
@@ -1234,7 +1234,7 @@ const recallMessageHandler = async (messageId) => {
     line-height: 60px;
     padding-left: 10px;
     font-size: 18px;
-    color: #000000;
+    color: var(--ec-title-text);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1271,8 +1271,8 @@ const recallMessageHandler = async (messageId) => {
 }
 
 .chat-panel {
-  border-top: 1px solid #ddd;
-  background: #f5f5f5;
+  border-top: 1px solid var(--ec-border);
+  background: var(--ec-chat-bg);
 
   .message-panel {
     padding: 10px 30px 0px 30px;

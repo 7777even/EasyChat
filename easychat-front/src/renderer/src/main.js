@@ -11,6 +11,8 @@ import "@/assets/cust-elementplus.scss";
 
 import "@/assets/icon/iconfont.css"
 import '@/assets/base.scss';
+// Element Plus 暗色主题变量（通过 <html>.dark 激活，配合 utils/theme.js 切换）
+import 'element-plus/theme-chalk/dark/css-vars.css'
 
 import WinOp from "@/components/WinOp.vue"
 import Avatar from "@/components/Avatar.vue"

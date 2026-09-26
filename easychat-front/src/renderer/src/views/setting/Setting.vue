@@ -55,19 +55,19 @@ const jump = (data) => {
 <style lang="scss" scoped>
 .title-panel {
   height: 60px;
-  background: #f7f7f7;
+  background: var(--ec-title-bg);
   text-align: center;
   line-height: 60px;
 }
 .menu-list {
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--ec-border);
   .menu-item {
     display: flex;
     align-items: center;
     padding: 10px;
     &:hover {
       cursor: pointer;
-      background: #d6d6d7;
+      background: var(--ec-hover);
     }
     .iconfont {
       font-size: 20px;
@@ -79,15 +79,15 @@ const jump = (data) => {
       justify-content: center;
     }
     .menu-name {
-      color: #000000;
+      color: var(--ec-title-text);
       margin-left: 10px;
       flex: 1;
     }
   }
   .menu-active {
-    background: #c4c4c4;
+    background: var(--ec-active);
     &:hover {
-      background: #c4c4c4;
+      background: var(--ec-active);
     }
   }
 }

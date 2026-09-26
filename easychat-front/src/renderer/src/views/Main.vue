@@ -64,6 +64,8 @@ const globalInfoStore = useGlobalInfoStore()
 import { useAvatarInfoStore } from '@/stores/AvatarUpdateStore'
 const avatarInfoStore = useAvatarInfoStore()
 
+import { applyTheme } from '@/utils/theme'
+
 const menuList = ref([
   {
     name: 'chat',
@@ -175,6 +177,20 @@ onMounted(() => {
 
   getSysSetting()
 
+  // 应用本地持久化的主题（浅色/深色），读取 user_setting.sysSetting.theme
+  window.ipcRenderer.send('getSysSetting')
+  window.ipcRenderer.on('getSysSettingCallback', (e, sysSetting) => {
+    if (!sysSetting) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(sysSetting)
+      applyTheme(parsed.theme === 'dark' ? 'dark' : 'light')
+    } catch (err) {
+      applyTheme('light')
+    }
+  })
+
   loadMomentUnread()
 
   // 朋友圈新通知：实时点亮红点
@@ -210,6 +226,7 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('reloadAvatar')
   window.ipcRenderer.removeAllListeners('momentNotify')
   window.ipcRenderer.removeAllListeners('momentUnread')
+  window.ipcRenderer.removeAllListeners('getSysSettingCallback')
 })
 
 watch(
@@ -225,19 +242,19 @@ watch(
 
 <style lang="scss" scoped>
 .main {
-  background: #ddd;
+  background: var(--ec-bg);
   display: flex;
   border-radius: 0px 3px 3px 0px;
   overflow: hidden;
   .left-sider {
     width: 55px;
-    background: #2e2e2e;
+    background: var(--ec-sider-bg);
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding-top: 35px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--ec-sider-bg);
     border-right: none;
     padding-bottom: 10px;
     .menu-list {
@@ -268,7 +285,7 @@ watch(
   .right-container {
     flex: 1;
     overflow: hidden;
-    border: 1px solid #ddd;
+    border: 1px solid var(--ec-border);
     border-left: none;
   }
 }
