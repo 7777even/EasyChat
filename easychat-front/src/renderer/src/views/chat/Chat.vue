@@ -43,6 +43,22 @@
         </div>
         <div class="title-actions">
           <span
+            class="iconfont no-drag"
+            :class="{ 'call-disabled': callStore.status !== 'idle' }"
+            title="语音通话"
+            @click="startCall(1)"
+          >
+            <el-icon><Phone /></el-icon>
+          </span>
+          <span
+            class="iconfont no-drag"
+            :class="{ 'call-disabled': callStore.status !== 'idle' }"
+            title="视频通话"
+            @click="startCall(2)"
+          >
+            <el-icon><VideoCamera /></el-icon>
+          </span>
+          <span
             v-if="currentChatSession.contactType == 1"
             class="iconfont icon-folder no-drag"
             title="群文件"
@@ -167,6 +183,8 @@ import {useUserInfoStore} from '@/stores/UserInfoStore'
 import {useMessageCountStore} from '@/stores/MessageCountStore'
 import {useContactStateStore} from '@/stores/ContactStateStore'
 import {useSysSettingStore} from '@/stores/SysSettingStore'
+import {useCallStore} from '@/stores/useCallStore'
+import {Phone, VideoCamera} from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -177,6 +195,8 @@ const userInfoStore = useUserInfoStore()
 const messageCountStore = useMessageCountStore()
 //系统设置（含新消息提醒开关 notifySwitch）
 const sysSettingStore = useSysSettingStore()
+//通话状态机（语音/视频）
+const callStore = useCallStore()
 
 //全局提醒开关：缺省视为开启
 const notifySwitchOn = () => {
@@ -1030,6 +1050,18 @@ const showMessageSearch = () => {
   }
 }
 
+// ===== 发起语音/视频通话（单聊 contactType=0 / 群聊 contactType=1）=====
+// mediaType: 1 语音 2 音视频。store 内部会拦截「已在通话中」的重复发起。
+const startCall = (mediaType) => {
+  if (callStore.status !== 'idle') return
+  if (!currentChatSession.value.contactId) return
+  callStore.startCall({
+    contactId: currentChatSession.value.contactId,
+    contactType: currentChatSession.value.contactType,
+    mediaType
+  })
+}
+
 // ===== 全局搜索：跨会话消息 + 联系人 + 群组 =====
 const globalSearchRef = ref()
 const openGlobalSearch = () => {
@@ -1280,6 +1312,12 @@ const recallMessageHandler = async (messageId) => {
       &:hover {
         color: #07c160;
       }
+    }
+
+    .call-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
     }
   }
 }

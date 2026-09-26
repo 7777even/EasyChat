@@ -39,11 +39,13 @@
     <Update></Update>
   </div>
   <WinOp></WinOp>
+  <CallWindow></CallWindow>
 </template>
 
 <script setup>
 import Update from './Update.vue'
 import Badge from '@/components/Badge.vue'
+import CallWindow from './chat/CallWindow.vue'
 import { ref, reactive, getCurrentInstance, nextTick, onUnmounted, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 const { proxy } = getCurrentInstance()
@@ -63,6 +65,8 @@ const globalInfoStore = useGlobalInfoStore()
 
 import { useAvatarInfoStore } from '@/stores/AvatarUpdateStore'
 const avatarInfoStore = useAvatarInfoStore()
+
+import { useCallStore } from '@/stores/useCallStore'
 
 import { applyTheme } from '@/utils/theme'
 
@@ -218,6 +222,13 @@ onMounted(() => {
   window.ipcRenderer.on('reloadAvatar', (e, fileId) => {
     avatarInfoStore.setFoceReload(fileId, false)
   })
+
+  // 通话信令帧：主进程经 WebSocket 收到后转发到此，由 useCallStore 统一分发
+  window.ipcRenderer.on('callMessage', (e, frame) => {
+    if (frame && frame.messageType != null) {
+      useCallStore().handleFrame(frame)
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -227,6 +238,7 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('momentNotify')
   window.ipcRenderer.removeAllListeners('momentUnread')
   window.ipcRenderer.removeAllListeners('getSysSettingCallback')
+  window.ipcRenderer.removeAllListeners('callMessage')
 })
 
 watch(
