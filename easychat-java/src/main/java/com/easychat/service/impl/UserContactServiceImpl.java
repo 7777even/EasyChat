@@ -397,7 +397,7 @@ public class UserContactServiceImpl implements UserContactService {
     public void removeGroupContact(String userId, String groupId, String contactId, UserContactStatusEnum statusEnum) {
         GroupInfo groupInfo = groupInfoMapper.selectByGroupId(groupId);
         if (null == groupInfo || !groupInfo.getGroupOwnerId().equals(userId)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         UserContact userContact = new UserContact();
         userContact.setStatus(statusEnum.getStatus());

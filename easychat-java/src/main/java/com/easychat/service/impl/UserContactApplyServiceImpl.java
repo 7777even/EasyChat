@@ -185,7 +185,7 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
     public Integer applyAdd(TokenUserInfoDto tokenUserInfoDto, String contactId, String contactType, String applyInfo) {
         UserContactTypeEnum typeEnum = UserContactTypeEnum.getByName(contactType);
         if (null == typeEnum) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         //申请人
         String applyUserId = tokenUserInfoDto.getUserId();
@@ -216,7 +216,7 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
         } else {
             UserInfo userInfo = userInfoMapper.selectByUserId(contactId);
             if (userInfo == null) {
-                throw new BusinessException(ResponseCodeEnum.CODE_600);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
             }
             joinType = userInfo.getJoinType();
         }
@@ -263,12 +263,12 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
     public void dealWithApply(String userId, Integer applyId, Integer status) {
         UserContactApplyStatusEnum statusEnum = UserContactApplyStatusEnum.getByStatus(status);
         if (null == statusEnum || UserContactApplyStatusEnum.INIT == statusEnum) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         UserContactApply applyInfo = this.userContactApplyMapper.selectByApplyId(applyId);
         if (applyInfo == null || !userId.equals(applyInfo.getReceiveUserId())) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         //更新申请信息 只能由待处理更新为其他状态
@@ -281,7 +281,7 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
         applyQuery.setStatus(UserContactApplyStatusEnum.INIT.getStatus());
         Integer count = userContactApplyMapper.updateByParam(updateInfo, applyQuery);
         if (count == 0) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
         if (UserContactApplyStatusEnum.PASS.getStatus().equals(status)) {
