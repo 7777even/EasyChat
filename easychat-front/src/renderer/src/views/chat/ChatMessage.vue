@@ -147,12 +147,12 @@ const emit = defineEmits([
 ])
 
 /**
- * 消息扩展数据（引用回复 / 转发来源），兼容对象与 JSON 字符串两种形态
+ * 消息扩展数据（引用回复 / 转发来源）
+ * 后端统一以 JSON 字符串落库与下发，此处解析为对象
  */
 const parseExtraData = () => {
   const extra = props.data.extraData
   if (!extra) return null
-  if (typeof extra === 'object') return extra
   try {
     return JSON.parse(extra)
   } catch (e) {
