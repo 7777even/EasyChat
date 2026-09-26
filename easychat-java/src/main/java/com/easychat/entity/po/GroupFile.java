@@ -48,6 +48,11 @@ public class GroupFile implements Serializable {
     private String uploadUserId;
 
     /**
+     * 上传人昵称（列表查询时由 user_info 关联带出，仅展示用）
+     */
+    private String uploadUserNickName;
+
+    /**
      * 上传时间毫秒
      */
     private Long createTime;
@@ -120,6 +125,14 @@ public class GroupFile implements Serializable {
 
     public String getUploadUserId() {
         return this.uploadUserId;
+    }
+
+    public void setUploadUserNickName(String uploadUserNickName) {
+        this.uploadUserNickName = uploadUserNickName;
+    }
+
+    public String getUploadUserNickName() {
+        return this.uploadUserNickName;
     }
 
     public void setCreateTime(Long createTime) {

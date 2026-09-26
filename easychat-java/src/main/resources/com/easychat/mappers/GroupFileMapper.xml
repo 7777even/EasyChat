@@ -13,6 +13,7 @@
         <result column="file_type" property="fileType"/>
         <result column="cover_path" property="coverPath"/>
         <result column="upload_user_id" property="uploadUserId"/>
+        <result column="uploadUserNickName" property="uploadUserNickName"/>
         <result column="create_time" property="createTime"/>
         <result column="status" property="status"/>
     </resultMap>
