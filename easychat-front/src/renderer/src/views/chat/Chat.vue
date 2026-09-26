@@ -105,6 +105,7 @@
                 @multiSelect="enterMultiSelect"
                 @toggleSelect="toggleMessageSelect"
                 @deleteMessage="deleteMessageHandler"
+                @reportMessage="reportMessageHandler"
               ></ChatMessage>
             </template>
           </div>
@@ -129,6 +130,7 @@
   <GroupFile ref="groupFileRef"></GroupFile>
   <MessageSearch ref="messageSearchRef" @jumpToMessage="jumpToMessage"></MessageSearch>
   <ForwardSelect ref="forwardSelectRef"></ForwardSelect>
+  <ReportDialog v-model="reportVisible" type="message" :messageId="reportTargetId"></ReportDialog>
   <GlobalSearch
     ref="globalSearchRef"
     @openSession="openSessionFromSearch"
@@ -156,6 +158,7 @@ import ChatMessageTime from './ChatMessageTime.vue'
 import ChatMessageSys from './ChatMessageSys.vue'
 import MessageSend from './MessageSend.vue'
 import ForwardSelect from './ForwardSelect.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 import GlobalSearch from './GlobalSearch.vue'
 import {ref, reactive, getCurrentInstance, nextTick, onMounted, onActivated, watch, onUnmounted} from 'vue'
 import {useRoute} from 'vue-router'
@@ -660,6 +663,14 @@ const deleteSelected = () => {
 const deleteMessageHandler = (message) => {
   messageList.value = messageList.value.filter((item) => item.messageId !== message.messageId)
   window.ipcRenderer.send('delLocalMessage', {messageId: message.messageId})
+}
+
+// 举报聊天消息：打开举报弹窗
+const reportVisible = ref(false)
+const reportTargetId = ref(null)
+const reportMessageHandler = (messageId) => {
+  reportTargetId.value = messageId
+  reportVisible.value = true
 }
 
 /**

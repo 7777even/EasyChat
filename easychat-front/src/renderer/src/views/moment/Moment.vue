@@ -67,11 +67,12 @@
               </span>
             </div>
           </div>
-          <el-dropdown v-if="item.userId === currentUserId" trigger="click" @command="(cmd) => handleMomentAction(cmd, item)">
+          <el-dropdown trigger="click" @command="(cmd) => handleMomentAction(cmd, item)">
             <i class="iconfont icon-more"></i>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="delete">删除</el-dropdown-item>
+                <el-dropdown-item v-if="item.userId === currentUserId" command="delete">删除</el-dropdown-item>
+                <el-dropdown-item v-if="item.userId !== currentUserId" command="report">举报</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -133,6 +134,11 @@
                 class="comment-del"
                 @click="deleteComment(item, comment)"
               >删除</span>
+              <span
+                v-if="comment.userId !== currentUserId"
+                class="comment-report"
+                @click="reportComment(item, comment)"
+              >举报</span>
             </div>
           </div>
         </div>
@@ -191,6 +197,14 @@
       :initial-index="previewStartIndex"
       @close="closeImageViewer"
     />
+
+    <!-- 举报弹窗 -->
+    <ReportDialog
+      v-model="reportVisible"
+      :type="reportType"
+      :momentId="reportMomentId"
+      :commentId="reportCommentId"
+    />
   </div>
 </template>
 
@@ -201,6 +215,7 @@ import PublishMoment from './PublishMoment.vue'
 import MomentDetail from './MomentDetail.vue'
 import MomentNotify from './MomentNotify.vue'
 import UserMoment from './UserMoment.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 
@@ -213,6 +228,18 @@ const publishMomentRef = ref(null)
 const momentDetailRef = ref(null)
 const momentNotifyRef = ref(null)
 const userMomentRef = ref(null)
+
+// 举报弹窗状态
+const reportVisible = ref(false)
+const reportType = ref('message')
+const reportMomentId = ref(null)
+const reportCommentId = ref(null)
+const openReport = (type, momentId, commentId = null) => {
+  reportType.value = type
+  reportMomentId.value = momentId
+  reportCommentId.value = commentId
+  reportVisible.value = true
+}
 
 // 朋友圈个人主页：点头像或昵称进入
 const openUserMoment = (moment) => {
@@ -251,6 +278,11 @@ const locateMoment = async (momentId) => {
   })
   if (!result) return
   momentDetailRef.value.show(result.data)
+}
+
+// 举报评论：打开举报弹窗（仅他人评论可举报）
+const reportComment = (moment, comment) => {
+  openReport('comment', moment.id, comment.id)
 }
 
 const deleteComment = (moment, comment) => {
@@ -553,6 +585,10 @@ const submitComment = async (moment) => {
 }
 
 const handleMomentAction = async (command, moment) => {
+  if (command === 'report') {
+    openReport('moment', moment.id)
+    return
+  }
   if (command === 'delete') {
     proxy.Confirm({
       message: '确定要删除这条朋友圈吗？',
@@ -691,6 +727,18 @@ onMounted(() => {
 }
 
 .comment-del {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+
+  &:hover {
+    color: #fa5151;
+    text-decoration: underline;
+  }
+}
+
+.comment-report {
   margin-left: 8px;
   font-size: 12px;
   color: #999;

@@ -36,6 +36,7 @@ const api = {
     updatePassword: "/userInfo/updatePassword",
     logout: "/userInfo/logout",
     sendMessage: "/chat/sendMessage",//发送消息
+    reportChat: "/report/chat",//举报聊天消息
     uploadFile: "/chat/uploadFile",//上传文件地址
     uploadChunk: "/upload/uploadChunk",//上传文件分片
     mergeChunks: "/upload/mergeChunks",//合并文件分片
@@ -62,6 +63,7 @@ const api = {
     likeMoment: "/moment/like",
     commentMoment: "/moment/comment",
     uploadMomentMedia: "/moment/uploadMedia",
+    reportMoment: "/report/moment", // 举报朋友圈动态/评论
     uploadMomentMediaChunk: "/moment/uploadMediaChunk",
     mergeMomentMediaChunks: "/moment/mergeMediaChunks",
     checkMomentMediaChunks: "/moment/checkMediaChunks",

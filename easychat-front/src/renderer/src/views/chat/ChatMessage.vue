@@ -142,7 +142,8 @@ const emit = defineEmits([
   'forwardMessage',
   'multiSelect',
   'toggleSelect',
-  'deleteMessage'
+  'deleteMessage',
+  'reportMessage'
 ])
 
 /**
@@ -245,6 +246,16 @@ const onContextMenu = (e) => {
       emit('deleteMessage', props.data)
     }
   })
+
+  // 举报：仅他人消息可举报
+  if (!isMyMessage) {
+    items.push({
+      label: '举报',
+      onClick: () => {
+        emit('reportMessage', props.data.messageId)
+      }
+    })
+  }
 
   ContextMenu.showContextMenu({
     x: e.x,
