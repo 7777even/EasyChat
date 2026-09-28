@@ -86,28 +86,62 @@ instance.interceptors.response.use(
         if (error.config && error.config.showLoading && loading) {
             loading.close();
         }
+        const reqCfg = error.config;
         // HTTP 非 2xx 但后端返回了 Result 结构（如 400/401/403 + {code, message}）：
         // 按业务错误处理，避免把真实错误信息误报为网络异常
-        const responseData = error.response && error.response.data;
-        if (responseData && responseData.code !== undefined) {
-            if (responseData.code == ErrorCode.TOKEN_EXPIRED) {
-                setTimeout(() => {
-                    window.ipcRenderer.send('reLogin')
-                }, 2000);
-                return Promise.reject({ showError: true, msg: "登录超时" });
+        const rejectByBody = (responseData) => {
+            if (responseData && responseData.code !== undefined) {
+                if (responseData.code == ErrorCode.TOKEN_EXPIRED) {
+                    setTimeout(() => {
+                        window.ipcRenderer.send('reLogin')
+                    }, 2000);
+                    return Promise.reject({ showError: true, msg: "登录超时" });
+                }
+                const showError = reqCfg ? reqCfg.showError !== false : true;
+                if (reqCfg && reqCfg.errorCallback) {
+                    reqCfg.errorCallback(responseData);
+                }
+                return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
             }
-            const showError = error.config ? error.config.showError !== false : true;
-            if (error.config && error.config.errorCallback) {
-                error.config.errorCallback(responseData);
+            // 开发环境打印详细错误
+            if (error && reqCfg) {
+                const { url, data, params } = reqCfg;
+                console.error('[Network Error]', url, { data, params });
             }
-            return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
+            return Promise.reject({ showError: true, msg: "网络异常，请检查后端是否启动" })
+        };
+
+        // blob / arraybuffer 请求（如 CSV 导出）的错误体是二进制而非 JSON，
+        // 需先按文本解出再判断 Result 结构，否则真实错误码会被误报为网络异常
+        const responseType = reqCfg && reqCfg.responseType;
+        const rawData = error.response && error.response.data;
+        if ((responseType === 'blob' || responseType === 'arraybuffer') && rawData) {
+            let textPromise;
+            if (typeof rawData === 'string') {
+                textPromise = Promise.resolve(rawData);
+            } else if (typeof rawData.text === 'function') {
+                textPromise = rawData.text();
+            } else {
+                try {
+                    textPromise = Promise.resolve(new TextDecoder().decode(rawData));
+                } catch (e) {
+                    textPromise = Promise.resolve(null);
+                }
+            }
+            return textPromise.then(
+                (text) => {
+                    let parsed = null;
+                    try {
+                        parsed = text ? JSON.parse(text) : null;
+                    } catch (e) {
+                        // 非 JSON 错误体（如网关 HTML 页），按网络异常处理
+                    }
+                    return rejectByBody(parsed);
+                },
+                () => rejectByBody(null)
+            );
         }
-        // 开发环境打印详细错误
-        if (error && error.config) {
-            const { url, data, params } = error.config;
-            console.error('[Network Error]', url, { data, params });
-        }
-        return Promise.reject({ showError: true, msg: "网络异常，请检查后端是否启动" })
+        return rejectByBody(rawData);
     }
 );
 
