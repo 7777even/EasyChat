@@ -73,7 +73,7 @@ const menuList = ref([
   {
     name: '举报管理',
     routeName: '举报管理',
-    icon: 'icon-warning',
+    icon: 'icon-image-error',
     path: '/admin/reportList',
     iconBgColor: '#ff976a'
   },
