@@ -63,7 +63,7 @@ AdminSensitiveWordController ──> SensitiveWordAdminService ──> Sensitive
 
 - 鉴权: 五端点全部 `checkAdmin=true`，非管理员 CODE_404（与举报管理端一致）
 - 数据权限: 词库为全局运营数据，不区分用户归属；仅管理员可读写
-- 输入校验: `@Valid` 校验 `word` 非空长度 ≤64、`level∈{1,2,3}`、`status∈{0,1}`；导入逐行同规则校验，越界行计失败
+- 输入校验: `@Valid` 校验 `word` 非空长度 ≤50（订正 2026-09-28：原文 ≤64 系笔误，DB 列为 `varchar(50)`，以 50 为准）、`level∈{1,2,3}`、`status∈{0,1}`；导入逐行同规则校验，越界行计失败
 - SQL 注入防护: 全 `#{}` 绑定；导入批量插入用 `foreach` 参数绑定，无字符串拼接
 - csv 安全: 导出 UTF-8 BOM + 对 `=+-@` 开头值前置单引号（对齐 chat-record-export 既有防护）
 
