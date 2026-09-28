@@ -103,9 +103,9 @@
 
 | # | 发现 | 定性 | 处置 |
 |---|---|---|---|
-| 1 | 清单 3 被拒 Confirm 的确认按钮复用**「重新申请」**（与好友申请共用组件），消息被拒语境下语义不符 | 文案问题，不影响功能 | 如实记录，待人工定稿后单独立项 |
+| 1 | 清单 3 被拒 Confirm 的确认按钮复用**「重新申请」**（与好友申请共用组件），消息被拒语境下语义不符 | 文案问题，不影响功能 | ~~待人工定稿后单独立项~~ → **2026-09-28 已修**：`MessageSend.vue` 仅 2301/2302 联系人类错误弹「重新申请」，其余业务码（含 2701）改「我知道了」且不带取消按钮（`33b055a`） |
 | 2 | `MessageSend.vue` 草稿 `watch` 引用后置声明的 `const msgContent`（TDZ），聊天页脚本异常 → 页面空白、无法发消息 | L1 缺陷，**已修复** | 随本次 `fix(chat)` 提交；修复后登录/开会话/发送链路实测通过 |
-| 3 | 主进程 `src/main/db/ADB.js#update()` 在 `data` 全为 `undefined/null` 时拼出 `update <t> set  where ...` → `SQLITE_ERROR: near "where": syntax error` 未捕获异常，弹原生模态框**阻塞主进程事件循环**（触发点：跨端会话同步帧带 `draft=null` 落 `ChatSessionUserModel#updateSessionAttr`） | **崩溃级缺陷，本次未修** | 不越权修复；建议单独立项：`ADB.js` 空列守卫 + `updateSessionAttr` 空值不落库 |
+| 3 | 主进程 `src/main/db/ADB.js#update()` 在 `data` 全为 `undefined/null` 时拼出 `update <t> set  where ...` → `SQLITE_ERROR: near "where": syntax error` 未捕获异常，弹原生模态框**阻塞主进程事件循环**（触发点：跨端会话同步帧带 `draft=null` 落 `ChatSessionUserModel#updateSessionAttr`） | **崩溃级缺陷，本次未修** | ~~不越权修复；建议单独立项~~ → **2026-09-28 已修**：`ADB.js` 空 set/空 where 短路返回 0 + `updateSessionAttr` 空值不落库（`ae7b86a`），守卫单测 4/4 PASS |
 | 4 | 连续删除两词时走查脚本 `querySelector('.el-message-box')` 命中前一弹层残留节点，第二个确认框未被确认 → 正文残留「走查」字样，`列表无走查残留` 断言瞬时 FAIL | 自动化竞态，非产品缺陷 | 已点「取消」关闭残留弹层并复核终态（见上「终态复核」） |
 
 > 发现 3 的现象旁证：模态框弹出即冻结 Electron 主进程消息循环，CDP inspector 全程无回包（表现为「截图后假死」）；经读窗口标题 `Error` + UI Automation 取错误文本定位为 SQL 拼接问题，与截图链路无关。
