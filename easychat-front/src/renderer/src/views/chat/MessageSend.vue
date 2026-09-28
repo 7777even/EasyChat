@@ -246,7 +246,8 @@ const searchAddRef = ref()
 const addContact = (contactId, code) => {
   searchAddRef.value.show({
     contactId,
-    contactType: code == 902 ? 'USER' : 'GROUP'
+    //902 是已下线的旧码，现码：2301 非好友（USER）/ 2302 不在群（GROUP）
+    contactType: code == 2301 ? 'USER' : 'GROUP'
   })
 }
 
@@ -303,12 +304,15 @@ const sendMessageDo = async (
     },
     showError: false,
     errorCallback: (responseData) => {
+      //仅联系人类失败（2301 非好友 / 2302 不在群）才走「重新申请」加好友流程；
+      //其余业务拦截（如 2701 敏感词、文件类校验）只做提示，不触发申请动作
+      const code = responseData.code
+      const isContactApply = code == 2301 || code == 2302
       proxy.Confirm({
         message: responseData.message || responseData.info,
-        okfun: () => {
-          addContact(props.currentChatSession.contactId, responseData.code)
-        },
-        okText: '重新申请'
+        okfun: isContactApply ? () => addContact(props.currentChatSession.contactId, code) : undefined,
+        okText: isContactApply ? '重新申请' : '我知道了',
+        showCancelBtn: isContactApply
       })
     }
   })
