@@ -149,6 +149,9 @@ defineExpose({
   clearQuote
 })
 
+//发送消息（需先于下方草稿 watch 声明，否则 setup 阶段 TDZ 报错导致整页白屏）
+const msgContent = ref('')
+
 // ===== 会话草稿：切会话时保存 / 恢复（跨端同步，服务端真源） =====
 let draftContactId = null
 let draftTimer = null
@@ -189,9 +192,6 @@ const saveDraft = (contactId, draft) => {
 }
 
 const activeEmoji = ref('笑脸')
-
-//发送消息
-const msgContent = ref('')
 
 const emit = defineEmits(['sendMessage4Local', 'showSearch'])
 const sendMessage = async (e) => {
