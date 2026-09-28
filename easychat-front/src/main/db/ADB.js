@@ -165,6 +165,12 @@ const update = (tableName, data, paramData) => {
             whereColumns.push(`${columnsMap[item]} = ?`);
         }
     }
+    //空 set / 空 where 都拼不出合法且安全的 SQL：前者报 SQLITE_ERROR(near "where") 并弹原生框阻塞主进程，
+    //后者会退化成全表更新。此处直接短路不写库，返回 0 与 run() 的受影响行数口径一致。
+    if (dbColumns.length === 0 || whereColumns.length === 0) {
+        console.warn(`update ${tableName} 跳过执行：无可更新列=${dbColumns.length}，where 条件列=${whereColumns.length}`);
+        return Promise.resolve(0);
+    }
     const sql = `update ${tableName} set ${dbColumns.join(",")} ${whereColumns.length > 0 ? ' where ' : ' '} ${whereColumns.join(" and ")}`;
     return run(sql, params);
 }

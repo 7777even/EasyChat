@@ -185,6 +185,10 @@ const updateSessionAttr = (contactId, attrName, attrValue) => {
     if (!allowKeys[attrName]) {
         return Promise.resolve();
     }
+    //同步帧可能不带值（null / undefined，如对端未设置该项），落库会拼出空 set 子句，直接跳过
+    if (attrValue === null || attrValue === undefined) {
+        return Promise.resolve();
+    }
     const paramData = {
         userId: store.getUserId(),
         contactId
