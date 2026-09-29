@@ -198,6 +198,14 @@ const updateSessionAttr = (contactId, attrName, attrValue) => {
     return update("chat_session_user", sessionInfo, paramData);
 }
 
+//管理端删除帧（20）条件预览占位：仅改写 last_message，
+//不刷 last_receive_time（防会话重排）、不计 no_read_count（防未读脏增）——ADR-004
+const updateSessionPreviewOnly = (contactId, lastMessage) => {
+    const sql = "update chat_session_user set last_message = ? where user_id = ? and contact_id = ?";
+    const params = [lastMessage, store.getUserId(), contactId];
+    return run(sql, params);
+}
+
 
 export {
     updateSessionInfo4Message,
@@ -212,5 +220,6 @@ export {
     updateGroupName,
     topChatSession,
     updateStatus,
-    updateSessionAttr
+    updateSessionAttr,
+    updateSessionPreviewOnly
 }
