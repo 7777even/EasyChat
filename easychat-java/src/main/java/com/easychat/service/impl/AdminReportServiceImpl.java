@@ -33,6 +33,7 @@ import com.easychat.mappers.ReportAuditLogMapper;
 import com.easychat.mappers.ReportReadMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.service.AdminReportService;
+import com.easychat.service.ChatMessageService;
 import com.easychat.service.UserInfoService;
 import org.springframework.stereotype.Service;
 
@@ -60,6 +61,8 @@ public class AdminReportServiceImpl implements AdminReportService {
     private UserInfoMapper<UserInfo, UserInfoQuery> userInfoMapper;
     @Resource
     private UserInfoService userInfoService;
+    @Resource
+    private ChatMessageService chatMessageService;
 
     @Override
     public PaginationResultVO<AdminReportVO> loadReport(ReportQuery query) {
@@ -123,13 +126,17 @@ public class AdminReportServiceImpl implements AdminReportService {
         Long now = System.currentTimeMillis();
 
         if (ReportTypeEnum.MESSAGE.getCode().equals(reportType)) {
+            if (HandleActionEnum.DELETE_CONTENT.equals(action)) {
+                // ADR-002：真实逻辑删除（delete_flag 置位 + 预览占位 + 20 帧）。
+                // 先删除后落处置记录，删除结果写入 handleNote（报告行与审计日志同时可溯）。
+                boolean newlyDeleted = chatMessageService.adminDeleteMessage(row.getTargetId(), admin);
+                handleNote = appendNote(handleNote, newlyDeleted
+                        ? "已执行逻辑删除（delete_flag 置位）并推送 20 帧删除通知"
+                        : "目标消息不存在或此前已删除，幂等跳过");
+            }
             MessageReport r = new MessageReport();
             applyHandle(r, status, admin.getUserId(), now, handleNote, handleAction);
             messageReportMapper.updateById(r, reportId);
-            if (HandleActionEnum.DELETE_CONTENT.equals(action)) {
-                // 聊天消息无删除状态位，仅记录，不物理删除
-                handleNote = appendNote(handleNote, "聊天消息无删除状态位，未执行物理删除");
-            }
             if (HandleActionEnum.BAN_PUBLISHER.equals(action)) {
                 ChatMessage msg = selectMessage(row.getTargetId());
                 if (msg != null && msg.getSendUserId() != null) {
@@ -244,10 +251,8 @@ public class AdminReportServiceImpl implements AdminReportService {
         if (messageId == null) {
             return null;
         }
-        ChatMessageQuery q = new ChatMessageQuery();
-        q.setMessageId(messageId);
-        List<ChatMessage> list = chatMessageMapper.selectList(q);
-        return (list != null && !list.isEmpty()) ? list.get(0) : null;
+        // PK 读（不进 query_condition）：已删消息的举报详情/封禁分支仍能读到原文（管理端证据链）
+        return chatMessageMapper.selectByMessageId(messageId);
     }
 
     private String nickName(String userId) {
