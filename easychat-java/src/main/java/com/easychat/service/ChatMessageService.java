@@ -85,6 +85,17 @@ public interface ChatMessageService {
     MessageSendDto recallMessage(Long messageId, TokenUserInfoDto tokenUserInfoDto);
 
     /**
+     * 管理端删除消息（举报处置 DELETE_CONTENT）：
+     * delete_flag 置位 + 会话最新消息预览占位 + 事务后推 20 ADMIN_DELETE 帧
+     * （单聊双方 + 群离线成员离线缓冲，ADR-002/003/004）。
+     *
+     * @param messageId 消息 ID
+     * @param admin     处置管理员（审计上下文）
+     * @return true=本次新删除；false=消息不存在或此前已删除（幂等跳过，不改写不重推）
+     */
+    boolean adminDeleteMessage(Long messageId, TokenUserInfoDto admin);
+
+    /**
      * 搜索消息
      */
     PaginationResultVO<ChatMessage> searchMessage(ChatMessageQuery query, String keyword, String sendUserId,

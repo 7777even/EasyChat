@@ -57,6 +57,7 @@ CREATE TABLE `chat_message`  (
   `extra_data` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '消息扩展数据JSON（引用/转发/@）',
   `at_user_ids` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '被@的用户ID，逗号分隔',
   `duration` int(11) NULL DEFAULT NULL COMMENT '语音/视频时长秒',
+  `delete_flag` bigint(20) NOT NULL DEFAULT 0 COMMENT '0=存活，非0=删除时间戳ms',
   PRIMARY KEY (`message_id`) USING BTREE,
   INDEX `idx_session_id`(`session_id`) USING BTREE,
   INDEX `idx_send_user_id`(`send_user_id`) USING BTREE,

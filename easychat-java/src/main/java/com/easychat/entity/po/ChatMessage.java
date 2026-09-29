@@ -99,6 +99,11 @@ public class ChatMessage implements Serializable {
      */
     private Integer duration;
 
+    /**
+     * 删除标记：0=存活，非0=删除时间戳ms（管理端消息删除位，ADR-001）
+     */
+    private Long deleteFlag;
+
 
     public void setMessageId(Long messageId) {
         this.messageId = messageId;
@@ -242,6 +247,14 @@ public class ChatMessage implements Serializable {
 
     public void setDuration(Integer duration) {
         this.duration = duration;
+    }
+
+    public Long getDeleteFlag() {
+        return deleteFlag;
+    }
+
+    public void setDeleteFlag(Long deleteFlag) {
+        this.deleteFlag = deleteFlag;
     }
 
     @Override

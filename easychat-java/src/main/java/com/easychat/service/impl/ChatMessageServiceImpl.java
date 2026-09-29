@@ -29,6 +29,7 @@ import com.easychat.service.GroupInfoService;
 import com.easychat.service.SensitiveWordService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.DateUtil;
+import com.easychat.utils.JsonUtils;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
@@ -37,6 +38,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
@@ -406,6 +410,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public File downloadFile(TokenUserInfoDto userInfoDto, Long messageId, Boolean cover) {
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
+        // 已删/不存在 → 消息不存在（ADR-002 守卫；已删文件不提供下载，原文只留管理端证据链）
+        if (message == null || isDeleted(message)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2201);
+        }
         String contactId = message.getContactId();
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(contactId);
         if (UserContactTypeEnum.USER.getType().equals(contactTypeEnum) && !userInfoDto.getUserId().equals(message.getContactId())) {
@@ -448,6 +456,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
         if (message == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        // 已被管理端删除的消息不可撤回（ADR-002 守卫，置于既有校验之前）
+        if (isDeleted(message)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2201);
         }
 
         // 检查是否是发送者本人
@@ -492,6 +504,120 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         messageHandler.sendMessage(recallNotify);
 
         return recallNotify;
+    }
+
+    /**
+     * 管理端删除消息（举报处置 DELETE_CONTENT）。见 openspec 2026-09-29-admin-message-delete ADR-002/003/004：
+     * delete_flag 置位（事务内）→ 最新消息预览占位（事务内）→ 事务后推 20 帧（仿 recall「先 update 后 push」）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean adminDeleteMessage(Long messageId, TokenUserInfoDto admin) {
+        if (messageId == null) {
+            return false;
+        }
+        // PK 读（不进 query_condition），管理端证据链保留原文
+        ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
+        if (message == null) {
+            return false;
+        }
+        if (isDeleted(message)) {
+            // 幂等守卫：已删不再改写、不再重推
+            logger.info("管理端删除幂等跳过 messageId={}, admin={}", messageId,
+                    admin == null ? null : admin.getUserId());
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        ChatMessage patch = new ChatMessage();
+        patch.setDeleteFlag(now);
+        chatMessageMapper.updateByMessageId(patch, messageId);
+
+        // ADR-004：被删消息是会话最新（send_time >= last_receive_time）才改写预览占位；
+        // last_receive_time 不动（不改变会话排序）。客户端本地预览由 20 帧 lastMessage 同步。
+        // 事实注记：服务端 chat_session_user 无 last_message 列（PO 该字段为 JOIN 别名），
+        // 服务端预览占位只落 chat_session（单源），与 saveMessage 的预览写入路径一致。
+        String tombstone = "该消息已被管理员删除";
+        String lastMessage = null;
+        ChatSession chatSession = chatSessionMapper.selectBySessionId(message.getSessionId());
+        if (chatSession != null && chatSession.getLastReceiveTime() != null
+                && message.getSendTime() != null
+                && message.getSendTime() >= chatSession.getLastReceiveTime()) {
+            lastMessage = tombstone;
+            ChatSession sessionPatch = new ChatSession();
+            sessionPatch.setLastMessage(tombstone);
+            chatSessionMapper.updateBySessionId(sessionPatch, message.getSessionId());
+        }
+
+        // 20 帧：sendUserId=原发送者（非处置管理员），否则接收方会把副本转成与管理员的会话
+        MessageSendDto deleteDto = new MessageSendDto();
+        deleteDto.setMessageId(messageId);
+        deleteDto.setMessageType(MessageTypeEnum.ADMIN_DELETE.getType());
+        deleteDto.setSessionId(message.getSessionId());
+        deleteDto.setContactId(message.getContactId());
+        deleteDto.setContactType(message.getContactType());
+        deleteDto.setSendUserId(message.getSendUserId());
+        deleteDto.setSendUserNickName(message.getSendUserNickName());
+        deleteDto.setSendTime(now);
+        deleteDto.setMessageContent(tombstone);
+        deleteDto.setLastMessage(lastMessage);
+
+        // 事务后推送：提交成功才发帧，避免回滚后客户端已墓碑；回滚/异常时客户端未动，自愈一致
+        Runnable notifyTask = () -> {
+            // 单聊：send2User 内含接收方在线直推/离线入缓冲 + 发送方副本（14|20）
+            // 群聊：sendMsg2Group 覆盖在线成员
+            messageHandler.sendMessage(deleteDto);
+            // 群聊离线成员逐个入离线缓冲（ADR-003 增强③）
+            pushGroupOfflineMembers(message, deleteDto);
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notifyTask.run();
+                }
+            });
+        } else {
+            notifyTask.run();
+        }
+        logger.info("管理端删除消息完成 messageId={}, admin={}, 最新预览占位={}", messageId,
+                admin == null ? null : admin.getUserId(), lastMessage != null);
+        return true;
+    }
+
+    /**
+     * 群聊删除补推：sendMsg2Group 只广播在线成员通道，对未拿到在线帧的群成员逐个入离线缓冲
+     * （帧保持 contactId=群ID 未转换，重连 replay 由 applyContactConvert 规则②防脏会话）。
+     */
+    private void pushGroupOfflineMembers(ChatMessage message, MessageSendDto deleteDto) {
+        if (!UserContactTypeEnum.GROUP.getType().equals(message.getContactType())) {
+            return;
+        }
+        UserContactQuery query = new UserContactQuery();
+        query.setContactId(message.getContactId());
+        query.setContactType(UserContactTypeEnum.GROUP.getType());
+        query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+        List<UserContact> members = userContactMapper.selectList(query);
+        if (members == null || members.isEmpty()) {
+            return;
+        }
+        String json = JsonUtils.convertObj2Json(deleteDto);
+        int offlineCount = 0;
+        for (UserContact member : members) {
+            if (!channelContextUtils.isUserOnline(member.getUserId())) {
+                redisComponet.pushOfflineMessage(member.getUserId(), json);
+                offlineCount++;
+            }
+        }
+        logger.info("群删除帧离线成员补推 groupId={}, 成员={}, 离线入缓冲={}", message.getContactId(),
+                members.size(), offlineCount);
+    }
+
+    /**
+     * 已被管理端删除（delete_flag > 0）
+     */
+    private static boolean isDeleted(ChatMessage message) {
+        return message != null && message.getDeleteFlag() != null && message.getDeleteFlag() > 0;
     }
 
 
@@ -545,7 +671,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public PaginationResultVO<ChatMessage> locateMessage(Long messageId, Integer pageSize) {
         ChatMessage target = chatMessageMapper.selectByMessageId(messageId);
-        if (target == null) {
+        if (target == null || isDeleted(target)) {
+            // 已删消息不可被定位跳转（ADR-002 守卫；分页查询本身也被 delete_flag=0 过滤兜底）
             throw new BusinessException(ResponseCodeEnum.CODE_2201);
         }
         // 以目标消息为锚点，取其之后（更新）的一页，保证目标在页内

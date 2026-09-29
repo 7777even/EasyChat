@@ -41,6 +41,8 @@
         <result column="at_user_ids" property="atUserIds"/>
         <!--语音/视频时长秒-->
         <result column="duration" property="duration"/>
+        <!--删除标记 0=存活 非0=删除时间戳ms-->
+        <result column="delete_flag" property="deleteFlag"/>
     </resultMap>
 
 
@@ -49,7 +51,7 @@
         message_id
         ,session_id,message_type,message_content,send_user_id,
 		 send_user_nick_name,send_time,contact_id,contact_type,file_size,
-		 file_name,file_type,status,seq,client_id,extra_data,at_user_ids,duration
+		 file_name,file_type,status,seq,client_id,extra_data,at_user_ids,duration,delete_flag
     </sql>
 
     <sql id="base_condition_filed">
@@ -124,6 +126,9 @@
     <!-- 通用查询条件列-->
     <sql id="query_condition">
         <where>
+            <!-- 管理端消息删除位（ADR-003）：用户侧查询无条件过滤已删消息。
+                 无 <if> 开关、不引用任何 query 字段 —— HTTP 层无法构造绕过；${} 零使用。 -->
+            and delete_flag = 0
             <include refid="base_condition_filed"/>
             <if test="query.sessionIdFuzzy!= null  and query.sessionIdFuzzy!=''">
                 and session_id like concat('%', #{query.sessionIdFuzzy}, '%')
@@ -641,6 +646,9 @@
             </if>
             <if test="bean.clientId != null">
                 client_id = #{bean.clientId},
+            </if>
+            <if test="bean.deleteFlag != null">
+                delete_flag = #{bean.deleteFlag},
             </if>
         </set>
         where message_id=#{messageId}
