@@ -4,7 +4,8 @@ import { saveMessage, saveMessageBatch, updateMessage, existsMessage } from "./d
 import {
     saveOrUpdateChatSessionBatch4Init, saveOrUpdate4Message,
     updateGroupName, delChatSession, selectUserSessionByContactId,
-    updateSessionBySessionId, topChatSession, updateSessionAttr
+    updateSessionBySessionId, topChatSession, updateSessionAttr,
+    updateSessionPreviewOnly
 } from "./db/ChatSessionUserModel"
 import { updateContactNoReadCount } from "./db/UserSetting"
 import { flashOnNewMessage } from "./notification"
@@ -293,6 +294,40 @@ const createWs = () => {
                     });
                 }
                 break;
+            case 20: {
+                // 管理端删除消息（墓碑）：本地行墓碑化 + 条件预览占位；
+                // 不计未读、不闪通知、不放提示音（ADR-002/003/004）
+                // 防御：单聊副本 contactId 异常为「当前用户自己」时按发送方修正（与 14 帧同款）
+                if (message.contactType == 0 && message.sendUserId
+                    && String(message.contactId) === String(store.getUserId())
+                    && String(message.sendUserId) !== String(store.getUserId())) {
+                    message.contactId = message.sendUserId;
+                    if (!message.contactName) {
+                        message.contactName = message.sendUserNickName;
+                    }
+                }
+                // 条件预览：仅帧带 lastMessage 才改写占位（不刷 last_receive_time、不计未读，ADR-004）
+                if (message.lastMessage) {
+                    await updateSessionPreviewOnly(message.contactId, message.lastMessage);
+                }
+                // 本地行墓碑化：已有则更新、缺行（离线错过在线帧）则补插（仿 14 帧）
+                const tombstoneInfo = {
+                    messageType: 20,
+                    messageContent: message.messageContent || "该消息已被管理员删除",
+                    status: 1
+                };
+                const exists20 = await existsMessage(message.messageId);
+                if (exists20 != null && exists20.messageId != null) {
+                    await updateMessage(tombstoneInfo, { messageId: message.messageId });
+                } else {
+                    await saveMessage(Object.assign({}, message, tombstoneInfo));
+                }
+                // 转发渲染进程（extendData=本地会话行，供 Chat.vue 会话内墓碑渲染）
+                const dbSession20 = await selectUserSessionByContactId(message.contactId);
+                message.extendData = dbSession20;
+                sender.send("reciveMessage", message);
+                break;
+            }
         }
     }
 
