@@ -105,7 +105,7 @@
 | `ADB.js` | 连接管理 |
 | `ChatMessageModel.js` | 消息本地持久化 + 分页 |
 | `ChatSessionUserModel.js` | 会话-用户关联 + 未读计数 |
-| `Tables.js` | 表结构 DDL |
+| `Tables.js` | 表结构 DDL；`chat_session_user` 含 `top_type`/`no_disturb`/`draft` 三列（后两列系 2026-09-29 补：此前缺失导致草稿与免打扰本地写入被列映射过滤丢弃、重启不恢复），存量库由 `alter_tables` 启动时自动 ALTER |
 | `UserSetting.js` | 用户本地配置读写 |
 
 ## 8. Redis Key 全表
@@ -215,3 +215,5 @@
 > | 2026-09-26 | 聊天记录备份升级为**跨会话全量**：设置页新增「数据备份」（`/setting/dataBackup`，`DataBackup.vue`）支持 TXT/CSV 一键备份全部会话；`utils/cloudBackup.js` 串行逐会话用 `loadHistoryMessage` 游标翻页取全（pageSize=100、失败会话跳过、总量软上限 200000）；主进程 `exportChat.js` 新增 `exportChatBackup()`（TXT 按会话分段 / CSV 增「会话」列）+ 新 IPC 通道 `exportChatBackup`（已注册）。**后端零改动**，复用既有接口与归属校验。活体冒烟 12/12 PASS（2 会话/31 条），GUI 交互留手动 | openspec 2026-09-26-chat-backup-export |
 > | 2026-09-27 | 深色模式漏网补齐：上一轮只清了 `chat/` 与 `moment/`，本轮把 `contact/`（Search/Contact/ContactSearchResult/GroupDetail）、`admin/`（Admin/ReportList）、`Login`、`Update`、`show/ShowMedia`、`setting/FileManage`、`components/AvatarUpload` 共 11 个文件 19 处硬编码浅色背景/描边换成 `--ec-*` 变量。至此全仓该类硬编码浅色**仅剩 base.scss 变量定义本身**；强调色与白字（`color:#fff` 24 处）有意保留 | 遗留项清理 |
 > | 2026-09-27 | 消息列表改为**自研不定高虚拟滚动**：新增 `views/chat/MessageVirtualList.vue`（ResizeObserver 实测每条高度 + 偏移表 + 二分定位），算法抽到 `utils/virtualListCore.mjs`（纯函数，15/15 算法验证通过）；`Chat.vue` 不再全量 `v-for` 渲染 `messageList`。因不可见项无真实 DOM，4 处 `scrollIntoView`/`getElementById` 定位已改为按 index 定位（`scrollToMessage`），原 `#message-panel` 滚动监听移除（改由组件 `@scroll`/`@load-more`）。**滚动手感（上翻是否跳动、图片加载后是否抖）需本机实测确认，沙箱无 GUI 无法覆盖** | 遗留项清理 |
+> | 2026-09-29 | 敏感词走查两项遗留缺陷修复：① `ADB.js#update()` 空 set/空 where 短路返回 0（原先拼出 `update t set  where` 报 SQLITE_ERROR 并弹原生框阻塞主进程），`updateSessionAttr` 空值不落库；② 发送失败仅 2301/2302 联系人类错误弹「重新申请」，其余业务码（含 2701 敏感词）改「我知道了」，并订正旧码 `902`→`2301` | 敏感词走查发现 #1/#3 |
+> | 2026-09-29 | **本地 SQLite `chat_session_user` 补列（前端 L4，人工已确认）**：新增 `no_disturb` 与 `draft` 两列（`add_tables` 建新库 + `alter_tables` 迁存量库）。此前两列缺失，`saveSessionDraft`/`setSessionNoDisturb` 与服务端 `-7` 同步帧的写入均被列映射静默过滤，导致**重启后草稿不恢复、免打扰状态丢失**（通知抑制与菜单状态读 `undefined`）。迁移验证 5/5 PASS（列存在 + 读写往返 + null 守卫不回归） | 人工确认 L4 关卡 |
