@@ -28,6 +28,8 @@ const add_tables = [
     "   no_read_count integer default 0," +
     "   member_count integer," +
     "   top_type integer default 0," +
+    "   no_disturb integer default 0," +
+    "   draft varchar default null," +
     "   primary key (user_id, contact_id)" +
     ");",
     "create table if not exists user_setting (" +
@@ -53,6 +55,17 @@ const alter_tables = [
         field: "email",
         sql: "alter table user_setting add column email varchar"
     } */
+    //存量库 chat_session_user 缺草稿/免打扰两列（跨端同步与本地持久化写入会被列映射过滤丢弃）
+    {
+        tableName: "chat_session_user",
+        field: "no_disturb",
+        sql: "alter table chat_session_user add column no_disturb integer default 0"
+    },
+    {
+        tableName: "chat_session_user",
+        field: "draft",
+        sql: "alter table chat_session_user add column draft varchar"
+    }
 ];
 
 export {
