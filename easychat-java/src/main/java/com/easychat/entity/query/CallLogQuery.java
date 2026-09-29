@@ -40,6 +40,16 @@ public class CallLogQuery extends BaseParam {
      */
     private Integer status;
 
+    /**
+     * 记录创建时间起（毫秒，null=不限制）
+     */
+    private Long startTime;
+
+    /**
+     * 记录创建时间止（毫秒，null=不限制）
+     */
+    private Long endTime;
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -94,5 +104,21 @@ public class CallLogQuery extends BaseParam {
 
     public Integer getStatus() {
         return this.status;
+    }
+
+    public void setStartTime(Long startTime) {
+        this.startTime = startTime;
+    }
+
+    public Long getStartTime() {
+        return this.startTime;
+    }
+
+    public void setEndTime(Long endTime) {
+        this.endTime = endTime;
+    }
+
+    public Long getEndTime() {
+        return this.endTime;
     }
 }

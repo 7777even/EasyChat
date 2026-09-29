@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.CallLogReadMapper">
+
+    <resultMap id="admin_call_log_map" type="com.easychat.entity.vo.AdminCallLogVO">
+        <result column="id" property="id"/>
+        <result column="call_type" property="callType"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="status" property="status"/>
+        <result column="caller_id" property="callerId"/>
+        <result column="caller_nick_name" property="callerNickName"/>
+        <result column="peer_id" property="peerId"/>
+        <result column="peer_nick_name" property="peerNickName"/>
+        <result column="group_id" property="groupId"/>
+        <result column="group_nick_name" property="groupNickName"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="participant_count" property="participantCount"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 筛选条件：全部 #{} 参数绑定；时间范围按 create_time 恒有值列过滤（ADR-003） -->
+    <sql id="call_log_where">
+        WHERE 1 = 1
+        <if test="query.callType != null">
+            AND cl.call_type = #{query.callType}
+        </if>
+        <if test="query.mediaType != null">
+            AND cl.media_type = #{query.mediaType}
+        </if>
+        <if test="query.status != null">
+            AND cl.status = #{query.status}
+        </if>
+        <if test="query.callerId != null and query.callerId != ''">
+            AND cl.caller_id = #{query.callerId}
+        </if>
+        <if test="query.peerId != null and query.peerId != ''">
+            AND cl.peer_id = #{query.peerId}
+        </if>
+        <if test="query.groupId != null and query.groupId != ''">
+            AND cl.group_id = #{query.groupId}
+        </if>
+        <if test="query.startTime != null">
+            AND cl.create_time &gt;= #{query.startTime}
+        </if>
+        <if test="query.endTime != null">
+            AND cl.create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <sql id="call_log_select_columns">
+        cl.id,
+        cl.call_type,
+        cl.media_type,
+        cl.status,
+        cl.caller_id,
+        cu.nick_name AS caller_nick_name,
+        cl.peer_id,
+        pu.nick_name AS peer_nick_name,
+        cl.group_id,
+        g.group_name AS group_nick_name,
+        cl.start_time,
+        cl.end_time,
+        (cl.end_time - cl.start_time) AS duration_ms,
+        cl.participant_count,
+        cl.create_time
+    </sql>
+
+    <sql id="call_log_joins">
+        FROM call_log cl
+                 LEFT JOIN user_info cu ON cl.caller_id = cu.user_id
+                 LEFT JOIN user_info pu ON cl.peer_id = pu.user_id
+                 LEFT JOIN group_info g ON cl.group_id = g.group_id
+    </sql>
+
+    <!-- 计数：不带 JOIN，仅按条件过滤 -->
+    <select id="selectCallLogCount" resultType="java.lang.Integer">
+        SELECT count(1) FROM call_log cl
+        <include refid="call_log_where"/>
+    </select>
+
+    <!-- 分页列表：排序为 XML 内字面量（不引用 ${query.orderBy}，注入面收口在 Service 硬编码覆盖双保险） -->
+    <select id="selectCallLogList" resultMap="admin_call_log_map">
+        SELECT
+        <include refid="call_log_select_columns"/>
+        <include refid="call_log_joins"/>
+        <include refid="call_log_where"/>
+        ORDER BY cl.id DESC
+        <if test="query.simplePage != null">
+            LIMIT #{query.simplePage.start}, #{query.simplePage.end}
+        </if>
+    </select>
+
+</mapper>
