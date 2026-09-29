@@ -1,0 +1,63 @@
+===== admin-message-delete 活体冒烟（P0–P4）=====
+时间: 2026-09-29T13:35:03
+   [PASS] P0-1 chat_message.delete_flag 列存在 | got='bigint#NO#0'
+   [PASS] P0-1 类型 bigint NOT NULL DEFAULT 0 | got='bigint#NO#0'
+   [PASS] P0-2 WHERE delete_flag=0 返回全量存量 | total=62 alive=62
+   [PASS] P0-2 存量无被删行（delete_flag<>0 为 0 行） | marked=0
+   [PASS] 后端 5050 可达
+登录成功：admin=U69630787860 / user=U04259455805
+===== P1 单聊删除链 =====
+   [PASS] P1-1 发送单聊消息 | {'code': 0, 'message': 'success', 'data': {'messageId': 1851, 'sessionId': '380571aaeed37621c53433dcbd238254', 'sendUserId': 'U04259455805', 'sendUserNickName': 'test', 'contactId': 'U29953535216', 'contactName': None, 'messageContent': 'SMKDEL单聊标记660103', 'lastMessage': 'SMKDEL单聊标记660103', 'messageType': 2, 'sendTime': 1790660103608, 'contactType': 0, 'extendData': None, 'status': 1, 'fileSize': None, 'fileName': None, 'fileType': None, 'memberCount': None, 'clientId': None, 'seq': None, 'extraData': None, 'atUserIds': None, 'duration': None}}
+   [PASS] P1-1 sessionId 为既有会话 | got=380571aaeed37621c53433dcbd238254
+   [PASS] P1-2 普通消息离线队列 contactId=发送者（转换不受影响） | frames=[{"atUserIds": null, "clientId": null, "contactId": "U04259455805", "contactName": "test", "contactType": 0, "duration": null, "extendData": null, "extraData": null, "fileName": null, "fileSize": null, "fileType": null, "lastMessage": "SMKDEL单聊标记660103", "memberCount": null, "messageContent": "SMKDE
+   [PASS] P1-3 举报人 karina 举报 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P1-3 举报人 admin 举报（同一消息两份待处理） | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P1-3 两份举报落库 | ids=[3, 4]
+   [PASS] P1-4 处置删除 code=0 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P1-5 delete_flag 置位(>0) | delete_flag=1790660103767
+   [PASS] P1-6 发送方离线队列 20 帧 contactId=会话对方（规则①） | frames=[{"atUserIds": null, "clientId": null, "contactId": "U29953535216", "contactName": null, "contactType": 0, "duration": null, "extendData": null, "extraData": null, "fileName": null, "fileSize": null, "fileType": null, "lastMessage": "该消息已被管理员删除", "memberCount": null, "messageContent": "该消息已被管理员删除", 
+   [PASS] P1-6b 接收方 20 帧 contactId=发送者 | frames=[{"atUserIds": null, "clientId": null, "contactId": "U04259455805", "contactName": "test", "contactType": 0, "duration": null, "extendData": null, "extraData": null, "fileName": null, "fileSize": null, "fileType": null, "lastMessage": "该消息已被管理员删除", "memberCount": null, "messageContent": "该消息已被管理员删除"
+   [PASS] P1-6b 非会话方(admin)不入 20 帧
+   [PASS] P1-7 单聊会话预览=墓碑文案 | got='该消息已被管理员删除'
+   [PASS] P1-8 loadHistoryMessage 不可见 | code=0 n=33
+   [PASS] P1-8 searchMessage 关键词 0 命中 | code=0 total=0
+   [PASS] P1-8 globalSearch 不含原文/该消息 | code=0
+   [PASS] P1-9 举报详情 content 保留原文 | content='SMKDEL单聊标记660103'
+   [PASS] P1-9 PK 行原文保留（管理端证据链）
+   [PASS] P1-10 locateMessage → 400/2201 | st=400 r={'code': 2201, 'message': '消息不存在', 'data': None}
+   [PASS] P1-10 recallMessage → 400/2201 | st=400 r={'code': 2201, 'message': '消息不存在', 'data': None}
+   [PASS] P1-10 downloadFile → 400/2201 | st=400 r={'code': 2201, 'message': '消息不存在', 'data': None}
+===== P2 重复处置幂等 =====
+   [PASS] P2-1 第二份处置 code=0 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P2-2 delete_flag 不改写（幂等） | before=1790660103767 after=1790660103767
+   [PASS] P2-3 不重推 20 帧 | before=1 after=1
+   [PASS] P2-4 handleNote 含「幂等跳过」 | note='冒烟：幂等处置；目标消息不存在或此前已删除，幂等跳过'
+===== P3 群聊删除链 =====
+   [PASS] P3-1 发送群消息 | {'code': 0, 'message': 'success', 'data': {'messageId': 1852, 'sessionId': '9f8083e4c6f0a78385ab45e09a65f384', 'sendUserId': 'U69630787860', 'sendUserNickName': '0.0', 'contactId': 'G08427252986', 'contactName': None, 'messageContent': 'SMKDEL群聊标记660103', 'lastMessage': 'SMKDEL群聊标记660103', 'messageType': 2, 'sendTime': 1790660104168, 'contactType': 1, 'extendData': None, 'status': 1, 'fileSize': None, 'fileName': None, 'fileType': None, 'memberCount': None, 'clientId': None, 'seq': None, 'extraData': None, 'atUserIds': None, 'duration': None}}
+   [PASS] P3-1 群 sessionId 正确 | got=9f8083e4c6f0a78385ab45e09a65f384
+   [PASS] P3-2 举报群消息 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P3-3 处置删除群消息 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P3-4 群消息 delete_flag 置位 | got=1790660104268
+   [PASS] P3-5 发送者(成员)离线 20 帧 contactId=groupId | frames=[{"atUserIds": null, "clientId": null, "contactId": "G08427252986", "contactName": null, "contactType": 1, "duration": null, "extendData": null, "extraData": null, "fileName": null, "fileSize": null, "fileType": null, "lastMessage": "该消息已被管理员删除", "memberCount": null, "messageContent": "该消息已被管理员删除", 
+   [PASS] P3-5 群离线成员 20 帧 contactId=groupId（规则②） | frames=[{"atUserIds": null, "clientId": null, "contactId": "G08427252986", "contactName": null, "contactType": 1, "duration": null, "extendData": null, "extraData": null, "fileName": null, "fileSize": null, "fileType": null, "lastMessage": "该消息已被管理员删除", "memberCount": null, "messageContent": "该消息已被管理员删除", 
+   [PASS] P3-6 群会话预览=墓碑文案 | got='该消息已被管理员删除'
+===== P4 dealReport 分支回归 =====
+   [PASS] P4-1a 举报（仅记录用） | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P4-1 处置 code=0 且 delete_flag 不动 | code=0 delete_flag=0
+   [PASS] P4-2a 举报朋友圈动态 | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P4-2 朋友圈处置 code=0 且动态 status=0 | code=0 status=0
+   [PASS] P4-3a 举报（封禁用） | {'code': 0, 'message': 'success', 'data': None}
+   [PASS] P4-3 封禁发布者 code=0 且 karina status=0 | code=0 status=0
+===== CLEANUP 回滚 fixture =====
+   已还原 delete_flag：[1851, 1852, 1853, 1854]
+   已还原会话预览 380571aaeed37621c53433dcbd238254
+   已还原会话预览 9f8083e4c6f0a78385ab45e09a65f384
+   已删除 message_report fixture
+   已删除 report_audit_log fixture
+   已删除 moment_report fixture
+   已还原 moment status id=2
+   已还原 karina status=1
+   已清空离线队列 ['U04259455805', 'U69630787860', 'U29953535216', 'U07346173613']
+===== SUMMARY =====
+用例 43 项 / 通过 43 / 失败 0
+SMOKE PASS
