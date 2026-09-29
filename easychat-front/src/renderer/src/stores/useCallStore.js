@@ -4,6 +4,7 @@
 //   -10 invite  -11 accept  -12 reject  -13 signal  -14 hangup  -15 cancel  -16 busy  -17 join
 import { defineStore } from 'pinia'
 import * as WebRTC from '@/utils/WebRTC'
+import { reduceCallFrame } from '@/utils/callFrameCore'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 
 export const useCallStore = defineStore('call', {
@@ -115,62 +116,22 @@ export const useCallStore = defineStore('call', {
         console.warn('回 answer 失败', e)
       }
     },
-    // 分发后端下发的通话帧
+    // 分发后端下发的通话帧（状态转移在 utils/callFrameCore.mjs 纯函数中，本方法只执行副作用）
     async handleFrame(frame) {
-      const t = frame.messageType
-      const selfId = this.selfId()
-      if (t === -10) {
-        // CALL_INVITE：被叫侧收到来电提醒
-        this.incoming = {
-          callId: frame.callId,
-          fromUserId: frame.fromUserId,
-          callType: frame.callType,
-          mediaType: frame.mediaType,
-          iceServers: frame.iceServers
+      const { patch, effects } = reduceCallFrame({ status: this.status }, frame, this.selfId())
+      if (Object.keys(patch).length) Object.assign(this, patch)
+      for (const fx of effects) {
+        if (fx.type === 'offer') {
+          this.ensureLocalThenOffer(fx.peerId)
+        } else if (fx.type === 'answer') {
+          this.ensureLocalThenAnswer(fx.peerId, fx.sdp)
+        } else if (fx.type === 'remoteAnswer') {
+          WebRTC.handleRemoteAnswer(fx.peerId, fx.sdp)
+        } else if (fx.type === 'remoteCandidate') {
+          WebRTC.handleRemoteCandidate(fx.peerId, fx.candidate)
+        } else if (fx.type === 'endCall') {
+          this.endCallLocal(fx.reason)
         }
-        this.callId = frame.callId
-        this.callType = frame.callType
-        this.mediaType = frame.mediaType
-        this.groupId = frame.groupId
-        this.iceServers = frame.iceServers || []
-        this.status = 'ringing'
-      } else if (t === -11 || t === -17) {
-        // CALL_ACCEPT / CALL_JOIN：后端把房间成员广播给所有成员
-        this.callId = frame.callId
-        if (frame.iceServers) this.iceServers = frame.iceServers
-        if (frame.members) this.members = frame.members
-        const newMemberId = frame.newMemberId
-        if (newMemberId === selfId) {
-          // 我是新加入者：向房间内其他每位成员发 offer（full-mesh）
-          this.status = 'connected'
-          for (const uid of (frame.members || [])) {
-            if (uid !== selfId) this.ensureLocalThenOffer(uid)
-          }
-        } else {
-          // 他人加入：发起方/已接听方此前停留在 calling/ringing，
-          // 此时已知有人接听，转为通话中并等待对方发来的 offer（经 CALL_SIGNAL 到达）
-          if (this.status === 'calling' || this.status === 'ringing') {
-            this.status = 'connected'
-          }
-        }
-      } else if (t === -13) {
-        // CALL_SIGNAL：offer / answer / ICE candidate
-        const peerId = frame.fromUserId
-        if (frame.signalType === 'offer') {
-          this.ensureLocalThenAnswer(peerId, frame.sdp)
-        } else if (frame.signalType === 'answer') {
-          WebRTC.handleRemoteAnswer(peerId, frame.sdp)
-        } else if (frame.signalType === 'candidate') {
-          WebRTC.handleRemoteCandidate(peerId, frame.candidate)
-        }
-      } else if (t === -14) {
-        this.endCallLocal('对方已挂断')
-      } else if (t === -15) {
-        this.endCallLocal('对方已取消')
-      } else if (t === -16) {
-        this.endCallLocal('对方忙线')
-      } else if (t === -12) {
-        this.endCallLocal('对方已拒绝')
       }
     },
     toggleMute() {
