@@ -7,7 +7,7 @@
     <div class="select-check" v-if="multiSelectMode" @click.stop="toggleSelect">
       <el-checkbox :model-value="selected"></el-checkbox>
     </div>
-    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 ? 'recalled-message' : '']">
+    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : '']">
       <div class="sending" v-if="data.status == 0">
         <el-skeleton :animated="true">
           <template #template>
@@ -16,8 +16,8 @@
         </el-skeleton>
       </div>
       <template v-else>
-        <div class="content recalled-content" v-if="data.messageType == 14">
-          <span class="recall-text">{{ getRecallText() }}</span>
+        <div class="content recalled-content" v-if="data.messageType == 14 || data.messageType == 20">
+          <span class="recall-text">{{ data.messageType == 20 ? '该消息已被管理员删除' : getRecallText() }}</span>
         </div>
         <template v-else>
           <div class="quote-block" v-if="quoteInfo">
@@ -57,10 +57,10 @@
         'content-panel',
         data.contactType == 1 ? 'group-content' : '',
         data.messageType == 5 ? 'content-panel-media' : '',
-        data.messageType == 14 ? 'recalled-message' : ''
+        data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : ''
       ]"
     >
-      <div class="nick-name" v-if="data.contactType == 1 && data.messageType != 14">
+      <div class="nick-name" v-if="data.contactType == 1 && data.messageType != 14 && data.messageType != 20">
         {{ data.sendUserNickName }}
       </div>
       <div class="sending" v-if="data.status == 0">
@@ -71,8 +71,8 @@
         </el-skeleton>
       </div>
       <template v-else>
-        <div class="content recalled-content" v-if="data.messageType == 14">
-          <span class="recall-text">{{ getRecallText() }}</span>
+        <div class="content recalled-content" v-if="data.messageType == 14 || data.messageType == 20">
+          <span class="recall-text">{{ data.messageType == 20 ? '该消息已被管理员删除' : getRecallText() }}</span>
         </div>
         <template v-else>
           <div class="quote-block" v-if="quoteInfo">

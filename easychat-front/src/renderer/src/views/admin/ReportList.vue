@@ -147,7 +147,7 @@
           v-if="dealForm.handleAction == 1 && dealForm.reportType == 3"
           type="warning"
           :closable="false"
-          title="聊天消息无删除状态位，选择「删除内容」将仅记录、不物理删除"
+          title="将逻辑删除该消息（会话双方与群成员实时收到删除通知，会话内显示墓碑），举报详情保留原文供审计"
         />
       </el-form>
       <template #footer>

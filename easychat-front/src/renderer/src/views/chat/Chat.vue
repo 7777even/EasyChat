@@ -451,6 +451,40 @@ const onReciveMessage = () => {
       })
       return
     }
+    //如果是管理端删除消息（20 帧），本地行墓碑化 + 条件预览占位（ADR-002/004）
+    if (message.messageType == 20) {
+      const localMessage = messageList.value.find((item) => {
+        if (item.messageId == message.messageId) {
+          return item
+        }
+      })
+      if (localMessage != null) {
+        localMessage.messageType = 20
+        localMessage.messageContent = message.messageContent || '该消息已被管理员删除'
+        localMessage.status = 1  // 确保消息状态为已发送，避免显示加载中
+        // 群聊墓碑同样展示原发送者昵称语义位
+        if (message.contactType == 1) {
+          localMessage.sendUserNickName = message.sendUserNickName
+        }
+      }
+      // 会话预览：仅帧带 lastMessage（被删消息为会话最新）时同步占位；
+      // 不重排（last_receive_time 未变）、不计未读（本分支直接 return）
+      if (message.extendData && message.extendData.contactId && message.extendData.lastMessage) {
+        const previewSession = chatSessionList.value.find((item) => {
+          return item.contactId == message.extendData.contactId
+        })
+        if (previewSession != null) {
+          previewSession.lastMessage = message.extendData.lastMessage
+        }
+      }
+      // 与主进程墓碑化幂等对齐（14 帧同款路径）
+      window.ipcRenderer.send('updateLocalMessage', {
+        messageId: message.messageId,
+        messageType: 20,
+        messageContent: message.messageContent || '该消息已被管理员删除'
+      })
+      return
+    }
     //添加好友、创建群、加入群
     //刷新我的联系人列表，如果当前页面正在联系人列表页面，加入群组申请通过后需要刷新列表
     if (message.messageType == 9 && message.extendData.userId == userInfoStore.getInfo().userId) {
