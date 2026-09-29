@@ -1,6 +1,6 @@
 # Spec — 语音/视频通话（voice-call）
 
-> 能力来源：openspec/changes/2026-09-26-voice-call（已归档）。实时音视频通话子能力。
+> 能力来源：openspec/changes/2026-09-26-voice-call（已归档）；openspec/changes/2026-09-29-call-log-admin（已归档）扩展管理端列表查询子能力。实时音视频通话子能力。
 > 确认范围：音视频（audio+video）+ 群通话（full-mesh，封顶 `easychat.call.max-participants` 默认 6）+ TURN 中继 + `call_log` 持久化。
 > 复用约束：仅扩展现有 Netty WS 帧类型（-10~−17），不新增端口 / HTTP 接口 / 运行时依赖；媒体 P2P 不经服务器；TURN 配置随信令帧下发。
 
@@ -145,4 +145,44 @@
 #### Scenario: 查询可回溯（落库口径）
 
 - **WHEN** 调用方按 `caller_id` / `peer_id` / `group_id` 查询
-- **THEN** 返回对应 `call_log` 列表（分页遵循 `PageRequest`/`PageResult`）；v1 仅落库，管理端列表查询为后续独立变更，不在本范围
+- **THEN** 返回对应 `call_log` 列表（分页遵循 `PageRequest`/`PageResult`）；管理端列表查询已由 `call-log-admin-list` 交付（`POST /admin/callLog/loadCallLog`，管理端分页沿用 `BaseParam`/`PaginationResultVO` 惯例）
+
+---
+
+## Requirement: 通话记录管理端列表查询（call-log-admin-list）— C1
+
+管理员（token `admin=true`）必须能够分页筛选通话记录，列表返回双方昵称与群名，且排序由服务端强制、不受请求参数影响。
+
+#### Scenario: 管理员分页筛选通话记录
+
+- **WHEN** 管理员调用 `POST /admin/callLog/loadCallLog`（可选 `callType/mediaType/status/callerId/peerId/groupId/startTime/endTime` + `pageNo/pageSize`，pageSize 缺省 15）
+- **THEN** 返回 `Result<PaginationResultVO<AdminCallLogVO>>`，按 `cl.id desc` 排序，分页语义沿用管理端 `BaseParam`/`PaginationResultVO` 惯例
+- **AND** `startTime/endTime` 按 `create_time` 毫秒范围过滤（含边界）
+
+#### Scenario: 列表解析昵称与群名
+
+- **WHEN** 返回单聊记录（`callType=1`）与群呼记录（`callType=2`）
+- **THEN** 单聊行返回 `callerNickName`/`peerNickName`（LEFT JOIN `user_info`），群呼行返回 `groupNickName`（LEFT JOIN `group_info`）
+- **AND** 用户已注销或群已解散时对应昵称字段为 null，前端显示「—」
+
+#### Scenario: orderBy 注入被服务端覆盖
+
+- **WHEN** 请求携带恶意 `orderBy=id desc;drop table`（`BaseParam.orderBy` 可被 HTTP 绑定）
+- **THEN** Service 首行硬编码 `setOrderBy("cl.id desc")` 覆盖请求值，SQL 不受污染
+- **AND** read mapper 全部条件使用 `#{}` 参数绑定
+
+---
+
+## Requirement: 通话记录管理端权限隔离（call-log-admin-guard）— C2
+
+`/admin/callLog/*` 接口 SHALL 使用 `@GlobalInterceptor(checkAdmin = true)`；非管理员调用 SHALL 被拦截返回 `CODE_1003`（HTTP 400，经 `inferHttpStatus` 兜底映射）；无 token SHALL 返回 `CODE_2001`（HTTP 401）。
+
+#### Scenario: 非管理员调用
+
+- **WHEN** 普通用户调用 `POST /admin/callLog/loadCallLog`
+- **THEN** 返回 HTTP 400 + `CODE_1003 资源不存在`，不泄露通话记录数据
+
+#### Scenario: 无 token 调用
+
+- **WHEN** 未携带 token 调用 `POST /admin/callLog/loadCallLog`
+- **THEN** 返回 HTTP 401 + `CODE_2001 登录超时，请重新登录`
