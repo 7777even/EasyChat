@@ -83,6 +83,13 @@ const menuList = ref([
     icon: 'icon-file',
     path: '/admin/sensitiveWord',
     iconBgColor: '#8a63d2'
+  },
+  {
+    name: '通话记录',
+    routeName: '通话记录',
+    icon: 'icon-video',
+    path: '/admin/callLog',
+    iconBgColor: '#13c2c2'
   }
 ])
 

@@ -67,6 +67,8 @@ const api = {
     deleteSensitiveWord: "/admin/sensitiveWord/deleteWord",//逻辑删除词条
     importSensitiveWord: "/admin/sensitiveWord/importWords",//批量导入词条
     exportSensitiveWord: "/admin/sensitiveWord/exportWords",//导出词库CSV
+    //通话记录
+    loadCallLog: "/admin/callLog/loadCallLog",//后台通话记录分页列表
     checkVersion: "/update/checkVersion",//更新检测
     //朋友圈
     publishMoment: "/moment/publish",

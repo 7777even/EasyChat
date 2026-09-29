@@ -52,6 +52,10 @@ const router = createRouter({
         path: "sensitiveWord",
         name: "敏感词管理",
         component: () => import('@/views/admin/SensitiveWord.vue'),
+      }, {
+        path: "callLog",
+        name: "通话记录",
+        component: () => import('@/views/admin/CallLogList.vue'),
       }]
     },
     {
