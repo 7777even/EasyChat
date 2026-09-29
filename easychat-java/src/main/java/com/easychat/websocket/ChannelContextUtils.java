@@ -220,10 +220,11 @@ public class ChannelContextUtils {
      */
     private void send2User(MessageSendDto messageSendDto) {
         String contactId = messageSendDto.getContactId();
-        // 撤回帧多端同步（C4）：必须在 sendMsg→applyContactConvert 改写 contactId 之前
-        // 取未转换副本投递给发送方自己的设备，保证副本 contactId 保持「会话对方」语义，
-        // 否则发送方会以 contactId=自己 新建脏会话（见 design ADR-001）。
-        if (MessageTypeEnum.RECALL_MESSAGE.getType().equals(messageSendDto.getMessageType())) {
+        // 撤回/管理端删除帧多端同步（C4 + ADR-003）：必须在 sendMsg→applyContactConvert 改写
+        // contactId 之前取未转换副本投递给发送方自己的设备，保证副本 contactId 保持
+        // 「会话对方」语义，否则发送方会以 contactId=自己 新建脏会话（见 design ADR-001）。
+        if (MessageTypeEnum.RECALL_MESSAGE.getType().equals(messageSendDto.getMessageType())
+                || MessageTypeEnum.ADMIN_DELETE.getType().equals(messageSendDto.getMessageType())) {
             sendRecallToSenderDevices(messageSendDto);
         }
         sendMsg(messageSendDto, contactId);
@@ -234,11 +235,16 @@ public class ChannelContextUtils {
     }
 
     /**
-     * 撤回帧发送方副本投递：把未经联系人转换的撤回帧直投 sendUserId 自己的全部在线设备，
-     * 使发送方的其他设备实时看到撤回（spec: 跨端消息撤回同步）。
+     * 撤回/管理端删除帧发送方副本投递：把未经联系人转换的帧直投 sendUserId 自己的全部在线设备，
+     * 使发送方的其他设备实时看到撤回/删除（spec: 跨端消息撤回同步 + ADR-003 删除同步）。
      * <p>
      * 仅单聊（USER 分支）需要：群聊中发送者本就是群成员，经 sendMsg2Group 已天然收到。
-     * 发送方无在线设备时判空跳过、不入离线缓冲（由 DB 已改写的撤回内容在拉取历史时兜底）。
+     * 发送方无在线设备时按帧类型分流（ADR-003 本期增强）：
+     * <ul>
+     *   <li>20 管理端删除 → 入发送方离线缓冲，重连时 replayOfflineMessages 由
+     *       「规则①：sendUserId=收件人」跳过转换补推（DB 过滤后历史拉取救不了本地已有行）；</li>
+     *   <li>14 撤回 → 维持现状跳过（由 DB 已改写的撤回内容在拉取历史时兜底）。</li>
+     * </ul>
      */
     private void sendRecallToSenderDevices(MessageSendDto messageSendDto) {
         String sendUserId = messageSendDto.getSendUserId();
@@ -248,11 +254,28 @@ public class ChannelContextUtils {
         }
         ChannelGroup senderGroup = USER_CONTEXT_MAP.get(sendUserId);
         if (senderGroup == null || senderGroup.isEmpty()) {
-            logger.debug("撤回帧发送方副本跳过：sendUserId={} 无在线设备", sendUserId);
+            if (MessageTypeEnum.ADMIN_DELETE.getType().equals(messageSendDto.getMessageType())) {
+                // ADR-003 增强：20 帧发送方副本入其离线缓冲（未转换副本），重连补推
+                redisComponet.pushOfflineMessage(sendUserId, JsonUtils.convertObj2Json(messageSendDto));
+                logger.info("删除帧发送方副本入离线缓冲 sendUserId={}", sendUserId);
+            } else {
+                logger.debug("撤回帧发送方副本跳过：sendUserId={} 无在线设备", sendUserId);
+            }
             return;
         }
         senderGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
-        logger.info("撤回帧发送方副本已投递 sendUserId={}, devices={}", sendUserId, senderGroup.size());
+        logger.info("撤回/删除帧发送方副本已投递 sendUserId={}, devices={}", sendUserId, senderGroup.size());
+    }
+
+    /**
+     * 用户当前是否有在线 WS 通道（用于管理端删除帧的离线成员补推分流）
+     */
+    public boolean isUserOnline(String userId) {
+        if (userId == null) {
+            return false;
+        }
+        ChannelGroup group = USER_CONTEXT_MAP.get(userId);
+        return group != null && !group.isEmpty();
     }
 
     /**
@@ -307,7 +330,8 @@ public class ChannelContextUtils {
             MessageTypeEnum.CONTACT_NAME_UPDATE.getType(),  // 10 更新群昵称
             MessageTypeEnum.LEAVE_GROUP.getType(),          // 11 退出群聊
             MessageTypeEnum.REMOVE_GROUP.getType(),         // 12 被移出群聊
-            MessageTypeEnum.RECALL_MESSAGE.getType()        // 14 撤回消息
+            MessageTypeEnum.RECALL_MESSAGE.getType(),       // 14 撤回消息
+            MessageTypeEnum.ADMIN_DELETE.getType()          // 20 管理端删除消息（ADR-003）
     );
 
     /**
@@ -361,6 +385,11 @@ public class ChannelContextUtils {
         if (!CONTACT_CONVERT_TYPES.contains(messageType)) {
             return;
         }
+        // 规则②（ADR-003）：contactType=1 的群聊帧 contactId 是群ID、不是「发送人」语义 → 跳过转换，
+        // 否则客户端会凭空生成与发送人的单聊脏会话（离线补推路径 sendMsg2Group 不经此处，天然无此问题）
+        if (Integer.valueOf(1).equals(messageSendDto.getContactType())) {
+            return;
+        }
         // 相当于客户而言，联系人就是发送人，所以转换后再发送
         messageSendDto.setContactId(messageSendDto.getSendUserId());
         messageSendDto.setContactName(messageSendDto.getSendUserNickName());
@@ -410,7 +439,12 @@ public class ChannelContextUtils {
                 // 反序列化为对象后转换，确保历史脏数据也能纠正为发送方联系人
                 try {
                     MessageSendDto sendDto = JsonUtils.convertJson2Obj(jsonMsg, MessageSendDto.class);
-                    applyContactConvert(sendDto);
+                    // 规则①（ADR-003）：sendUserId=收件人本人 → 该帧是发给发送方自己的副本，
+                    // contactId 本就是「会话对方」语义；再转换会把 contactId 覆写为收件人自己 → 脏会话，跳过。
+                    // 正常来向帧 sendUserId≠收件人，仍走转换；群聊帧由下方规则②（contactType=1）拦截。
+                    if (sendDto != null && !userId.equals(sendDto.getSendUserId())) {
+                        applyContactConvert(sendDto);
+                    }
                     userGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(sendDto)));
                 } catch (Exception parseError) {
                     logger.warn("补推消息解析失败，原样透传: {}", jsonMsg, parseError);

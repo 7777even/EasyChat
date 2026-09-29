@@ -21,7 +21,8 @@ public enum MessageTypeEnum {
     MOMENT_LIKE(16, "", "朋友圈点赞"),
     MOMENT_COMMENT(17, "", "朋友圈评论"),
     MOMENT_AT(18, "", "朋友圈@提醒"),
-    GROUP_NOTICE(19, "%s更新了群公告", "群公告更新");
+    GROUP_NOTICE(19, "%s更新了群公告", "群公告更新"),
+    ADMIN_DELETE(20, "", "管理员删除消息");
 
     private Integer type;
     private String initMessage;
