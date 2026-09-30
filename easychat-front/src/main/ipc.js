@@ -279,7 +279,7 @@ const onUpdateSysSetting = () => {
                     sysSetting = {};
                 }
             }
-            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch / theme / nudgeSuffix）
+            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch / theme / nudgeSuffix / chatBackground）
             if (patch && typeof patch === "object") {
                 if ("notifySwitch" in patch) {
                     sysSetting.notifySwitch = Boolean(patch.notifySwitch);
@@ -289,6 +289,9 @@ const onUpdateSysSetting = () => {
                 }
                 if ("nudgeSuffix" in patch) {
                     sysSetting.nudgeSuffix = patch.nudgeSuffix;
+                }
+                if ("chatBackground" in patch) {
+                    sysSetting.chatBackground = patch.chatBackground;
                 }
             }
             await updateSysSetting(JSON.stringify(sysSetting));

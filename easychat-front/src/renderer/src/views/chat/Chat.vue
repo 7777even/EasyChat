@@ -69,10 +69,16 @@
             class="iconfont icon-more no-drag"
             @click="showGroupDetail"
           ></span>
+          <span
+            class="iconfont icon-image no-drag"
+            title="聊天背景"
+            @click="showChatBackground"
+          ></span>
         </div>
       </div>
 
       <div class="chat-panel" v-show="Object.keys(currentChatSession).length > 0">
+        <div class="chat-background" v-if="chatBackground" :style="{ backgroundImage: `url(${chatBackground})` }"></div>
         <div class="multi-select-bar" v-if="multiSelect.mode">
           <span class="multi-tip">已选择 {{ multiSelect.ids.length }} 条</span>
           <el-button size="small" type="primary" @click="forwardSelected">转发</el-button>
@@ -930,6 +936,9 @@ onMounted(() => {
   // 监听新消息提示音
   onPlayNotifySound()
 
+  // 加载聊天背景
+  loadChatBackground()
+
   // 监听聊天记录导出结果
   onExportChatRecordCallback()
 
@@ -1355,6 +1364,55 @@ const recallMessageHandler = async (messageId) => {
     })
   }
 }
+
+// ===== 聊天背景 =====
+const chatBackground = ref('')
+
+// 加载聊天背景
+const loadChatBackground = () => {
+  window.ipcRenderer.send('getSysSetting')
+  window.ipcRenderer.on('getSysSettingCallback', (e, sysSetting) => {
+    if (!sysSetting) return
+    try {
+      const parsed = JSON.parse(sysSetting)
+      chatBackground.value = parsed.chatBackground || ''
+    } catch (error) {
+      chatBackground.value = ''
+    }
+  })
+}
+
+// 设置聊天背景
+const showChatBackground = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/jpeg,image/jpg,image/png,image/gif,image/webp'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    // 限制 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      proxy.Message.warning('图片大小不能超过 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64 = reader.result
+      chatBackground.value = base64
+      window.ipcRenderer.send('updateSysSetting', { chatBackground: base64 })
+      proxy.Message.success('聊天背景已设置')
+    }
+    reader.readAsDataURL(file)
+  }
+  input.click()
+}
+
+// 清除聊天背景
+const clearChatBackground = () => {
+  chatBackground.value = ''
+  window.ipcRenderer.send('updateSysSetting', { chatBackground: '' })
+  proxy.Message.success('聊天背景已清除')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -1456,8 +1514,25 @@ const recallMessageHandler = async (messageId) => {
 .chat-panel {
   border-top: 1px solid var(--ec-border);
   background: var(--ec-chat-bg);
+  position: relative;
+
+  // 聊天背景图
+  .chat-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
 
   .typing-indicator {
+    position: relative;
+    z-index: 1;
     padding: 5px 30px;
     font-size: 12px;
     color: #999;
