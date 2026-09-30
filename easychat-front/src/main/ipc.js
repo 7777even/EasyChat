@@ -2,7 +2,7 @@ import { shell, BrowserWindow, ipcMain, clipboard } from 'electron';
 const NODE_ENV = process.env.NODE_ENV
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { initWs, closeWs, registerPendingAck, sendCallFrame } from './wsClient';
+import { initWs, closeWs, registerPendingAck, sendCallFrame, sendTypingStatus, sendUserStatusChange } from './wsClient';
 import { initNotifySwitch, setNotifySwitch } from './notification';
 import { exportChatRecord, exportChatBackup } from './exportChat';
 import { selectMessageList, saveMessage, updateMessage, existsMessage, delMessage } from "./db/ChatMessageModel";
@@ -131,6 +131,20 @@ const onRegisterPendingAck = () => {
 const onSendCallFrame = () => {
     ipcMain.on("sendCallFrame", (e, frame) => {
         sendCallFrame(frame);
+    });
+}
+
+//发送正在输入状态帧（渲染端 → 主进程 → WS 5051 → 对方）
+const onSendTypingStatus = () => {
+    ipcMain.on("sendTypingStatus", (e, { contactId, sessionId, typing }) => {
+        sendTypingStatus(contactId, sessionId, typing);
+    });
+}
+
+//发送用户状态变更帧（渲染端 → 主进程 → WS 5051 → 服务端广播给好友）
+const onSendUserStatusChange = () => {
+    ipcMain.on("sendUserStatusChange", (e, { status }) => {
+        sendUserStatusChange(status);
     });
 }
 
@@ -265,13 +279,16 @@ const onUpdateSysSetting = () => {
                     sysSetting = {};
                 }
             }
-            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch / theme）
+            //键白名单：仅允许已知键合入，防覆盖丢失既有键（localFileFolder / notifySwitch / theme / nudgeSuffix）
             if (patch && typeof patch === "object") {
                 if ("notifySwitch" in patch) {
                     sysSetting.notifySwitch = Boolean(patch.notifySwitch);
                 }
                 if ("theme" in patch) {
                     sysSetting.theme = patch.theme === "dark" ? "dark" : "light";
+                }
+                if ("nudgeSuffix" in patch) {
+                    sysSetting.nudgeSuffix = patch.nudgeSuffix;
                 }
             }
             await updateSysSetting(JSON.stringify(sysSetting));
@@ -456,5 +473,7 @@ export {
     onTopChatSession,
     onReloadChatSession,
     onRegisterPendingAck,
-    onSendCallFrame
+    onSendCallFrame,
+    onSendTypingStatus,
+    onSendUserStatusChange
 }

@@ -43,6 +43,31 @@
           </el-radio-group>
         </div>
       </div>
+      <div class="part-item">
+        <div class="part-title">在线状态</div>
+        <div class="part-content">
+          <el-radio-group v-model="onlineStatus" @change="onlineStatusChange">
+            <el-radio :label="1">在线</el-radio>
+            <el-radio :label="2">忙碌</el-radio>
+            <el-radio :label="3">离线</el-radio>
+          </el-radio-group>
+        </div>
+      </div>
+      <div class="part-item">
+        <div class="part-title">拍一拍后缀</div>
+        <div class="part-content">
+          <el-input
+            v-model="nudgeSuffix"
+            size="small"
+            placeholder="设置拍一拍后缀，如：我的肩膀说你好"
+            maxlength="30"
+            show-word-limit
+            style="max-width: 260px"
+            @change="saveNudgeSuffix"
+          ></el-input>
+          <div class="tips">发送拍一拍时将显示「xx 拍了拍{后缀}」</div>
+        </div>
+      </div>
       <div class="logout">
         <el-button @click="logout">退出登录</el-button>
       </div>
@@ -98,6 +123,23 @@ const notifySwitchChange = (value) => {
   window.ipcRenderer.send('updateSysSetting', { notifySwitch: value })
 }
 
+// ===== 在线状态设置 =====
+const onlineStatus = ref(1)
+
+const onlineStatusChange = (value) => {
+  // 发送状态变更帧给服务端
+  window.api.sendUserStatusChange(value)
+}
+
+// ===== 拍一拍后缀设置 =====
+const nudgeSuffix = ref('')
+const nudgeSuffixBeforeSave = ref('')
+
+const saveNudgeSuffix = () => {
+  nudgeSuffixBeforeSave.value = nudgeSuffix.value
+  window.ipcRenderer.send('updateSysSetting', { nudgeSuffix: nudgeSuffix.value })
+}
+
 onMounted(() => {
   window.ipcRenderer.send('getSysSetting')
   window.ipcRenderer.on('getSysSettingCallback', (e, sysSetting) => {
@@ -109,10 +151,12 @@ onMounted(() => {
       notifySwitch.value = parsed.notifySwitch === undefined ? true : Boolean(parsed.notifySwitch)
       theme.value = parsed.theme === 'dark' ? 'dark' : 'light'
       applyTheme(theme.value)
+      nudgeSuffix.value = parsed.nudgeSuffix || ''
     } catch (error) {
       notifySwitch.value = true
       theme.value = 'light'
       applyTheme('light')
+      nudgeSuffix.value = ''
     }
   })
   //保存失败回弹原值
@@ -121,6 +165,7 @@ onMounted(() => {
       notifySwitch.value = !notifySwitch.value
       theme.value = themeBeforeSave.value
       applyTheme(theme.value)
+      nudgeSuffix.value = nudgeSuffixBeforeSave.value
       proxy.$message ? proxy.$message.error('设置保存失败') : null
     }
   })

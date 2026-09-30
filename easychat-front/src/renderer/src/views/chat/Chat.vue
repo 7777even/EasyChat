@@ -79,6 +79,10 @@
           <el-button size="small" type="danger" @click="deleteSelected">删除</el-button>
           <el-button size="small" @click="exitMultiSelect">退出多选</el-button>
         </div>
+        <!-- 正在输入提示 -->
+        <div class="typing-indicator" v-if="typingUser">
+          <span class="typing-text">{{ typingUser }} 正在输入...</span>
+        </div>
         <MessageVirtualList
           ref="messageListRef"
           class="message-panel"
@@ -104,7 +108,8 @@
                 data.messageType == 9 ||
                 data.messageType == 8 ||
                 data.messageType == 11 ||
-                data.messageType == 12
+                data.messageType == 12 ||
+                data.messageType == 26
               "
             >
               <ChatMessageSys :data="data"></ChatMessageSys>
@@ -608,6 +613,34 @@ const onSyncSessionUser = () => {
   })
 }
 
+// ===== 正在输入状态 =====
+const typingUser = ref(null)
+let typingTimer = null
+
+// 监听正在输入状态帧
+const onTypingStatus = () => {
+  window.ipcRenderer.on('typingStatus', (e, message) => {
+    if (!message || !message.extendData) return
+    const typing = message.extendData.typing
+    const contactId = message.extendData.contactId
+    // 只处理当前会话的输入状态
+    if (contactId !== currentChatSession.value.contactId) return
+    if (typing) {
+      typingUser.value = currentChatSession.value.contactName
+      // 清除之前的计时器
+      if (typingTimer) {
+        clearTimeout(typingTimer)
+      }
+      // 3 秒后自动隐藏
+      typingTimer = setTimeout(() => {
+        typingUser.value = null
+      }, 3000)
+    } else {
+      typingUser.value = null
+    }
+  })
+}
+
 /* ==================== 引用回复 / 转发 / 多选 ==================== */
 
 //多选模式：勾选后可批量转发或批量删除
@@ -888,6 +921,9 @@ onMounted(() => {
   // 监听会话属性跨端同步（置顶/免打扰/草稿）
   onSyncSessionUser()
 
+  // 监听正在输入状态
+  onTypingStatus()
+
   // 监听系统横幅点击定位
   onLocateSession()
 
@@ -919,6 +955,7 @@ onUnmounted(() => {
   window.ipcRenderer.removeAllListeners('syncSession')
   window.ipcRenderer.removeAllListeners('reloadChatSessionCallback')
   window.ipcRenderer.removeAllListeners('exportChatRecordCallback')
+  window.ipcRenderer.removeAllListeners('typingStatus')
 })
 
 /**
@@ -1420,6 +1457,18 @@ const recallMessageHandler = async (messageId) => {
   border-top: 1px solid var(--ec-border);
   background: var(--ec-chat-bg);
 
+  .typing-indicator {
+    padding: 5px 30px;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+
+    .typing-text {
+      display: inline-block;
+      animation: typing-blink 1.5s ease-in-out infinite;
+    }
+  }
+
   .message-panel {
     padding: 10px 30px 0px 30px;
     height: calc(100vh - 200px - 62px);
@@ -1442,6 +1491,15 @@ const recallMessageHandler = async (messageId) => {
   }
   50% {
     background-color: rgba(7, 193, 96, 0.2);
+  }
+}
+
+@keyframes typing-blink {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
   }
 }
 </style>

@@ -9,6 +9,7 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item @click="nudge">拍一拍</el-dropdown-item>
               <el-dropdown-item @click="addContact2BlackList">加入黑名单</el-dropdown-item>
               <el-dropdown-item @click="delContact">删除联系人</el-dropdown-item>
             </el-dropdown-menu>
@@ -189,6 +190,21 @@ const sendMessage = () => {
     path: '/chat',
     query: {chatId: userInfo.value.userId, timestamp: new Date().getTime()}
   })
+}
+
+//拍一拍
+const nudge = async () => {
+  const result = await proxy.Request({
+    url: proxy.Api.nudge,
+    params: {
+      contactId: userInfo.value.userId
+    },
+    showLoading: false
+  })
+  if (!result) {
+    return
+  }
+  proxy.Message.success('已发送拍一拍')
 }
 </script>
 

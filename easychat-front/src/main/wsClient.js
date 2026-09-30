@@ -51,6 +51,59 @@ const sendCallFrame = (frame) => {
     }
 }
 
+// ===== 输入状态与在线状态 =====
+// 输入状态防抖计时器
+let typingTimer = null;
+const TYPING_DEBOUNCE_MS = 3000;
+
+/**
+ * 发送正在输入状态帧（防抖 3 秒）
+ * @param {string} contactId 对方用户 ID
+ * @param {string} sessionId 会话 ID
+ * @param {boolean} typing 是否正在输入
+ */
+const sendTypingStatus = (contactId, sessionId, typing) => {
+    if (ws == null || ws.readyState !== 1) {
+        return;
+    }
+    // 清除之前的防抖计时器
+    if (typingTimer) {
+        clearTimeout(typingTimer);
+    }
+    // 如果正在输入，立即发送；如果停止输入，延迟 3 秒发送（避免频繁发送）
+    const sendFn = () => {
+        const frame = {
+            messageType: 21, // TYPING_STATUS
+            contactId: contactId,
+            typing: typing,
+            sessionId: sessionId
+        };
+        ws.send(JSON.stringify(frame));
+        console.log('发送输入状态帧: contactId=' + contactId + ', typing=' + typing);
+    };
+    if (typing) {
+        sendFn();
+    } else {
+        typingTimer = setTimeout(sendFn, TYPING_DEBOUNCE_MS);
+    }
+}
+
+/**
+ * 发送用户状态变更帧
+ * @param {number} status 状态值（1=在线 2=忙碌 3=离线）
+ */
+const sendUserStatusChange = (status) => {
+    if (ws == null || ws.readyState !== 1) {
+        return;
+    }
+    const frame = {
+        messageType: 23, // USER_STATUS_CHANGE
+        status: status
+    };
+    ws.send(JSON.stringify(frame));
+    console.log('发送用户状态变更帧: status=' + status);
+}
+
 const registerPendingAck = (clientId, messageObj) => {
     if (pendingMap.has(clientId)) {
         clearTimeout(pendingMap.get(clientId).timer);
@@ -216,6 +269,7 @@ const createWs = () => {
             case 12://提出群聊
             case 14://撤回消息
             case 19://群公告更新
+            case 26://拍一拍
                 //如果是群聊消息，那么这个群里的所有人都会收到聊天消息，发送人和接收人是同一个人不做处理
                 if (message.sendUserId === store.getUserId() && message.contactType == 1 && messageType != 14) {
                     break;
@@ -328,6 +382,16 @@ const createWs = () => {
                 sender.send("reciveMessage", message);
                 break;
             }
+            case 21: { // TYPING_STATUS：正在输入状态帧
+                // 转发给渲染进程，由 Chat.vue 显示"正在输入..."提示
+                sender.send("typingStatus", message);
+                break;
+            }
+            case 22: { // ONLINE_STATUS：在线状态变更帧
+                // 转发给渲染进程，由 Contact.vue 显示好友在线状态
+                sender.send("onlineStatus", message);
+                break;
+            }
         }
     }
 
@@ -390,5 +454,7 @@ export {
     closeWs,
     registerPendingAck,
     sendSyncFrame,
-    sendCallFrame
+    sendCallFrame,
+    sendTypingStatus,
+    sendUserStatusChange
 }

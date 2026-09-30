@@ -108,6 +108,13 @@ const api = {
     momentMarkReadByType: "/moment/notify/markReadByType",
     momentMarkRead: "/moment/notify/markRead",
     momentClearNotify: "/moment/notify/clear",
+
+    // ===== 表情包 =====
+    emojiList: "/emoji/list",
+    emojiUpload: "/emoji/upload",
+    emojiDelete: "/emoji/delete",
+    // ===== 拍一拍 =====
+    nudge: "/contact/nudge",
 }
 
 export default api;
