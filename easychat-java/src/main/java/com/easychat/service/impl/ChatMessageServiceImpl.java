@@ -436,6 +436,11 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             folder.mkdirs();
         }
         String fileName = message.getFileName();
+        // 文本等非文件消息 fileName 为空 → 直接按「文件不存在」返回，避免 getFileSuffix(null) NPE 冒泡成 1002
+        if (StringTools.isEmpty(fileName)) {
+            logger.info("消息无文件 messageId={}", messageId);
+            throw new BusinessException(ResponseCodeEnum.CODE_2104);
+        }
         String fileExtName = StringTools.getFileSuffix(fileName);
         String fileRealName = messageId + fileExtName;
 
