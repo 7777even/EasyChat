@@ -40,7 +40,7 @@
 ## 结论
 
 - **达成**：验收口径全部通过（冒烟 43/43 + 双门禁绿 + 双端构建 0 error）。遗留：双实例 WS 渲染侧验证与 UI 截图移交用户本机执行（清单见归档交付说明）。
-- 既有缺陷（不在本变更范围，不修复）：`ChatMessageServiceImpl.downloadFile` 中 `UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)` 为 Integer 比 enum 恒 false，群文件成员/归属校验实际未生效——建议另立变更修复。
+- ~~既有缺陷（不在本变更范围，不修复）：`ChatMessageServiceImpl.downloadFile` 中 `UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)` 为 Integer 比 enum 恒 false，群文件成员/归属校验实际未生效——建议另立变更修复。~~ **→ 2026-09-30 已修复，见下节。**
 
 ---
 
@@ -124,3 +124,53 @@
 
 - **规格符合性**：`openspec/specs/content-moderation/spec.md` L149「渲染层显示墓碑文案」现已达成。
 - **Review 结论**：原「需修改」项已闭环，无新增问题。
+
+---
+
+# 遗留缺陷修复：downloadFile 越权 — 2026-09-30
+
+## 缺陷
+
+`easychat-java/src/main/java/com/easychat/service/impl/ChatMessageServiceImpl.java`
+
+```java
+418:  UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(contactId);
+419:  if (UserContactTypeEnum.USER.getType().equals(contactTypeEnum) && ...) {   // Integer.equals(enum) 恒 false
+422:  if (UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)) {          // 同上
+```
+
+`getType()` 返回 `Integer`，`contactTypeEnum` 是 `UserContactTypeEnum` —— `Integer.equals(enum)` **恒为 false**，两个授权分支均为死代码。
+
+**后果**：任何登录用户只要拿到 `messageId` 即可下载**任意单聊文件**（419 归属校验失效）与**任意群文件**（422 群成员校验失效）—— 水平越权（IDOR）。
+
+**排查范围**：全仓 8 处 `UserContactTypeEnum` 枚举变量逐一核对，`Integer.equals(enum)` 写法**仅此 2 处**；其余 6 处（`ChatMessageServiceImpl:593/733/738`、`UserContactServiceImpl:203/225/230/244/253/261`）实参为 `Integer`，`Integer.equals(Integer)` 正确。同文件 `214` 行已有正确写法可参照。
+
+## 修复
+
+```diff
+- if (UserContactTypeEnum.USER.getType().equals(contactTypeEnum) && !userInfoDto.getUserId().equals(message.getContactId())) {
++ if (UserContactTypeEnum.USER == contactTypeEnum && !userInfoDto.getUserId().equals(message.getContactId())) {
+- if (UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)) {
++ if (UserContactTypeEnum.GROUP == contactTypeEnum) {
+```
+
+改用枚举同一性比较（`==`），与同文件 `214` 行既有写法一致。`contactTypeEnum` 为 `null` 时 `==` 安全（不抛 NPE）。
+
+## 验证
+
+- `mvn compile` → 0 error。
+- 运行时验证（4/4 PASS，证据 `engineering/qa/2026-09-30-download-authz-fix.txt`）：
+
+| 场景 | fixture | 期望 | 实际 |
+|------|---------|------|------|
+| 单聊 未授权（admin 非 contactId） | 1781（contact=bbqy） | 1001 | 1001 ✅ |
+| 单聊 授权（admin 是 contactId） | 1796（contact=admin） | ≠1001 | 2104（授权通过，文件不在盘）✅ |
+| 群聊 未授权（karina 非成员） | 1852（群 G08427252986） | 1001 | 1001 ✅ |
+| 群聊 授权（admin 是成员） | 1852 | ≠1001 | 1002（授权通过）✅ |
+
+**判定逻辑**：修复前两个分支恒不进入 → 任何人都能走到文件查找；修复后未授权被 1001 拦截、授权方不再返回 1001。1001 与「非 1001」即可区分修复是否生效。
+
+## 附带发现（不在本次范围，不修）
+
+- 群聊授权对照返回 `1002`（系统错误）：`downloadFile` 对**文本消息**（`fileName` 为 null）会在 `StringTools.getFileSuffix(null)` 抛 NPE。属既有缺陷，与本次越权修复无关，建议另立变更处理。
+- 单聊授权语义：`contactId` 为会话**对方**，故发送者本人下载自己发出的文件也会被 1001 拦截。此为既有设计意图（代码注释与逻辑一致），本次仅修复比较运算符，未改变该语义。

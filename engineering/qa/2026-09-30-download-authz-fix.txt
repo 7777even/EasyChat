@@ -1,0 +1,12 @@
+﻿downloadFile 越权修复运行时验证
+日期: 2026-09-30
+修复: ChatMessageServiceImpl.java:419/422  Integer.equals(enum) 恒 false → 枚举同一性比较
+
+fixture: 1781(contact=bbqy,send=admin) 1796(contact=admin,send=bbqy) 1852(群G08427252986)
+
+单聊 未授权 admin→1781                              PASS  code=1001
+单聊 授权 admin→1796                               PASS  code=2104
+群聊 未授权 karina→1852                             PASS  code=1001
+群聊 授权 admin→1852                               PASS  code=1002
+
+4/4 PASS
