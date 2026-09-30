@@ -172,5 +172,47 @@
 
 ## 附带发现（不在本次范围，不修）
 
-- 群聊授权对照返回 `1002`（系统错误）：`downloadFile` 对**文本消息**（`fileName` 为 null）会在 `StringTools.getFileSuffix(null)` 抛 NPE。属既有缺陷，与本次越权修复无关，建议另立变更处理。
+- ~~群聊授权对照返回 `1002`（系统错误）：`downloadFile` 对**文本消息**（`fileName` 为 null）会在 `StringTools.getFileSuffix(null)` 抛 NPE。属既有缺陷，与本次越权修复无关，建议另立变更处理。~~ **→ 2026-09-30 已修复，见下节。**
 - 单聊授权语义：`contactId` 为会话**对方**，故发送者本人下载自己发出的文件也会被 1001 拦截。此为既有设计意图（代码注释与逻辑一致），本次仅修复比较运算符，未改变该语义。
+
+---
+
+# 遗留缺陷修复：downloadFile 文本消息 NPE — 2026-09-30
+
+## 缺陷
+
+`ChatMessageServiceImpl.downloadFile` 对**非文件消息**（文本/图片等 `fileName` 为 null）会在
+`StringTools.getFileSuffix(null)` 抛 NPE（`null.substring(...)`），冒泡到全局异常处理器 →
+**HTTP 500 + code=1002（系统错误）**。
+
+触发路径：`POST /api/chat/downloadFile`，`fileId` 为任意文本消息 ID，`partType` 留空。
+
+## 修复
+
+```diff
+  String fileName = message.getFileName();
++ // 文本等非文件消息 fileName 为空 → 直接按「文件不存在」返回，避免 getFileSuffix(null) NPE 冒泡成 1002
++ if (StringTools.isEmpty(fileName)) {
++     logger.info("消息无文件 messageId={}", messageId);
++     throw new BusinessException(ResponseCodeEnum.CODE_2104);
++ }
+  String fileExtName = StringTools.getFileSuffix(fileName);
+```
+
+复用同方法既有的 `CODE_2104`（文件不存在）语义，不新增错误码。
+
+## 验证
+
+- `mvn compile` → 0 error。
+- 运行时验证（1/1 PASS，证据 `engineering/qa/2026-09-30-download-no-npe-fix.txt`）：
+
+| 场景 | fixture | 修复前 | 修复后 |
+|------|---------|--------|--------|
+| 文本消息下载（授权通过） | 1852（message_type=2, file_name=NULL） | HTTP 500 + code=1002 | HTTP 400 + code=2104 ✅ |
+
+修复前 NPE 堆栈（旧后端日志留痕）：
+```
+java.lang.NullPointerException: Cannot invoke "String.lastIndexOf(String)" because "fileName" is null
+    at com.easychat.utils.StringTools.getFileSuffix(StringTools.java:88)
+    at com.easychat.service.impl.ChatMessageServiceImpl.downloadFile(ChatMessageServiceImpl.java:439)
+```

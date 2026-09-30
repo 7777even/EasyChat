@@ -1,0 +1,15 @@
+﻿downloadFile 文本消息 NPE 修复运行时验证
+日期: 2026-09-30
+修复: ChatMessageServiceImpl.downloadFile 在 getFileSuffix 前加 fileName 空守卫
+
+fixture: message_id=1852 message_type=2 file_name=NULL delete_flag=0
+
+修复前: StringTools.getFileSuffix(null) -> NPE -> 全局异常处理器 -> HTTP 500 + code=1002
+修复后: fileName 为空直接抛 BusinessException(CODE_2104) -> HTTP 400 + code=2104
+
+执行: python verify_download_no_npe.py
+结果:
+fixture 1852: message_type=2 file_name=NULL delete_flag=0
+文本消息下载 不再 NPE                                  PASS  http=400 code=2104
+
+1/1 PASS
