@@ -524,4 +524,68 @@ public class UserContactServiceImpl implements UserContactService {
         }
         return result;
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void sendNudge(String userId, String contactId, String suffix) {
+        // 1. 校验好友关系
+        UserContact userContact = requireFriendContact(userId, contactId);
+
+        // 2. 获取发送者信息
+        UserInfo sendUserInfo = userInfoMapper.selectByUserId(userId);
+        if (sendUserInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+
+        // 3. 构建消息内容
+        String messageContent;
+        if (StringTools.isEmpty(suffix)) {
+            messageContent = String.format(MessageTypeEnum.NUDGE.getInitMessage(), sendUserInfo.getNickName());
+        } else {
+            messageContent = sendUserInfo.getNickName() + "拍了拍" + suffix;
+        }
+
+        // 4. 获取会话ID
+        String sessionId = StringTools.getChatSessionId4User(new String[]{userId, contactId});
+
+        // 5. 创建聊天消息
+        Date curDate = new Date();
+        ChatMessage chatMessage = new ChatMessage();
+        chatMessage.setSessionId(sessionId);
+        chatMessage.setMessageType(MessageTypeEnum.NUDGE.getType());
+        chatMessage.setMessageContent(messageContent);
+        chatMessage.setSendUserId(userId);
+        chatMessage.setSendUserNickName(sendUserInfo.getNickName());
+        chatMessage.setSendTime(curDate.getTime());
+        chatMessage.setContactId(contactId);
+        chatMessage.setContactType(UserContactTypeEnum.USER.getType());
+        chatMessage.setStatus(MessageStatusEnum.SENDED.getStatus());
+        chatMessageMapper.insert(chatMessage);
+
+        // 6. 更新会话最后消息
+        ChatSession chatSession = new ChatSession();
+        chatSession.setSessionId(sessionId);
+        chatSession.setLastMessage(messageContent);
+        chatSession.setLastReceiveTime(curDate.getTime());
+        chatSessionMapper.insertOrUpdate(chatSession);
+
+        // 7. 更新会话用户记录
+        ChatSessionUser sendSessionUser = chatSessionUserMapper.selectByUserIdAndContactId(userId, contactId);
+        if (sendSessionUser != null) {
+            sendSessionUser.setLastMessage(messageContent);
+            sendSessionUser.setLastReceiveTime(curDate.getTime());
+            chatSessionUserMapper.updateByUserIdAndContactId(sendSessionUser, userId, contactId);
+        }
+
+        ChatSessionUser contactSessionUser = chatSessionUserMapper.selectByUserIdAndContactId(contactId, userId);
+        if (contactSessionUser != null) {
+            contactSessionUser.setLastMessage(messageContent);
+            contactSessionUser.setLastReceiveTime(curDate.getTime());
+            chatSessionUserMapper.updateByUserIdAndContactId(contactSessionUser, contactId, userId);
+        }
+
+        // 8. 发送消息
+        MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
+        messageHandler.sendMessage(messageSendDto);
+    }
 }

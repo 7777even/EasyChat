@@ -200,4 +200,15 @@ public class UserContactController extends ABaseController {
         userContactService.removeUserContact(tokenUserInfoDto.getUserId(), contactId, UserContactStatusEnum.BLACKLIST);
         return success();
     }
+
+    /**
+     * 拍一拍
+     */
+    @PostMapping("/nudge")
+    @GlobalInterceptor
+    public Result<Void> nudge(HttpServletRequest request, @NotEmpty String contactId, String suffix) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userContactService.sendNudge(tokenUserInfoDto.getUserId(), contactId, suffix);
+        return success();
+    }
 }

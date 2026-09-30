@@ -85,6 +85,10 @@ public class ChannelContextUtils {
             addUserChannel(userId, channel);
             redisComponet.saveUserHeartBeat(userId);
 
+            // 更新用户在线状态为在线，并向所有好友广播
+            redisComponet.updateUserStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.ONLINE.getStatus());
+            broadcastOnlineStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.ONLINE.getStatus());
+
             //更新用户最后连接时间
             UserInfo updateInfo = new UserInfo();
             updateInfo.setLastLoginTime(new Date());
@@ -173,6 +177,9 @@ public class ChannelContextUtils {
                     userInfo.setLastOffTime(System.currentTimeMillis());
                     userInfoMapper.updateByUserId(userInfo, userId);
                     redisComponet.removeUserHeartBeat(userId);
+                    // 更新用户在线状态为离线，并向所有好友广播
+                    redisComponet.updateUserStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.OFFLINE.getStatus());
+                    broadcastOnlineStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.OFFLINE.getStatus());
                 }
             }
         }
@@ -331,7 +338,8 @@ public class ChannelContextUtils {
             MessageTypeEnum.LEAVE_GROUP.getType(),          // 11 退出群聊
             MessageTypeEnum.REMOVE_GROUP.getType(),         // 12 被移出群聊
             MessageTypeEnum.RECALL_MESSAGE.getType(),       // 14 撤回消息
-            MessageTypeEnum.ADMIN_DELETE.getType()          // 20 管理端删除消息（ADR-003）
+            MessageTypeEnum.ADMIN_DELETE.getType(),         // 20 管理端删除消息（ADR-003）
+            MessageTypeEnum.NUDGE.getType()                 // 26 拍一拍
     );
 
     /**
@@ -538,5 +546,38 @@ public class ChannelContextUtils {
     public int getUserChannelCount(String userId) {
         ChannelGroup userGroup = USER_CONTEXT_MAP.get(userId);
         return userGroup == null ? 0 : userGroup.size();
+    }
+
+    /**
+     * 向指定用户的所有好友广播在线状态变更。
+     *
+     * @param userId 状态变更的用户 ID
+     * @param status 新状态值（1=在线 2=忙碌 3=离线）
+     */
+    public void broadcastOnlineStatus(String userId, Integer status) {
+        if (StringTools.isEmpty(userId)) {
+            return;
+        }
+        // 获取用户的所有好友
+        List<String> contactList = redisComponet.getUserContactList(userId);
+        if (contactList == null || contactList.isEmpty()) {
+            return;
+        }
+        // 向每个好友发送在线状态变更帧
+        for (String friendId : contactList) {
+            if (StringTools.isEmpty(friendId)) {
+                continue;
+            }
+            MessageSendDto statusDto = new MessageSendDto();
+            statusDto.setMessageType(MessageTypeEnum.ONLINE_STATUS.getType());
+            statusDto.setContactId(userId);
+            statusDto.setSendUserId(userId);
+            statusDto.setExtendData(status);
+            // 只向在线的好友发送
+            if (isUserOnline(friendId)) {
+                sendRawToUser(friendId, JsonUtils.convertObj2Json(statusDto));
+            }
+        }
+        logger.info("用户{}状态变更为{}，已广播给{}个好友", userId, status, contactList.size());
     }
 }

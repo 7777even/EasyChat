@@ -112,4 +112,9 @@ public interface UserContactService {
      * 按关键词搜索好友：匹配备注名 / 昵称 / 用户ID / 分组名
      */
     java.util.List<UserContact> searchContactByKeyword(String userId, String keyword);
+
+    /**
+     * 拍一拍
+     */
+    void sendNudge(String userId, String contactId, String suffix);
 }

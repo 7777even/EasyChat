@@ -22,7 +22,13 @@ public enum MessageTypeEnum {
     MOMENT_COMMENT(17, "", "朋友圈评论"),
     MOMENT_AT(18, "", "朋友圈@提醒"),
     GROUP_NOTICE(19, "%s更新了群公告", "群公告更新"),
-    ADMIN_DELETE(20, "", "管理员删除消息");
+    ADMIN_DELETE(20, "", "管理员删除消息"),
+    TYPING_STATUS(21, "", "正在输入状态"),
+    ONLINE_STATUS(22, "", "在线状态变更"),
+    USER_STATUS_CHANGE(23, "", "用户状态变更请求"),
+    VOICE(24, "", "语音消息"),
+    LOCATION(25, "", "位置消息"),
+    NUDGE(26, "%s拍了拍你", "拍一拍");
 
     private Integer type;
     private String initMessage;
