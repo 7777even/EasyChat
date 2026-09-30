@@ -416,10 +416,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
         String contactId = message.getContactId();
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(contactId);
-        if (UserContactTypeEnum.USER.getType().equals(contactTypeEnum) && !userInfoDto.getUserId().equals(message.getContactId())) {
+        if (UserContactTypeEnum.USER == contactTypeEnum && !userInfoDto.getUserId().equals(message.getContactId())) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
-        if (UserContactTypeEnum.GROUP.getType().equals(contactTypeEnum)) {
+        if (UserContactTypeEnum.GROUP == contactTypeEnum) {
             UserContactQuery userContactQuery = new UserContactQuery();
             userContactQuery.setUserId(userInfoDto.getUserId());
             userContactQuery.setContactType(UserContactTypeEnum.GROUP.getType());
