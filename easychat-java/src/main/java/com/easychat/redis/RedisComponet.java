@@ -139,13 +139,29 @@ public class RedisComponet {
         redisUtils.delete(Constants.REDIS_KEY_USER_SESSION + userId);
     }
 
+    // 系统设置本地缓存（减少 Redis 访问）
+    private SysSettingDto sysSettingCache = null;
+    private long sysSettingCacheTime = 0;
+    private static final long SYS_SETTING_CACHE_TTL = 60000; // 缓存 60 秒
+
     public void saveSysSetting(SysSettingDto sysSettingDto) {
         redisUtils.set(Constants.REDIS_KEY_SYS_SETTING, sysSettingDto);
+        // 更新本地缓存
+        sysSettingCache = sysSettingDto;
+        sysSettingCacheTime = System.currentTimeMillis();
     }
 
     public SysSettingDto getSysSetting() {
+        // 优先从本地缓存获取
+        if (sysSettingCache != null && System.currentTimeMillis() - sysSettingCacheTime < SYS_SETTING_CACHE_TTL) {
+            return sysSettingCache;
+        }
+        // 从 Redis 获取
         SysSettingDto sysSettingDto = (SysSettingDto) redisUtils.get(Constants.REDIS_KEY_SYS_SETTING);
         sysSettingDto = sysSettingDto == null ? new SysSettingDto() : sysSettingDto;
+        // 更新本地缓存
+        sysSettingCache = sysSettingDto;
+        sysSettingCacheTime = System.currentTimeMillis();
         return sysSettingDto;
     }
 
