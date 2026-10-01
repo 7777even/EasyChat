@@ -139,13 +139,29 @@ public class RedisComponet {
         redisUtils.delete(Constants.REDIS_KEY_USER_SESSION + userId);
     }
 
+    // 系统设置本地缓存（减少 Redis 访问）
+    private SysSettingDto sysSettingCache = null;
+    private long sysSettingCacheTime = 0;
+    private static final long SYS_SETTING_CACHE_TTL = 60000; // 缓存 60 秒
+
     public void saveSysSetting(SysSettingDto sysSettingDto) {
         redisUtils.set(Constants.REDIS_KEY_SYS_SETTING, sysSettingDto);
+        // 更新本地缓存
+        sysSettingCache = sysSettingDto;
+        sysSettingCacheTime = System.currentTimeMillis();
     }
 
     public SysSettingDto getSysSetting() {
+        // 优先从本地缓存获取
+        if (sysSettingCache != null && System.currentTimeMillis() - sysSettingCacheTime < SYS_SETTING_CACHE_TTL) {
+            return sysSettingCache;
+        }
+        // 从 Redis 获取
         SysSettingDto sysSettingDto = (SysSettingDto) redisUtils.get(Constants.REDIS_KEY_SYS_SETTING);
         sysSettingDto = sysSettingDto == null ? new SysSettingDto() : sysSettingDto;
+        // 更新本地缓存
+        sysSettingCache = sysSettingDto;
+        sysSettingCacheTime = System.currentTimeMillis();
         return sysSettingDto;
     }
 
@@ -195,6 +211,8 @@ public class RedisComponet {
         return list != null && !list.isEmpty();
     }
 
+    /* ===================== 用户在线状态 ===================== */
+
     /**
      * 更新用户在线状态
      *
@@ -204,7 +222,8 @@ public class RedisComponet {
     public void updateUserStatus(String userId, Integer status) {
         redisUtils.setex(Constants.REDIS_KEY_WS_USER_STATUS + userId, status, Constants.REDIS_KEY_EXPIRES_DAY * 7);
     }
-/* ===================== 群二维码/邀请链接 ===================== */
+
+    /* ===================== 群二维码/邀请链接 ===================== */
 
     /**
      * 保存群二维码 token
@@ -257,7 +276,6 @@ public class RedisComponet {
         // 注意：这是一个简化的实现，实际生产环境可能需要更高效的方式
         return null;
     }
-
 
     /**
      * 获取用户在线状态
