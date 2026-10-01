@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.EmojiMapper">
+
+    <resultMap id="BaseResultMap" type="com.easychat.entity.po.Emoji">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="file_path" property="filePath"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="emoji_type" property="emojiType"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, user_id, file_name, file_path, file_size, emoji_type, create_time
+    </sql>
+
+    <insert id="insert" parameterType="com.easychat.entity.po.Emoji" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO emoji (user_id, file_name, file_path, file_size, emoji_type, create_time)
+        VALUES (#{userId}, #{fileName}, #{filePath}, #{fileSize}, #{emojiType}, #{createTime})
+    </insert>
+
+    <insert id="insertBatch" parameterType="java.util.List">
+        INSERT INTO emoji (user_id, file_name, file_path, file_size, emoji_type, create_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.userId}, #{item.fileName}, #{item.filePath}, #{item.fileSize}, #{item.emojiType}, #{item.createTime})
+        </foreach>
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM emoji WHERE id = #{id}
+    </delete>
+
+    <select id="selectList" resultMap="BaseResultMap" parameterType="com.easychat.entity.query.EmojiQuery">
+        SELECT <include refid="Base_Column_List"/>
+        FROM emoji
+        <where>
+            <if test="userId != null and userId != ''">
+                AND user_id = #{userId}
+            </if>
+            <if test="emojiType != null">
+                AND emoji_type = #{emojiType}
+            </if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectCount" resultType="java.lang.Integer" parameterType="com.easychat.entity.query.EmojiQuery">
+        SELECT COUNT(*)
+        FROM emoji
+        <where>
+            <if test="userId != null and userId != ''">
+                AND user_id = #{userId}
+            </if>
+            <if test="emojiType != null">
+                AND emoji_type = #{emojiType}
+            </if>
+        </where>
+    </select>
+
+</mapper>
