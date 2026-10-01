@@ -45,6 +45,12 @@ public class GlobalOperationAspect {
             if (interceptor.checkLogin() || interceptor.checkAdmin()) {
                 checkLogin(interceptor.checkAdmin());
             }
+            /**
+             * API 限流
+             */
+            if (interceptor.checkRateLimit()) {
+                checkRateLimit();
+            }
         } catch (BusinessException e) {
             logger.error("全局拦截器异常", e);
             throw e;
@@ -67,6 +73,26 @@ public class GlobalOperationAspect {
         }
         if (checkAdmin && !tokenUserInfoDto.getAdmin()) {
             throw new BusinessException(ResponseCodeEnum.CODE_1003);
+        }
+    }
+
+    /**
+     * API 限流：每分钟最多 60 次请求
+     */
+    private void checkRateLimit() {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
+        String token = request.getHeader("token");
+        if (token == null) {
+            return;
+        }
+        String key = "rate_limit:" + token;
+        Long count = redisUtils.incr(key);
+        if (count != null && count == 1) {
+            // 第一次请求，设置过期时间 60 秒
+            redisUtils.expire(key, 60);
+        }
+        if (count != null && count > 60) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001, "请求过于频繁，请稍后再试");
         }
     }
 }

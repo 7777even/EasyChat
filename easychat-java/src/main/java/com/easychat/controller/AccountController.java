@@ -77,6 +77,7 @@ public class AccountController extends ABaseController {
      * 用户注册
      */
     @PostMapping(value = "/register")
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
     public Result<Void> register(UserRegisterDTO dto) {
         try {
             validateCheckCode(dto.getCheckCodeKey(), dto.getCheckCode());
@@ -91,6 +92,7 @@ public class AccountController extends ABaseController {
      * 用户登录
      */
     @PostMapping(value = "/login")
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
     public Result<UserInfoVO> login(UserLoginDTO dto) {
         try {
             validateCheckCode(dto.getCheckCodeKey(), dto.getCheckCode());
@@ -105,6 +107,7 @@ public class AccountController extends ABaseController {
      * 发送邮箱验证码（type：0注册 1找回密码）
      */
     @PostMapping(value = "/sendEmailCode")
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
     public Result<Void> sendEmailCode(@NotEmpty String email, Integer type) {
         userInfoService.sendEmailCode(email, type == null ? 0 : type);
         return success();
@@ -114,6 +117,7 @@ public class AccountController extends ABaseController {
      * 忘记密码：通过邮箱验证码重置密码
      */
     @PostMapping(value = "/resetPassword")
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
     public Result<Void> resetPassword(@NotEmpty String email,
                                       @NotEmpty String code,
                                       @NotEmpty(message = "新密码不能为空")

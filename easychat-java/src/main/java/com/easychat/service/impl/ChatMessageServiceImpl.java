@@ -93,6 +93,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Resource
     private ChatSessionUserMapper<ChatSessionUser, ChatSessionUserQuery> chatSessionUserMapper;
 
+    @Resource
+    private com.easychat.service.OperationLogService operationLogService;
+
     /**
      * 根据条件查询列表
      */
@@ -537,6 +540,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         ChatMessage patch = new ChatMessage();
         patch.setDeleteFlag(now);
         chatMessageMapper.updateByMessageId(patch, messageId);
+        // 记录删除消息日志
+        operationLogService.recordLog(admin.getUserId(), "DELETE_MESSAGE", "删除消息: " + messageId, null);
 
         // ADR-004：被删消息是会话最新（send_time >= last_receive_time）才改写预览占位；
         // last_receive_time 不动（不改变会话排序）。客户端本地预览由 20 帧 lastMessage 同步。

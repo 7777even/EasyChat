@@ -23,4 +23,11 @@ public @interface GlobalInterceptor {
      * @return
      */
     boolean checkAdmin() default false;
+
+    /**
+     * 校验 API 限流
+     *
+     * @return
+     */
+    boolean checkRateLimit() default false;
 }
