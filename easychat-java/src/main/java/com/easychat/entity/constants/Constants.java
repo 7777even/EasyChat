@@ -96,6 +96,9 @@ public class Constants {
     // 离线消息缓冲队列（LPUSH，消费后删除）
     public static final String REDIS_KEY_WS_OFFLINE_MSG = "easychat:ws:offline:";
 
+    // 用户在线状态（1=在线 2=忙碌 3=离线）
+    public static final String REDIS_KEY_WS_USER_STATUS = "easychat:ws:user:status:";
+
     // 消息可靠性 ACK 帧类型标识（在 WS 推送 extendData.messageType 中使用 -1）
     public static final Integer WS_ACK_MESSAGE_TYPE = -1;
 

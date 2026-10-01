@@ -194,4 +194,14 @@ public class RedisComponet {
         List<String> list = redisUtils.getQueueList(Constants.REDIS_KEY_WS_OFFLINE_MSG + userId);
         return list != null && !list.isEmpty();
     }
+
+    /**
+     * 更新用户在线状态
+     *
+     * @param userId 用户 ID
+     * @param status 状态值（1=在线 2=忙碌 3=离线）
+     */
+    public void updateUserStatus(String userId, Integer status) {
+        redisUtils.setex(Constants.REDIS_KEY_WS_USER_STATUS + userId, status, Constants.REDIS_KEY_EXPIRES_DAY * 7);
+    }
 }
