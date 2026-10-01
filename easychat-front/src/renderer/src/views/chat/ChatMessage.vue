@@ -7,7 +7,7 @@
     <div class="select-check" v-if="multiSelectMode" @click.stop="toggleSelect">
       <el-checkbox :model-value="selected"></el-checkbox>
     </div>
-    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : '']">
+    <div :class="['content-panel', data.messageType == 5 ? 'content-panel-media' : '', data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : '', isAtAll ? 'at-all-message' : '']">
       <div class="sending" v-if="data.status == 0">
         <el-skeleton :animated="true">
           <template #template>
@@ -24,7 +24,7 @@
             <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
-          <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+          <div class="content" v-html="renderContent" v-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
               <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -57,7 +57,8 @@
         'content-panel',
         data.contactType == 1 ? 'group-content' : '',
         data.messageType == 5 ? 'content-panel-media' : '',
-        data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : ''
+        data.messageType == 14 || data.messageType == 20 ? 'recalled-message' : '',
+        isAtAll ? 'at-all-message' : ''
       ]"
     >
       <div class="nick-name" v-if="data.contactType == 1 && data.messageType != 14 && data.messageType != 20">
@@ -79,7 +80,7 @@
             <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
-          <div class="content" v-html="data.messageContent" v-if="data.messageType != 5"></div>
+          <div class="content" v-html="renderContent" v-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
               <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -143,8 +144,7 @@ const emit = defineEmits([
   'multiSelect',
   'toggleSelect',
   'deleteMessage',
-  'reportMessage',
-  'laterHandle'
+  'reportMessage'
 ])
 
 /**
@@ -165,6 +165,35 @@ const quoteInfo = computed(() => {
   const extra = parseExtraData()
   if (!extra || !extra.quoteContent) return null
   return extra
+})
+
+// @所有人 消息：extraData.atAll 为真，或正文含「@所有人」（兼容旧消息仅存正文的形态）
+const isAtAll = computed(() => {
+  const extra = parseExtraData()
+  if (extra && extra.atAll) return true
+  return (props.data.messageContent || '').indexOf('@所有人') >= 0
+})
+
+// @所有人 正文着色：仅高亮首处标记，其余保持原文
+const atAllContent = computed(() => {
+  const content = props.data.messageContent || ''
+  const idx = content.indexOf('@所有人')
+  if (idx < 0) {
+    return content
+  }
+  return (
+    content.slice(0, idx) +
+    `<span class="at-all-tag">@所有人</span>` +
+    content.slice(idx + 4)
+  )
+})
+
+// 撤回 / 管理员删除态走原文，普通文本消息按需套用 @所有人 着色
+const renderContent = computed(() => {
+  if (props.data.messageType == 14 || props.data.messageType == 20) {
+    return props.data.messageContent || ''
+  }
+  return isAtAll.value ? atAllContent.value : props.data.messageContent || ''
 })
 
 const showDetail = () => {
@@ -218,13 +247,6 @@ const onContextMenu = (e) => {
     label: '转发',
     onClick: () => {
       emit('forwardMessage', props.data)
-    }
-  })
-
-  items.push({
-    label: '稍后处理',
-    onClick: () => {
-      emit('laterHandle', props.data)
     }
   })
 
@@ -442,6 +464,17 @@ const copyText = async (text) => {
   }
   &::after {
     display: none;
+  }
+}
+// @所有人 消息特殊样式：气泡描边高亮 + 标记文字红色加粗
+.at-all-message {
+  .content {
+    border: 1px solid var(--ec-at-all);
+    box-shadow: 0 0 0 1px rgba(250, 81, 81, 0.08);
+  }
+  .at-all-tag {
+    color: var(--ec-at-all);
+    font-weight: 600;
   }
 }
 </style>

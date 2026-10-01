@@ -57,6 +57,7 @@
     --ec-quote-border: #b6b6b6;
     --ec-recalled-bg: #e5e5e5; // 撤回消息块
     --ec-recalled-text: #999999;
+    --ec-at-all: #fa5151; // @所有人 高亮色（微信红，深浅一致）
     --ec-card-bg: #ffffff; // 卡片/面板背景（朋友圈卡片等）
     --ec-card-text: #333333; // 卡片正文主色
 
@@ -96,6 +97,7 @@ html.dark {
     --ec-quote-border: #555555;
     --ec-recalled-bg: #2a2a2a;
     --ec-recalled-text: #888888;
+    --ec-at-all: #fa5151;
     --ec-card-bg: #2b2b2b; // 卡片/面板背景（深色）
     --ec-card-text: #d2d2d2; // 卡片正文主色（深色）
 

@@ -28,48 +28,59 @@
           <div class="iconfont icon-emoji" @click="showEmojiPopoverHandler"></div>
         </template>
       </el-popover>
-      <!-- 表情包选择器 -->
+      <el-upload
+        ref="uploadRef"
+        name="file"
+        :show-file-list="false"
+        :multiple="true"
+        :limit="fileLimit"
+        :http-request="uploadFile"
+        :on-exceed="uploadExceed"
+      >
+        <div class="iconfont icon-folder"></div>
+      </el-upload>
+      <!-- 群聊 @ 提及（仅群聊可见；「@所有人」仅群主/管理员可见） -->
       <el-popover
-        :visible="showEmojiPicker"
+        v-if="isGroupChat"
+        :visible="showAtPopover"
         trigger="click"
-        placement="top"
+        placement="top-start"
         :teleported="false"
-        @show="openEmojiPicker"
-        @hide="closeEmojiPicker"
         :popper-style="{
           padding: '0px',
-          width: '320px'
+          width: '240px'
         }"
+        @show="openAtPopoverHandler"
+        @hide="closeAtPopover"
       >
         <template #default>
-          <EmojiPicker @select="selectEmoji" />
+          <div class="at-panel" @click.stop>
+            <div class="at-item at-item-all" v-if="canAtAll" @click="selectAtAll">
+              <div class="at-name">@所有人</div>
+              <div class="at-desc">提醒群内全体成员</div>
+            </div>
+            <div class="at-search">
+              <el-input v-model="atKeyword" placeholder="搜索群成员" size="small" clearable />
+            </div>
+            <div class="at-list">
+              <div
+                class="at-item"
+                v-for="item in filteredAtMemberList"
+                :key="item.userId"
+                @click="selectAtMember(item)"
+              >
+                <div class="at-name">{{ item.contactName || item.userId }}</div>
+                <div class="at-role" v-if="item.role != null && item.role != 2">{{ roleText(item.role) }}</div>
+              </div>
+              <div class="at-empty" v-if="atLoading">加载中...</div>
+              <div class="at-empty" v-else-if="filteredAtMemberList.length == 0">无匹配群成员</div>
+            </div>
+          </div>
         </template>
         <template #reference>
-          <div class="iconfont icon-sticker" @click="showEmojiPickerHandler" title="表情包"></div>
+          <span class="at-icon" @click="showAtPopoverHandler" title="@"></span>
         </template>
       </el-popover>
-      <el-upload
-        ref="uploadRef"
-        name="file"
-        :show-file-list="false"
-        :multiple="true"
-        :limit="fileLimit"
-        :http-request="uploadFile"
-        :on-exceed="uploadExceed"
-      >
-        <div class="iconfont icon-folder"></div>
-      </el-upload>
-      <el-upload
-        ref="uploadRef"
-        name="file"
-        :show-file-list="false"
-        :multiple="true"
-        :limit="fileLimit"
-        :http-request="uploadFile"
-        :on-exceed="uploadExceed"
-      >
-        <div class="iconfont icon-folder"></div>
-      </el-upload>
       <div class="iconfont icon-search" @click="showSearchDialog" title="搜索消息"></div>
     </div>
     <div class="quote-panel" v-if="quoteInfo">
@@ -81,6 +92,7 @@
     </div>
     <div class="input-area" @drop="dropHandler" @dragover="dragOverHandler">
       <el-input
+        ref="inputRef"
         :rows="5"
         v-model="msgContent"
         type="textarea"
@@ -139,7 +151,7 @@
 <script setup>
 import SearchAdd from '@/views/contact/SearchAdd.vue'
 import {getFileType} from '@/utils/Constants.js'
-import {getCurrentInstance, onMounted, onUnmounted, ref, watch} from 'vue'
+import {computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, watch} from 'vue'
 import emojiList from '@/utils/Emoji.js'
 import {useUserInfoStore} from '@/stores/UserInfoStore'
 import {useSysSettingStore} from '@/stores/SysSettingStore'
@@ -163,6 +175,7 @@ const uploadProgress = ref({})
 const cleanMessage = () => {
   msgContent.value = ''
   clearQuote()
+  atAllEnabled.value = false
 }
 
 // ===== 引用回复 =====
@@ -182,6 +195,132 @@ defineExpose({
 
 //发送消息（需先于下方草稿 watch 声明，否则 setup 阶段 TDZ 报错导致整页白屏）
 const msgContent = ref('')
+
+// ===== 群聊 @ 提及 =====
+const AT_ALL_TEXT = '@所有人'
+const AT_ALL_ROLE = 0 // 群主
+const AT_ADMIN_ROLE = 1 // 管理员
+// 仅群聊出现 @ 按钮
+const isGroupChat = computed(() => props.currentChatSession.contactType == 1)
+// 本人群角色（0 群主 / 1 管理员 / 2 成员），来自 getGroupInfo4Chat 的 userContactList
+const myGroupRole = ref(2)
+// 仅群主/管理员可 @所有人（普通成员面板不渲染该选项）
+const canAtAll = computed(
+  () => myGroupRole.value === AT_ALL_ROLE || myGroupRole.value === AT_ADMIN_ROLE
+)
+const roleText = (role) => ({ 0: '群主', 1: '管理员', 2: '成员' })[role] || '成员'
+
+const showAtPopover = ref(false)
+const atKeyword = ref('')
+const atMemberList = ref([])
+const atLoading = ref(false)
+// 输入框组件实例：@ 文本需插入到光标位置而非文末
+const inputRef = ref()
+// 本条消息是否携带 @所有人 标记（写入 extraData.atAll，发送后清空）
+const atAllEnabled = ref(false)
+
+// 按关键词过滤群成员
+const filteredAtMemberList = computed(() => {
+  const keyword = (atKeyword.value || '').trim().toLowerCase()
+  if (!keyword) {
+    return atMemberList.value
+  }
+  return atMemberList.value.filter((item) => {
+    return (item.contactName || '').toLowerCase().includes(keyword)
+  })
+})
+
+// 打开 @ 面板时按需拉取群成员 + 我的角色（同一群只拉一次，切换会话后重置）
+const loadAtMemberList = async () => {
+  const groupId = props.currentChatSession.contactId
+  if (!groupId || atLoading.value || atMemberList.value.length > 0) {
+    return
+  }
+  atLoading.value = true
+  try {
+    const result = await proxy.Request({
+      url: proxy.Api.getGroupInfo4Chat,
+      params: {groupId},
+      showLoading: false,
+      showError: false,
+      errorCallback: (response) => {
+        proxy.Confirm({message: response.message || response.info, showCancelBtn: false})
+      }
+    })
+    if (!result) {
+      return
+    }
+    atMemberList.value = result.data.userContactList || []
+    const me = userInfoStore.getInfo().userId
+    const mine = atMemberList.value.find((item) => item.userId === me)
+    if (mine && mine.role != null) {
+      myGroupRole.value = Number(mine.role)
+    }
+  } finally {
+    atLoading.value = false
+  }
+}
+
+const showAtPopoverHandler = () => {
+  showAtPopover.value = true
+  loadAtMemberList()
+}
+const openAtPopoverHandler = () => {
+  loadAtMemberList()
+}
+const closeAtPopover = () => {
+  showAtPopover.value = false
+  atKeyword.value = ''
+}
+
+// 在光标处插入 @ 文本（沿用既有 @Ux 格式，服务端 atUserIds 解析依赖此形态）
+const insertAtText = (text) => {
+  const textarea = inputRef.value && inputRef.value.textarea
+  if (!textarea) {
+    msgContent.value = msgContent.value + text
+    return
+  }
+  const start = textarea.selectionStart ?? msgContent.value.length
+  const end = textarea.selectionEnd ?? start
+  msgContent.value =
+    msgContent.value.slice(0, start) + text + msgContent.value.slice(end)
+  // 插入后把光标移到文本之后
+  nextTick(() => {
+    const cursor = start + text.length
+    textarea.focus()
+    textarea.setSelectionRange(cursor, cursor)
+  })
+}
+
+const selectAtMember = (member) => {
+  insertAtText(`@${member.userId} `)
+  closeAtPopover()
+}
+
+const selectAtAll = () => {
+  // 双重保护：非群主/管理员不允许 @所有人
+  if (!canAtAll.value) {
+    proxy.Message.warning('仅群主或管理员可以@所有人')
+    return
+  }
+  if (msgContent.value.indexOf(AT_ALL_TEXT) < 0) {
+    insertAtText(`${AT_ALL_TEXT} `)
+  }
+  atAllEnabled.value = true
+  closeAtPopover()
+}
+
+// 切换会话时重置 @ 面板缓存（成员列表与角色按群隔离）
+watch(
+  () => props.currentChatSession.contactId,
+  () => {
+    atMemberList.value = []
+    myGroupRole.value = 2
+    atAllEnabled.value = false
+    showAtPopover.value = false
+    atKeyword.value = ''
+  }
+)
 
 // ===== 会话草稿：切会话时保存 / 恢复（跨端同步，服务端真源） =====
 let draftContactId = null
@@ -240,25 +379,29 @@ const sendMessage = async (e) => {
 }
 
 /**
- * 组装消息扩展数据：引用回复 / 群 @ 提及
- * 引用落在 extraData（JSON），@ 落在 atUserIds（服务端用于红点提醒）
+ * 组装消息扩展数据：引用回复 / 群 @ 提及 / @所有人
+ * 均落在 extraData（JSON 字符串），@ 另落 atUserIds（服务端用于红点提醒）。
+ * 三者可共存，按需合并，避免引用消息丢失 @ 标记。
  */
 const buildExtraData = (messageContent) => {
+  const extra = {}
   if (quoteInfo.value) {
-    return JSON.stringify({
-      quoteId: quoteInfo.value.messageId,
-      quoteContent: quoteInfo.value.quoteContent,
-      quoteNickName: quoteInfo.value.quoteNickName || ''
-    })
+    extra.quoteId = quoteInfo.value.messageId
+    extra.quoteContent = quoteInfo.value.quoteContent
+    extra.quoteNickName = quoteInfo.value.quoteNickName || ''
   }
   // 群 @ 提及：正文里形如 "@Uxxxx" 的用户 ID
   if (props.currentChatSession.contactType == 1 && messageContent) {
     const matched = messageContent.match(/@(U[A-Za-z0-9]+)/g)
     if (matched && matched.length > 0) {
-      return JSON.stringify({atUserIds: matched.map((item) => item.substring(1))})
+      extra.atUserIds = matched.map((item) => item.substring(1))
+    }
+    // @所有人：以面板勾选标记为准，正文出现 @所有人 也认（兼容草稿恢复后重发）
+    if (atAllEnabled.value || messageContent.indexOf(AT_ALL_TEXT) >= 0) {
+      extra.atAll = true
     }
   }
-  return null
+  return Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
 }
 
 const buildAtUserIds = (messageContent) => {
@@ -360,6 +503,8 @@ const sendMessageDo = async (
     messageObj.extraData = extraData
   }
   clearQuote()
+  // @所有人标记随消息一次性消费，发送后清空，避免下一条消息误带
+  atAllEnabled.value = false
   Object.assign(messageObj, result.data)
   //更新列表
   emit('sendMessage4Local', messageObj)
@@ -378,8 +523,6 @@ const sendMessageDo = async (
   return result.data
 }
 
-import EmojiPicker from './EmojiPicker.vue'
-const showEmojiPicker = ref(false)
 //表情相关
 const sendEmoji = (emoji) => {
   msgContent.value = msgContent.value + emoji
@@ -718,6 +861,70 @@ onUnmounted(() => {
     .empty-msg {
       font-size: 13px;
     }
+  }
+}
+
+// ===== @ 提及选择面板 =====
+.at-panel {
+  font-size: 13px;
+  color: var(--ec-body-text);
+
+  .at-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--ec-divider);
+  }
+
+  .at-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+
+  .at-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--ec-surface-soft);
+    }
+
+    &.at-item-all {
+      border-bottom: 1px solid var(--ec-divider);
+      color: var(--ec-at-all);
+      font-weight: 600;
+    }
+  }
+
+  .at-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .at-desc {
+    font-size: 11px;
+    color: #b2b2b2;
+    margin-left: 8px;
+  }
+
+  .at-role {
+    flex-shrink: 0;
+    margin-left: 8px;
+    padding: 0 5px;
+    font-size: 11px;
+    border-radius: 3px;
+    background: var(--ec-chip-green-bg);
+    color: #07c160;
+  }
+
+  .at-empty {
+    padding: 12px;
+    text-align: center;
+    color: #b2b2b2;
   }
 }
 
