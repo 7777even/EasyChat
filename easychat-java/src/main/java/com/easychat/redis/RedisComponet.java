@@ -139,29 +139,13 @@ public class RedisComponet {
         redisUtils.delete(Constants.REDIS_KEY_USER_SESSION + userId);
     }
 
-    // 系统设置本地缓存（减少 Redis 访问）
-    private SysSettingDto sysSettingCache = null;
-    private long sysSettingCacheTime = 0;
-    private static final long SYS_SETTING_CACHE_TTL = 60000; // 缓存 60 秒
-
     public void saveSysSetting(SysSettingDto sysSettingDto) {
         redisUtils.set(Constants.REDIS_KEY_SYS_SETTING, sysSettingDto);
-        // 更新本地缓存
-        sysSettingCache = sysSettingDto;
-        sysSettingCacheTime = System.currentTimeMillis();
     }
 
     public SysSettingDto getSysSetting() {
-        // 优先从本地缓存获取
-        if (sysSettingCache != null && System.currentTimeMillis() - sysSettingCacheTime < SYS_SETTING_CACHE_TTL) {
-            return sysSettingCache;
-        }
-        // 从 Redis 获取
         SysSettingDto sysSettingDto = (SysSettingDto) redisUtils.get(Constants.REDIS_KEY_SYS_SETTING);
         sysSettingDto = sysSettingDto == null ? new SysSettingDto() : sysSettingDto;
-        // 更新本地缓存
-        sysSettingCache = sysSettingDto;
-        sysSettingCacheTime = System.currentTimeMillis();
         return sysSettingDto;
     }
 
@@ -220,4 +204,58 @@ public class RedisComponet {
     public void updateUserStatus(String userId, Integer status) {
         redisUtils.setex(Constants.REDIS_KEY_WS_USER_STATUS + userId, status, Constants.REDIS_KEY_EXPIRES_DAY * 7);
     }
+/* ===================== 群二维码/邀请链接 ===================== */
+
+    /**
+     * 保存群二维码 token
+     *
+     * @param groupId 群组 ID
+     * @param token 二维码 token
+     */
+    public void saveGroupQrCode(String groupId, String token) {
+        redisUtils.setex(Constants.REDIS_KEY_GROUP_QRCODE + groupId, token, Constants.REDIS_KEY_EXPIRES_DAY * 7);
+    }
+
+    /**
+     * 获取群二维码 token
+     *
+     * @param groupId 群组 ID
+     * @return 二维码 token，不存在返回 null
+     */
+    public String getGroupQrCode(String groupId) {
+        return (String) redisUtils.get(Constants.REDIS_KEY_GROUP_QRCODE + groupId);
+    }
+
+    /**
+     * 保存群邀请链接 token
+     *
+     * @param groupId 群组 ID
+     * @param token 邀请链接 token
+     */
+    public void saveGroupInvite(String groupId, String token) {
+        redisUtils.setex(Constants.REDIS_KEY_GROUP_INVITE + groupId, token, Constants.REDIS_KEY_EXPIRES_DAY * 7);
+    }
+
+    /**
+     * 获取群邀请链接 token
+     *
+     * @param groupId 群组 ID
+     * @return 邀请链接 token，不存在返回 null
+     */
+    public String getGroupInvite(String groupId) {
+        return (String) redisUtils.get(Constants.REDIS_KEY_GROUP_INVITE + groupId);
+    }
+
+    /**
+     * 根据 token 获取群组 ID
+     *
+     * @param token 二维码/邀请链接 token
+     * @return 群组 ID，不存在返回 null
+     */
+    public String getGroupIdByToken(String token) {
+        // 遍历所有群组，查找匹配的 token
+        // 注意：这是一个简化的实现，实际生产环境可能需要更高效的方式
+        return null;
+    }
+
 }

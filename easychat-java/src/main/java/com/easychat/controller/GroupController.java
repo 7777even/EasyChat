@@ -16,6 +16,8 @@ import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.entity.vo.Result;
 import com.easychat.exception.BusinessException;
 import com.easychat.service.GroupInfoService;
+import com.easychat.service.GroupInviteService;
+import com.easychat.service.GroupQrCodeService;
 import com.easychat.service.UserContactService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,6 +40,12 @@ public class GroupController extends ABaseController {
 
     @Resource
     private UserContactService userContactService;
+
+    @Resource
+    private GroupQrCodeService groupQrCodeService;
+
+    @Resource
+    private GroupInviteService groupInviteService;
 
     @PostMapping(value = "/saveGroup")
     @GlobalInterceptor
@@ -207,5 +215,53 @@ public class GroupController extends ABaseController {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         PaginationResultVO<UserContact> result = groupInfoService.getGroupMemberList(tokenUserInfoDto, groupId);
         return success(result);
+    }
+
+    // ==================== 群二维码 ====================
+
+    /**
+     * 生成群二维码（群主/管理员）
+     */
+    @PostMapping(value = "/qrCode/generate")
+    @GlobalInterceptor
+    public Result<String> generateQrCode(HttpServletRequest request, @NotEmpty String groupId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        String token = groupQrCodeService.generateQrCode(tokenUserInfoDto, groupId);
+        return success(token);
+    }
+
+    /**
+     * 通过二维码加入群组
+     */
+    @PostMapping(value = "/qrCode/join")
+    @GlobalInterceptor
+    public Result<Void> joinByQrCode(HttpServletRequest request, @NotEmpty String qrCodeToken) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        groupQrCodeService.joinByQrCode(tokenUserInfoDto, qrCodeToken);
+        return success();
+    }
+
+    // ==================== 群邀请链接 ====================
+
+    /**
+     * 生成群邀请链接（群主/管理员）
+     */
+    @PostMapping(value = "/invite/generate")
+    @GlobalInterceptor
+    public Result<String> generateInvite(HttpServletRequest request, @NotEmpty String groupId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        String token = groupInviteService.generateInvite(tokenUserInfoDto, groupId);
+        return success(token);
+    }
+
+    /**
+     * 通过邀请链接加入群组
+     */
+    @PostMapping(value = "/invite/join")
+    @GlobalInterceptor
+    public Result<Void> joinByInvite(HttpServletRequest request, @NotEmpty String inviteToken) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        groupInviteService.joinByInvite(tokenUserInfoDto, inviteToken);
+        return success();
     }
 }

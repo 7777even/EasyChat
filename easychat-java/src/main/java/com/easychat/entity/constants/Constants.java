@@ -99,6 +99,12 @@ public class Constants {
     // 用户在线状态（1=在线 2=忙碌 3=离线）
     public static final String REDIS_KEY_WS_USER_STATUS = "easychat:ws:user:status:";
 
+    // 群二维码 token
+    public static final String REDIS_KEY_GROUP_QRCODE = "easychat:group:qrcode:";
+
+    // 群邀请链接 token
+    public static final String REDIS_KEY_GROUP_INVITE = "easychat:group:invite:";
+
     // 消息可靠性 ACK 帧类型标识（在 WS 推送 extendData.messageType 中使用 -1）
     public static final Integer WS_ACK_MESSAGE_TYPE = -1;
 
