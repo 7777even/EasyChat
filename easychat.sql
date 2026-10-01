@@ -156,7 +156,7 @@ CREATE TABLE `user_info`  (
   `nick_name` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '昵称',
   `join_type` tinyint(1) NULL DEFAULT NULL COMMENT '0:直接加入  1:同意后加好友',
   `sex` tinyint(1) NULL DEFAULT NULL COMMENT '性别 0:女 1:男',
-  `password` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '密码',
+  `password` varchar(60) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '密码',
   `personal_signature` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '个性签名',
   `status` tinyint(1) NULL DEFAULT NULL COMMENT '状态',
   `create_time` datetime NULL DEFAULT NULL COMMENT '创建时间',
@@ -398,5 +398,66 @@ CREATE TABLE `call_log`  (
   INDEX `idx_group`(`group_id`) USING BTREE,
   INDEX `idx_peer`(`peer_id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '通话记录';
+
+-- ----------------------------
+-- Table structure for emoji
+-- ----------------------------
+DROP TABLE IF EXISTS `emoji`;
+CREATE TABLE `emoji` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户ID',
+  `file_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '文件名',
+  `file_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '存储路径',
+  `file_size` bigint(20) NULL DEFAULT NULL COMMENT '文件大小',
+  `emoji_type` tinyint(1) NULL DEFAULT 0 COMMENT '0=系统 1=自定义',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_user`(`user_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '表情包';
+
+-- ----------------------------
+-- Table structure for operation_log
+-- ----------------------------
+DROP TABLE IF EXISTS `operation_log`;
+CREATE TABLE `operation_log` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '操作用户ID',
+  `operation_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '操作类型',
+  `operation_desc` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '操作描述',
+  `ip_address` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'IP地址',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '操作时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_user`(`user_id`) USING BTREE,
+  INDEX `idx_type`(`operation_type`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '操作日志';
+
+-- ----------------------------
+-- Table structure for favorite
+-- ----------------------------
+DROP TABLE IF EXISTS `favorite`;
+CREATE TABLE `favorite` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户ID',
+  `message_id` bigint(20) NOT NULL COMMENT '消息ID',
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '收藏内容',
+  `file_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '文件路径',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间毫秒',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_user`(`user_id`) USING BTREE,
+  UNIQUE INDEX `uk_user_message`(`user_id`, `message_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '收藏';
+
+-- ----------------------------
+-- Table structure for user_status
+-- ----------------------------
+DROP TABLE IF EXISTS `user_status`;
+CREATE TABLE `user_status` (
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户ID',
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '状态文字内容',
+  `image_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '状态图片URL',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '创建时间戳',
+  `expire_time` bigint(20) NULL DEFAULT NULL COMMENT '过期时间戳',
+  PRIMARY KEY (`user_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COMMENT = '用户状态';
 
 SET FOREIGN_KEY_CHECKS = 1;
