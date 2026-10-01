@@ -31,7 +31,14 @@
                 ]"
                 @click="contactDetail(contact, item)"
               >
-                <Avatar :userId="contact[item.contactId]" :width="35" :contactType="contact.contactType"></Avatar>
+                <div class="avatar-wrapper">
+                  <Avatar :userId="contact[item.contactId]" :width="35" :contactType="contact.contactType"></Avatar>
+                  <!-- 在线状态指示点 -->
+                  <span
+                    v-if="contact.contactType === 0 && onlineStatusMap[contact[item.contactId]]"
+                    :class="['status-dot', `status-${onlineStatusMap[contact[item.contactId]]}`]"
+                  ></span>
+                </div>
                 <div class="text">
                   {{ contact[item.contactName] }}
                 </div>
@@ -198,6 +205,30 @@ const contactDetail = (contact, part) => {
   })
 }
 
+// ===== 在线状态 =====
+const onlineStatusMap = ref({})
+
+// 监听在线状态变更帧
+const onOnlineStatus = () => {
+  window.ipcRenderer.on('onlineStatus', (e, message) => {
+    if (!message || !message.contactId) return
+    const status = message.extendData
+    // 更新在线状态映射
+    onlineStatusMap.value = {
+      ...onlineStatusMap.value,
+      [message.contactId]: status
+    }
+  })
+}
+
+onMounted(() => {
+  onOnlineStatus()
+})
+
+onUnmounted(() => {
+  window.ipcRenderer.removeAllListeners('onlineStatus')
+})
+
 //搜索
 const searchKey = ref()
 const searchList = ref([])
@@ -318,6 +349,32 @@ watch(
         justify-content: center;
         font-size: 20px;
         color: #fff;
+      }
+      .avatar-wrapper {
+        position: relative;
+        width: 35px;
+        height: 35px;
+        flex-shrink: 0;
+
+        .status-dot {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          border: 2px solid #fff;
+
+          &.status-1 {
+            background-color: #07c160;
+          }
+          &.status-2 {
+            background-color: #ff9800;
+          }
+          &.status-3 {
+            background-color: #999;
+          }
+        }
       }
       .text {
         flex: 1;

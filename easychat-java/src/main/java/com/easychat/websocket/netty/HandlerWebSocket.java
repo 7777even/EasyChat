@@ -107,6 +107,9 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             } else if (messageType != null && isCallMessageType(messageType)) {
                 // 语音/视频通话信令帧：交由 CallService 中继（不落库、不触发普通消息逻辑）
                 callService.handleCallFrame(userId, json);
+            } else if (messageType != null && com.easychat.entity.enums.MessageTypeEnum.USER_STATUS_CHANGE.getType().equals(messageType)) {
+                // 用户状态变更帧：更新 Redis 并广播给好友
+                handleUserStatusChange(userId, json);
             } else {
                 // 心跳或其他未知类型（含旧客户端残留的 -3 回执帧）：仅刷新心跳，静默忽略
                 redisComponet.saveUserHeartBeat(userId);
@@ -219,5 +222,20 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             return url;
         }
         return params[1];
+    }
+    /**
+     * 处理用户状态变更帧：更新 Redis 并广播给好友
+     * 帧格式: { "messageType": 23, "status": 2 }
+     */
+    private void handleUserStatusChange(String userId, JSONObject json) {
+        Integer status = json.getInteger("status");
+        if (status == null) {
+            return;
+        }
+        // 更新 Redis 中的用户状态
+        redisComponet.updateUserStatus(userId, status);
+        // 向所有好友广播状态变更
+        channelContextUtils.broadcastOnlineStatus(userId, status);
+        logger.info("用户{}状态变更为{}", userId, status);
     }
 }

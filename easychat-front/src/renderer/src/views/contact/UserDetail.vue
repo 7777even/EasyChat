@@ -21,6 +21,32 @@
       <div class="part-title">个性签名</div>
       <div class="part-content">{{ userInfo.personalSignature || '-' }}</div>
     </div>
+    <!-- 好友状态 -->
+    <div class="part-item" v-if="userStatus">
+      <div class="part-title">状态</div>
+      <div class="part-content">
+        <div class="status-content">
+          <img v-if="userStatus.imageUrl" :src="userStatus.imageUrl" class="status-image" />
+          <span>{{ userStatus.content }}</span>
+        </div>
+      </div>
+    </div>
+    <!-- 设置自己的状态 -->
+    <div class="part-item">
+      <div class="part-title">我的状态</div>
+      <div class="part-content">
+        <el-input
+          v-model="myStatusContent"
+          size="small"
+          placeholder="设置状态，24小时后过期"
+          maxlength="500"
+          show-word-limit
+          style="max-width: 260px"
+          @change="saveMyStatus"
+        ></el-input>
+        <el-button size="small" @click="clearMyStatus" v-if="myStatusContent">清除</el-button>
+      </div>
+    </div>
     <!-- 好友备注：优先于昵称展示在会话与通讯录 -->
     <div class="part-item">
       <div class="part-title">备注</div>
@@ -86,6 +112,8 @@ const loadUserDetail = async (contactId) => {
   userInfo.value = result.data
   remark.value = result.data.remark || ''
   groupName.value = result.data.groupName || ''
+  // 加载好友状态
+  loadUserStatus(contactId)
 }
 
 //设置好友备注名
@@ -179,6 +207,7 @@ watch(
   (newVal, oldVal) => {
     if (newVal) {
       loadUserDetail(newVal)
+      loadMyStatus()
     }
   },
   {immediate: true, deep: true}
@@ -205,6 +234,73 @@ const nudge = async () => {
     return
   }
   proxy.Message.success('已发送拍一拍')
+}
+
+// ===== 状态 =====
+const userStatus = ref(null)
+const myStatusContent = ref('')
+
+// 加载好友状态
+const loadUserStatus = async (userId) => {
+  const result = await proxy.Request({
+    url: proxy.Api.getStatus,
+    params: {
+      userId: userId
+    },
+    showLoading: false,
+    showError: false
+  })
+  if (result && result.data) {
+    userStatus.value = result.data
+  } else {
+    userStatus.value = null
+  }
+}
+
+// 加载我的状态
+const loadMyStatus = async () => {
+  const result = await proxy.Request({
+    url: proxy.Api.getStatus,
+    params: {
+      userId: userInfoStore.getInfo().userId
+    },
+    showLoading: false,
+    showError: false
+  })
+  if (result && result.data) {
+    myStatusContent.value = result.data.content || ''
+  }
+}
+
+// 设置我的状态
+const saveMyStatus = async () => {
+  if (!myStatusContent.value) {
+    return
+  }
+  const result = await proxy.Request({
+    url: proxy.Api.setStatus,
+    params: {
+      content: myStatusContent.value
+    },
+    showLoading: false
+  })
+  if (!result) {
+    return
+  }
+  proxy.Message.success('状态已设置')
+}
+
+// 清除我的状态
+const clearMyStatus = async () => {
+  const result = await proxy.Request({
+    url: proxy.Api.clearStatus,
+    showLoading: false
+  })
+  if (!result) {
+    return
+  }
+  myStatusContent.value = ''
+  proxy.Message.success('状态已清除')
 }
 </script>
 
@@ -264,6 +360,19 @@ const nudge = async () => {
   &:hover {
     background: #e9e9e9;
     cursor: pointer;
+  }
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .status-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    object-fit: cover;
   }
 }
 </style>

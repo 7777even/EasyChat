@@ -115,6 +115,10 @@ const api = {
     emojiDelete: "/emoji/delete",
     // ===== 拍一拍 =====
     nudge: "/contact/nudge",
+    // ===== 状态 =====
+    setStatus: "/userStatus/set",
+    getStatus: "/userStatus/get",
+    clearStatus: "/userStatus/clear",
 }
 
 export default api;

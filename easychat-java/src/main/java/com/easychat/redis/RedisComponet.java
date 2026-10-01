@@ -258,4 +258,23 @@ public class RedisComponet {
         return null;
     }
 
+
+    /**
+     * 获取用户在线状态
+     *
+     * @param userId 用户 ID
+     * @return 状态值（1=在线 2=忙碌 3=离线），不存在返回 null
+     */
+    public Integer getUserStatus(String userId) {
+        return (Integer) redisUtils.get(Constants.REDIS_KEY_WS_USER_STATUS + userId);
+    }
+
+    /**
+     * 删除用户在线状态（用户注销时调用）
+     *
+     * @param userId 用户 ID
+     */
+    public void removeUserStatus(String userId) {
+        redisUtils.delete(Constants.REDIS_KEY_WS_USER_STATUS + userId);
+    }
 }
