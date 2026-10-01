@@ -80,6 +80,9 @@ public class UserInfoServiceImpl implements UserInfoService {
     @Resource
     private EmailVerifyCodeMapper<EmailVerifyCode, EmailVerifyCodeQuery> emailVerifyCodeMapper;
 
+    @Resource
+    private com.easychat.service.OperationLogService operationLogService;
+
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(UserInfoServiceImpl.class);
 
     /**
@@ -229,7 +232,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         userInfo.setUserId(userId);
         userInfo.setNickName(nickName);
         userInfo.setEmail(email);
-        userInfo.setPassword(StringTools.encodeByMD5(password));
+        userInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(password));
         userInfo.setCreateTime(curDate);
         userInfo.setStatus(UserStatusEnum.ENABLE.getStatus());
         userInfo.setLastOffTime(curDate.getTime());
@@ -247,11 +250,39 @@ public class UserInfoServiceImpl implements UserInfoService {
     @Override
     public UserInfoVO login(String email, String password) {
         UserInfo userInfo = this.userInfoMapper.selectByEmail(email);
-        if (null == userInfo || !userInfo.getPassword().equals(password)) {
+        if (null == userInfo) {
+            throw new BusinessException("账号或者密码错误");
+        }
+        // 验证密码：支持 BCrypt 和 MD5 双验证
+        boolean passwordValid = false;
+        if (com.easychat.utils.PasswordEncoder.isBCrypt(userInfo.getPassword())) {
+            // BCrypt 验证
+            passwordValid = com.easychat.utils.PasswordEncoder.matches(password, userInfo.getPassword());
+        } else {
+            // MD5 验证（兼容旧密码）
+            passwordValid = userInfo.getPassword().equals(StringTools.encodeByMD5(password));
+        }
+        if (!passwordValid) {
+            // 记录登录失败日志
+            operationLogService.recordLog(userInfo.getUserId(), "LOGIN_FAILED", "登录失败：密码错误", null);
             throw new BusinessException("账号或者密码错误");
         }
         if (UserStatusEnum.DISABLE.getStatus().equals(userInfo.getStatus())) {
+            // 记录登录失败日志
+            operationLogService.recordLog(userInfo.getUserId(), "LOGIN_FAILED", "登录失败：账号已禁用", null);
             throw new BusinessException("账号已禁用");
+        }
+
+        // 记录登录成功日志
+        operationLogService.recordLog(userInfo.getUserId(), "LOGIN_SUCCESS", "登录成功", null);
+
+        // 如果是 MD5 验证，自动升级为 BCrypt
+        if (!com.easychat.utils.PasswordEncoder.isBCrypt(userInfo.getPassword())) {
+            String bcryptPassword = com.easychat.utils.PasswordEncoder.encode(password);
+            UserInfo updateInfo = new UserInfo();
+            updateInfo.setPassword(bcryptPassword);
+            userInfoMapper.updateByUserId(updateInfo, userInfo.getUserId());
+            userInfo.setPassword(bcryptPassword);
         }
 
         //查询联系人
@@ -359,15 +390,31 @@ public class UserInfoServiceImpl implements UserInfoService {
         if (dbInfo == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_2101);
         }
-        if (!dbInfo.getPassword().equals(StringTools.encodeByMD5(oldPassword))) {
+        // 验证旧密码：支持 BCrypt 和 MD5 双验证
+        boolean oldPasswordValid = false;
+        if (com.easychat.utils.PasswordEncoder.isBCrypt(dbInfo.getPassword())) {
+            oldPasswordValid = com.easychat.utils.PasswordEncoder.matches(oldPassword, dbInfo.getPassword());
+        } else {
+            oldPasswordValid = dbInfo.getPassword().equals(StringTools.encodeByMD5(oldPassword));
+        }
+        if (!oldPasswordValid) {
             throw new BusinessException(ResponseCodeEnum.CODE_2103);
         }
-        if (dbInfo.getPassword().equals(StringTools.encodeByMD5(newPassword))) {
+        // 验证新密码是否与原密码相同
+        boolean samePassword = false;
+        if (com.easychat.utils.PasswordEncoder.isBCrypt(dbInfo.getPassword())) {
+            samePassword = com.easychat.utils.PasswordEncoder.matches(newPassword, dbInfo.getPassword());
+        } else {
+            samePassword = dbInfo.getPassword().equals(StringTools.encodeByMD5(newPassword));
+        }
+        if (samePassword) {
             throw new BusinessException("新密码不能与原密码相同");
         }
         UserInfo updateInfo = new UserInfo();
-        updateInfo.setPassword(StringTools.encodeByMD5(newPassword));
+        updateInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(newPassword));
         userInfoMapper.updateByUserId(updateInfo, userId);
+        // 记录修改密码日志
+        operationLogService.recordLog(userId, "UPDATE_PASSWORD", "修改密码", null);
     }
 
     @Override
@@ -434,7 +481,7 @@ public class UserInfoServiceImpl implements UserInfoService {
             throw new BusinessException(ResponseCodeEnum.CODE_2101);
         }
         UserInfo updateInfo = new UserInfo();
-        updateInfo.setPassword(StringTools.encodeByMD5(newPassword));
+        updateInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(newPassword));
         userInfoMapper.updateByUserId(updateInfo, userInfo.getUserId());
 
         EmailVerifyCode used = new EmailVerifyCode();
@@ -451,5 +498,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         sendDto.setMessageType(MessageTypeEnum.FORCE_OFF_LINE.getType());
         sendDto.setContactId(userId);
         messageHandler.sendMessage(sendDto);
+        // 记录强制下线日志
+        operationLogService.recordLog(userId, "FORCE_OFFLINE", "被强制下线", null);
     }
 }
