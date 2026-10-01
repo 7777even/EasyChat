@@ -110,6 +110,9 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             } else if (messageType != null && com.easychat.entity.enums.MessageTypeEnum.TYPING_STATUS.getType().equals(messageType)) {
                 // 正在输入状态帧：中继给对方
                 handleTypingStatus(userId, json);
+            } else if (messageType != null && com.easychat.entity.enums.MessageTypeEnum.USER_STATUS_CHANGE.getType().equals(messageType)) {
+                // 用户状态变更帧：更新 Redis 并广播给好友
+                handleUserStatusChange(userId, json);
             } else {
                 // 心跳或其他未知类型（含旧客户端残留的 -3 回执帧）：仅刷新心跳，静默忽略
                 redisComponet.saveUserHeartBeat(userId);
@@ -136,6 +139,49 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
                 || Constants.WS_CALL_CANCEL.equals(messageType)
                 || Constants.WS_CALL_BUSY.equals(messageType)
                 || Constants.WS_CALL_JOIN.equals(messageType);
+    }
+
+    /**
+     * 处理正在输入状态帧：中继给对方
+     * 帧格式: { "messageType": 21, "contactId": "U99999999999", "typing": true, "sessionId": "session-001" }
+     */
+    private void handleTypingStatus(String userId, JSONObject json) {
+        String contactId = json.getString("contactId");
+        Boolean typing = json.getBoolean("typing");
+        String sessionId = json.getString("sessionId");
+        if (StringTools.isEmpty(contactId)) {
+            return;
+        }
+        // 构建中继帧
+        MessageSendDto typingDto = new MessageSendDto();
+        typingDto.setMessageType(com.easychat.entity.enums.MessageTypeEnum.TYPING_STATUS.getType());
+        typingDto.setContactId(userId);  // 对于接收方来说，联系人是发送方
+        typingDto.setSendUserId(userId);
+        typingDto.setSendTime(System.currentTimeMillis());
+        typingDto.setSessionId(sessionId);
+        java.util.Map<String, Object> extendData = new java.util.HashMap<>();
+        extendData.put("typing", typing);
+        extendData.put("contactId", userId);
+        typingDto.setExtendData(extendData);
+        // 发送给对方
+        channelContextUtils.sendMessage(typingDto);
+        logger.debug("用户{}正在输入状态: typing={}, 已中继给{}", userId, typing, contactId);
+    }
+
+    /**
+     * 处理用户状态变更帧：更新 Redis 并广播给好友
+     * 帧格式: { "messageType": 23, "status": 2 }
+     */
+    private void handleUserStatusChange(String userId, JSONObject json) {
+        Integer status = json.getInteger("status");
+        if (status == null) {
+            return;
+        }
+        // 更新 Redis 中的用户状态
+        redisComponet.updateUserStatus(userId, status);
+        // 向所有好友广播状态变更
+        channelContextUtils.broadcastOnlineStatus(userId, status);
+        logger.info("用户{}状态变更为{}", userId, status);
     }
 
     private void handleSync(String userId, JSONObject extendData) {
@@ -223,28 +269,4 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
         }
         return params[1];
     }
-    private void handleTypingStatus(String userId, JSONObject json) {
-        String contactId = json.getString("contactId");
-        Boolean typing = json.getBoolean("typing");
-        String sessionId = json.getString("sessionId");
-        if (StringTools.isEmpty(contactId)) {
-            return;
-        }
-        // 构建中继帧
-        MessageSendDto typingDto = new MessageSendDto();
-        typingDto.setMessageType(com.easychat.entity.enums.MessageTypeEnum.TYPING_STATUS.getType());
-        typingDto.setContactId(userId);  // 对于接收方来说，联系人是发送方
-        typingDto.setSendUserId(userId);
-        typingDto.setSendTime(System.currentTimeMillis());
-        typingDto.setSessionId(sessionId);
-        java.util.Map<String, Object> extendData = new java.util.HashMap<>();
-        extendData.put("typing", typing);
-        extendData.put("contactId", userId);
-        typingDto.setExtendData(extendData);
-        // 发送给对方
-        channelContextUtils.sendMessage(typingDto);
-        logger.debug("用户{}正在输入状态: typing={}, 已中继给{}", userId, typing, contactId);
-    }
-
-
 }
