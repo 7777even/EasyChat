@@ -12,10 +12,11 @@ import {
   onTopChatSession, onReloadChatSession, onRegisterPendingAck,
   onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
   onExportChatRecord, onExportChatBackup, onSendCallFrame,
-  onFloatingWindow,
+  onLaterHandle,
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 import { stopBlink } from './notification'
+import { selectNeedRemindLaterHandle, deleteExpiredLaterHandle } from './db/LaterHandleModel'
 
 const login_width = 300;
 const login_height = 370;
@@ -114,10 +115,44 @@ function createWindow() {
     mainWindow.show();
   })
 
+  //稍后处理
+  onLaterHandle();
+
+  //稍后处理提醒：每分钟检查一次，到时间则发送系统通知
+  setInterval(async () => {
+    try {
+      const now = Date.now();
+      // 查询需要提醒的稍后处理
+      const needRemindList = await selectNeedRemindLaterHandle(now);
+      if (needRemindList && needRemindList.length > 0) {
+        for (const item of needRemindList) {
+          const notification = new Notification({
+            title: '稍后处理',
+            body: `${item.contactName}: ${item.content}`
+          });
+          notification.on('click', () => {
+            // 点击通知跳转到对应会话
+            const mainWindow = getWindow('main');
+            if (mainWindow) {
+              mainWindow.show();
+              mainWindow.webContents.send('locateSession', { contactId: item.contact_id });
+            }
+          });
+          notification.show();
+        }
+        // 删除已提醒的稍后处理
+        for (const item of needRemindList) {
+          await deleteExpiredLaterHandle(item.remind_time);
+        }
+      }
+      // 清理已过期的稍后处理
+      await deleteExpiredLaterHandle(now);
+    } catch (error) {
+      console.warn('稍后处理提醒检查失败', error);
+    }
+  }, 60 * 1000); // 每分钟检查一次
   //设置本地store存储
   onSetLocalStore();
-  //浮窗窗口
-  onFloatingWindow();
 
   //获取本地store存储
   onGetLocalStore();

@@ -39,6 +39,17 @@ const add_tables = [
     "   contact_no_read integer," +
     "   server_port integer," +
     "   primary key (user_id)" +
+    ");",
+    "create table if not exists later_handle(" +
+    "   id integer primary key autoincrement," +
+    "   user_id varchar not null," +
+    "   message_id bigint not null," +
+    "   session_id varchar," +
+    "   contact_id varchar," +
+    "   contact_name varchar," +
+    "   content varchar," +
+    "   create_time bigint," +
+    "   remind_time bigint" +
     ");"
 ]
 

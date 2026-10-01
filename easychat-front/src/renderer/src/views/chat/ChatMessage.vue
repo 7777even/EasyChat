@@ -143,7 +143,8 @@ const emit = defineEmits([
   'multiSelect',
   'toggleSelect',
   'deleteMessage',
-  'reportMessage'
+  'reportMessage',
+  'laterHandle'
 ])
 
 /**
@@ -217,6 +218,13 @@ const onContextMenu = (e) => {
     label: '转发',
     onClick: () => {
       emit('forwardMessage', props.data)
+    }
+  })
+
+  items.push({
+    label: '稍后处理',
+    onClick: () => {
+      emit('laterHandle', props.data)
     }
   })
 
