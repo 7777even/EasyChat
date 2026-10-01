@@ -23,12 +23,18 @@
 ## 阶段三：收尾
 
 - [x] spec-delta 回写 `openspec/specs/operation-log/spec.md` — ≤30min
-- [ ] 归档 Change 到 `openspec/archive/2026-09-30-operation-log` — ≤15min
+- [x] 归档 Change 到 `openspec/archive/2026-09-30-operation-log` — ≤15min
 
 ## DoD 自检（完成后逐项确认）
 
 - [x] `openspec/changes/2026-09-30-operation-log/tasks.md` 全部勾选
 - [x] 按 AGENTS.md §2 矩阵对应行执行，mvn compile / package 0 error
 - [x] 代码改动若改变契约 / 行为 / 数据结构，已同步 `easychat.sql` / 前端调用方
-- [ ] 归档闭环完成（spec-delta 回写 specs/ + git mv 到 archive/）
-- [ ] QA / Retro 记录已落 `engineering/`
+- [x] 归档闭环完成（spec-delta 回写 specs/ + git mv 到 archive/）
+- [x] QA / Retro 记录已落 `engineering/`
+> **2026-10-01 批量补勾说明**：本 Change 于 2026-09-30 归档时未勾选收尾类任务（QA / Retro /
+> spec 回写 / 归档闭环）。2026-10-01 复核确认下列产出均已真实存在后补勾，勾选内容与仓库实际一致：
+- 实现：OperationLog 后端全链路（PO/Mapper/Service/切面）
+- QA：`engineering/qa/2026-09-30-operation-log.md`
+- Retro：`engineering/retro/2026-09-30-operation-log.md`
+- spec 回写：`openspec/specs/operation-log/spec.md`

@@ -7,6 +7,23 @@
 > 任务按实施顺序排列；单条 ≤2h。
 > [TDD] 标记的任务必须先写失败测试再实现。
 
+## ⚠ 状态：已从 archive/ 移回，变更未完成（2026-10-01 复核）
+
+原于 2026-09-30 归档，但复核发现**验证与收尾阶段全部缺失**，与 AGENTS §7.1「全勾必归档」不符，
+故移回 `changes/` 继续执行。当前进度：**功能代码已全部落地，过程记录与 spec 回写为零**。
+
+已落地（复核确认存在）：
+- 后端帧类型 `TYPING_STATUS(21)` / `ONLINE_STATUS(22)` / `USER_STATUS_CHANGE(23)`
+- `HandlerWebSocket.handleTypingStatus` / `handleUserStatusChange`（`git grep -c` 命中 2）
+- 前端链路 `preload/index.js` → `ipc.js` → `wsClient.js` → `MessageSend.vue` 的
+  `sendTypingStatus`（三处命中）
+
+**未完成**（复核确认缺失）：
+- `engineering/qa/` 下**无** typing-online-status 报告（`git ls-files engineering | grep typing` 为空）
+- `engineering/retro/` 下**无** 复盘记录
+- `openspec/specs/typing-online-status/spec.md` **不存在**，spec-delta 未回写
+- 「后端 `mvn test` 通过（含新增测试）」—— 本 Change 未新增测试用例
+
 ## 阶段一：后端基础结构
 
 - [x] 新增 `MessageTypeEnum` 帧类型：`TYPING_STATUS(21)` / `ONLINE_STATUS(22)` / `USER_STATUS_CHANGE(23)` — ≤30min

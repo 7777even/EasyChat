@@ -7,6 +7,21 @@
 > 任务按实施顺序排列；单条 ≤2h。
 > [TDD] 标记的任务必须先写失败测试再实现。
 
+## ⚠ 状态：已从 archive/ 移回，变更未完成（2026-10-01 复核）
+
+原于 2026-09-30 归档，但复核发现**收尾阶段未完成**，与 AGENTS §7.1「全勾必归档」不符，
+故移回 `changes/` 继续执行。当前进度：**核心加密能力已上线，两项收尾缺失**。
+
+已落地（复核确认）：
+- `PasswordEncoder`（BCrypt）、`user_info.password` 扩至 60
+- `UserInfoServiceImpl` 注册 / 登录 / 改密走 BCrypt，并对历史 MD5 密码**双验 + 自动升级**
+- QA 报告 `engineering/qa/2026-09-30-password-bcrypt.md` 已如实记录未完成项
+
+**未完成**（复核确认）：
+- 管理端批量迁移接口 —— `git grep -n "migrate" -- easychat-java/src/main/java/com/easychat/controller/` **无结果**；
+  QA 报告「未运行项」已写明「批量迁移功能：未实现」
+- 手动验证登录 / 注册 / 改密 —— 需起 MySQL + Redis 双账号环境，当前不具备
+
 ## 阶段一：基础结构
 
 - [x] 新增 `PasswordEncoder` 工具类（BCrypt 实现） — ≤1h
