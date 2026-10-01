@@ -14,16 +14,16 @@
 ## 阶段二：验证与同步
 
 - [x] 前端构建通过 — ≤15min
-- [ ] 同步 engineering/qa/ 验证报告 — ≤15min
+- [x] 同步 engineering/qa/ 验证报告 — ≤15min
 
 ## 阶段三：收尾
 
-- [ ] 同步 engineering/retro/ 复盘记录 — ≤15min
-- [ ] spec-delta 回写 openspec/specs/chat-background/spec.md + 归档 Change — ≤15min
+- [x] 同步 engineering/retro/ 复盘记录 — ≤15min
+- [x] spec-delta 回写 openspec/specs/chat-background/spec.md + 归档 Change — ≤15min
 
 ## DoD 自检（完成后逐项确认）
 
-- [ ] tasks.md 全部勾选
+- [x] tasks.md 全部勾选
 - [x] 前端构建通过
-- [ ] 归档闭环完成
-- [ ] QA / Retro 记录已落 engineering/
+- [x] 归档闭环完成
+- [x] QA / Retro 记录已落 engineering/

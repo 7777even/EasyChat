@@ -34,18 +34,18 @@
 ## 阶段五：验证与同步
 
 - [x] 前端 ESLint / Prettier / Vite build 通过 — ≤30min
-- [ ] 同步 `engineering/qa/` 验证报告 — ≤30min
-- [ ] 同步 `engineering/retro/` 复盘记录 — ≤30min
+- [x] 同步 `engineering/qa/` 验证报告 — ≤30min
+- [x] 同步 `engineering/retro/` 复盘记录 — ≤30min
 
 ## 阶段六：收尾
 
-- [ ] spec-delta 回写 `openspec/specs/voice-emoji/spec.md` — ≤30min
-- [ ] 归档 Change 到 `openspec/archive/2026-09-30-voice-emoji` — ≤15min
+- [x] spec-delta 回写 `openspec/specs/voice-emoji/spec.md` — ≤30min
+- [x] 归档 Change 到 `openspec/archive/2026-09-30-voice-emoji` — ≤15min
 
 ## DoD 自检（完成后逐项确认）
 
-- [ ] `openspec/changes/2026-09-30-voice-emoji/tasks.md` 全部勾选
-- [ ] 按 AGENTS.md §2 矩阵对应行执行，mvn compile / package 0 error
-- [ ] 代码改动若改变契约 / 行为 / 数据结构，已同步 `easychat.sql` / 前端调用方
-- [ ] 归档闭环完成（spec-delta 回写 specs/ + git mv 到 archive/）
-- [ ] QA / Retro 记录已落 `engineering/`
+- [x] `openspec/changes/2026-09-30-voice-emoji/tasks.md` 全部勾选
+- [x] 按 AGENTS.md §2 矩阵对应行执行，mvn compile / package 0 error
+- [x] 代码改动若改变契约 / 行为 / 数据结构，已同步 `easychat.sql` / 前端调用方
+- [x] 归档闭环完成（spec-delta 回写 specs/ + git mv 到 archive/）
+- [x] QA / Retro 记录已落 `engineering/`
