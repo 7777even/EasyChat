@@ -1,15 +1,6 @@
 <template>
   <div class="send-panel">
     <div class="toolbar">
-      <!-- 按住说话 -->
-      <div
-        class="iconfont icon-voice-press"
-        :class="{ recording: isRecording }"
-        @mousedown="startRecording"
-        @mouseup="stopRecording"
-        @mouseleave="cancelRecording"
-        title="按住说话"
-      ></div>
       <el-popover
         :visible="showEmojiPopover"
         trigger="click"
@@ -37,33 +28,37 @@
           <div class="iconfont icon-emoji" @click="showEmojiPopoverHandler"></div>
         </template>
       </el-popover>
+      <!-- 表情包选择器 -->
       <el-popover
-        :visible="showEmojiPopover"
+        :visible="showEmojiPicker"
         trigger="click"
         placement="top"
         :teleported="false"
-        @show="openPopover"
-        @hide="closePopover"
+        @show="openEmojiPicker"
+        @hide="closeEmojiPicker"
         :popper-style="{
-          padding: '0px 10px 10px 10px',
-          width: '490px'
+          padding: '0px',
+          width: '320px'
         }"
       >
         <template #default>
-          <el-tabs v-model="activeEmoji" @click.stop>
-            <el-tab-pane :label="emoji.name" :name="emoji.name" v-for="emoji in emojiList">
-              <div class="emoji-list">
-                <div class="emoji-item" v-for="item in emoji.emojiList" @click="sendEmoji(item)">
-                  {{ item }}
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
+          <EmojiPicker @select="selectEmoji" />
         </template>
         <template #reference>
-          <div class="iconfont icon-emoji" @click="showEmojiPopoverHandler"></div>
+          <div class="iconfont icon-sticker" @click="showEmojiPickerHandler" title="表情包"></div>
         </template>
       </el-popover>
+      <el-upload
+        ref="uploadRef"
+        name="file"
+        :show-file-list="false"
+        :multiple="true"
+        :limit="fileLimit"
+        :http-request="uploadFile"
+        :on-exceed="uploadExceed"
+      >
+        <div class="iconfont icon-folder"></div>
+      </el-upload>
       <el-upload
         ref="uploadRef"
         name="file"
@@ -383,82 +378,8 @@ const sendMessageDo = async (
   return result.data
 }
 
-// ===== 按住说话录音 =====
-const isRecording = ref(false)
-const mediaRecorder = ref(null)
-const audioChunks = ref([])
-const recordingStartTime = ref(0)
-const recordingTimer = ref(null)
-const MAX_RECORDING_TIME = 60000 // 最大录音时长 60 秒
-
-const startRecording = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaRecorder.value = new MediaRecorder(stream)
-    audioChunks.value = []
-    recordingStartTime.value = Date.now()
-    isRecording.value = true
-
-    mediaRecorder.value.ondataavailable = (event) => {
-      audioChunks.value.push(event.data)
-    }
-
-    mediaRecorder.value.onstop = () => {
-      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' })
-      const duration = Math.round((Date.now() - recordingStartTime.value) / 1000)
-      sendVoiceMessage(audioBlob, duration)
-      stream.getTracks().forEach(track => track.stop())
-    }
-
-    mediaRecorder.value.start()
-
-    // 最大录音时长限制
-    recordingTimer.value = setTimeout(() => {
-      if (isRecording.value) {
-        stopRecording()
-      }
-    }, MAX_RECORDING_TIME)
-  } catch (error) {
-    proxy.Message.error('无法访问麦克风，请检查权限设置')
-  }
-}
-
-const stopRecording = () => {
-  if (mediaRecorder.value && isRecording.value) {
-    mediaRecorder.value.stop()
-    isRecording.value = false
-    if (recordingTimer.value) {
-      clearTimeout(recordingTimer.value)
-    }
-  }
-}
-
-const cancelRecording = () => {
-  if (mediaRecorder.value && isRecording.value) {
-    mediaRecorder.value.onstop = null
-    mediaRecorder.value.stop()
-    isRecording.value = false
-    if (recordingTimer.value) {
-      clearTimeout(recordingTimer.value)
-    }
-  }
-}
-
-const sendVoiceMessage = async (audioBlob, duration) => {
-  // 将 Blob 转换为 File
-  const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
-  // 发送语音消息
-  sendMessageDo({
-    messageContent: '[语音]',
-    messageType: 24, // VOICE
-    fileSize: file.size,
-    fileName: file.name,
-    filePath: file.path,
-    fileType: 3, // 语音类型
-    duration: duration
-  }, true)
-}
-
+import EmojiPicker from './EmojiPicker.vue'
+const showEmojiPicker = ref(false)
 //表情相关
 const sendEmoji = (emoji) => {
   msgContent.value = msgContent.value + emoji
@@ -800,25 +721,6 @@ onUnmounted(() => {
   }
 }
 
-    .icon-voice-press {
-      &::before {
-        content: "\e7b8";
-      }
-
-      &.recording {
-        color: #07c160;
-        animation: voice-recording 1s ease-in-out infinite;
-      }
-    }
-
-@keyframes voice-recording {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-}
 .upload-progress-panel {
   position: fixed;
   bottom: 220px;
