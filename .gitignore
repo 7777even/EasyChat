@@ -14,3 +14,6 @@ easychat-java/logs/
 # ffmpeg/ffprobe 二进制
 easychat-front/assets/ffprobe.exe
 easychat-front/assets/ffmpeg.exe
+
+# AI 工具本地记忆目录（不入库）
+.workbuddy/
