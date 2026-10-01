@@ -14,6 +14,7 @@ import {
 } from "./file"
 
 import { saveWindow, getWindow, delWindow, windowManage } from './windowProxy'
+import { addLaterHandle } from './db/LaterHandleModel'
 
 import store from "./store"
 import icon from '../../resources/icon.png?asset'
@@ -439,6 +440,65 @@ const openWindow = ({ windowId, title = "EasyChat", path, width = 960, height = 
     }
 }
 
+//浮窗窗口
+const onFloatingWindow = () => {
+    ipcMain.on("floatingWindow", (e, { contactId, contactName, sessionId }) => {
+        const windowId = `floating_${contactId}`;
+        let floatingWindow = getWindow(windowId);
+        if (!floatingWindow) {
+            floatingWindow = new BrowserWindow({
+                icon: icon,
+                width: 300,
+                height: 400,
+                fullscreenable: false,
+                fullscreen: false,
+                maximizable: false,
+                autoHideMenuBar: true,
+                resizable: false,
+                frame: false,
+                transparent: true,
+                alwaysOnTop: true,
+                webPreferences: {
+                    preload: join(__dirname, '../preload/index.js'),
+                    sandbox: false,
+                    contextIsolation: false
+                }
+            })
+            saveWindow(windowId, floatingWindow);
+
+            if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+                floatingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/chat`);
+            } else {
+                floatingWindow.loadFile(join(__dirname, `../renderer/index.html`), { hash: `/chat` });
+            }
+
+            floatingWindow.on('ready-to-show', () => {
+                floatingWindow.setTitle(contactName);
+                floatingWindow.show();
+            })
+
+            floatingWindow.once('show', () => {
+                setTimeout(() => {
+                    floatingWindow.webContents.send('pageInitData', {
+                        floating: true,
+                        contactId,
+                        contactName,
+                        sessionId
+                    });
+                }, 500);
+            })
+
+            floatingWindow.on('closed', () => {
+                delWindow(windowId);
+            });
+        } else {
+            floatingWindow.show();
+            floatingWindow.setSkipTaskbar(false);
+        }
+    });
+}
+
+//稍后处理
 const onLaterHandle = () => {
     ipcMain.on("laterHandle", async (e, { messageId, sessionId, contactId, contactName, content }) => {
         const userId = store.getUserId();
@@ -457,8 +517,8 @@ const onLaterHandle = () => {
         e.sender.send("laterHandleCallback", { success: true });
     });
 }
+
 export {
-onLaterHandle,
     onLoginSuccess,
     onSetLocalStore,
     onGetLocalStore,
@@ -466,6 +526,7 @@ onLaterHandle,
     onLoginOrRegister,
     onOpenNewWindow,
     openWindow,
+    onFloatingWindow,
     onReLogin,
     onLoadChatMessage,
     onLoadSessionData,
@@ -497,5 +558,6 @@ onLaterHandle,
     onRegisterPendingAck,
     onSendCallFrame,
     onSendTypingStatus,
-    onSendUserStatusChange
+    onSendUserStatusChange,
+    onLaterHandle
 }

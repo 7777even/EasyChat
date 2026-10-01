@@ -257,6 +257,13 @@ const onContextMenu = (e) => {
     }
   })
 
+  items.push({
+    label: '稍后处理',
+    onClick: () => {
+      emit('laterHandle', props.data)
+    }
+  })
+
   // 撤回：仅自己的消息且 2 分钟内
   if (isMyMessage) {
     const timeDiff = Date.now() - props.data.sendTime
@@ -466,6 +473,7 @@ const copyText = async (text) => {
     display: none;
   }
 }
+
 // @所有人 消息特殊样式：气泡描边高亮 + 标记文字红色加粗
 .at-all-message {
   .content {

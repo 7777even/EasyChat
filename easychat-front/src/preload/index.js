@@ -4,6 +4,15 @@ window.ipcRenderer = ipcRenderer;
 // Custom APIs for renderer
 const api = {
   /**
+   * 发送正在输入状态帧
+   * @param {string} contactId 对方用户 ID
+   * @param {string} sessionId 会话 ID
+   * @param {boolean} typing 是否正在输入
+   */
+  sendTypingStatus: (contactId, sessionId, typing) => {
+    ipcRenderer.send('sendTypingStatus', { contactId, sessionId, typing });
+  },
+  /**
    * 发送用户状态变更帧
    * @param {number} status 状态值（1=在线 2=忙碌 3=离线）
    */

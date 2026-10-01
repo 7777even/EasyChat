@@ -1,6 +1,15 @@
 <template>
   <div class="send-panel">
     <div class="toolbar">
+      <!-- 按住说话 -->
+      <div
+        class="iconfont icon-voice-press"
+        :class="{ recording: isRecording }"
+        @mousedown="startRecording"
+        @mouseup="stopRecording"
+        @mouseleave="cancelRecording"
+        title="按住说话"
+      ></div>
       <el-popover
         :visible="showEmojiPopover"
         trigger="click"
@@ -26,6 +35,26 @@
         </template>
         <template #reference>
           <div class="iconfont icon-emoji" @click="showEmojiPopoverHandler"></div>
+        </template>
+      </el-popover>
+      <!-- 表情包选择器 -->
+      <el-popover
+        :visible="showEmojiPicker"
+        trigger="click"
+        placement="top"
+        :teleported="false"
+        @show="openEmojiPicker"
+        @hide="closeEmojiPicker"
+        :popper-style="{
+          padding: '0px',
+          width: '320px'
+        }"
+      >
+        <template #default>
+          <EmojiPicker @select="selectEmoji" />
+        </template>
+        <template #reference>
+          <div class="iconfont icon-sticker" @click="showEmojiPickerHandler" title="表情包"></div>
         </template>
       </el-popover>
       <el-upload
@@ -103,6 +132,7 @@
         input-style="background:var(--ec-input-bg);border:none;"
         @keydown.enter="sendMessage"
         @paste="pasteFile"
+        @input="onInput"
       />
     </div>
     <div class="send-btn-panel">
@@ -150,6 +180,7 @@
 
 <script setup>
 import SearchAdd from '@/views/contact/SearchAdd.vue'
+import EmojiPicker from './EmojiPicker.vue'
 import {getFileType} from '@/utils/Constants.js'
 import {computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, watch} from 'vue'
 import emojiList from '@/utils/Emoji.js'
@@ -351,6 +382,32 @@ watch(msgContent, (val) => {
   }, 800)
 })
 
+// ===== 输入状态：正在输入... =====
+let typingTimer = null
+const TYPING_DEBOUNCE_MS = 3000
+
+const onInput = () => {
+  if (!props.currentChatSession.contactId) return
+  // 发送正在输入状态
+  window.api.sendTypingStatus(
+    props.currentChatSession.contactId,
+    props.currentChatSession.sessionId,
+    true
+  )
+  // 清除之前的防抖计时器
+  if (typingTimer) {
+    clearTimeout(typingTimer)
+  }
+  // 3 秒后发送停止输入状态
+  typingTimer = setTimeout(() => {
+    window.api.sendTypingStatus(
+      props.currentChatSession.contactId,
+      props.currentChatSession.sessionId,
+      false
+    )
+  }, TYPING_DEBOUNCE_MS)
+}
+
 const saveDraft = (contactId, draft) => {
   window.ipcRenderer.send('saveSessionDraft', {contactId, draft: draft || ''})
   proxy.Request({
@@ -535,6 +592,106 @@ const showEmojiPopoverHandler = () => {
 
 const showSendMsgPopover = ref(false)
 const showEmojiPopover = ref(false)
+const showEmojiPicker = ref(false)
+
+// ===== 按住说话录音 =====
+const isRecording = ref(false)
+const mediaRecorder = ref(null)
+const audioChunks = ref([])
+const recordingStartTime = ref(0)
+const recordingTimer = ref(null)
+const MAX_RECORDING_TIME = 60000 // 最大录音时长 60 秒
+
+const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaRecorder.value = new MediaRecorder(stream)
+    audioChunks.value = []
+    recordingStartTime.value = Date.now()
+    isRecording.value = true
+
+    mediaRecorder.value.ondataavailable = (event) => {
+      audioChunks.value.push(event.data)
+    }
+
+    mediaRecorder.value.onstop = () => {
+      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' })
+      const duration = Math.round((Date.now() - recordingStartTime.value) / 1000)
+      sendVoiceMessage(audioBlob, duration)
+      stream.getTracks().forEach(track => track.stop())
+    }
+
+    mediaRecorder.value.start()
+
+    // 最大录音时长限制
+    recordingTimer.value = setTimeout(() => {
+      if (isRecording.value) {
+        stopRecording()
+      }
+    }, MAX_RECORDING_TIME)
+  } catch (error) {
+    proxy.Message.error('无法访问麦克风，请检查权限设置')
+  }
+}
+
+const stopRecording = () => {
+  if (mediaRecorder.value && isRecording.value) {
+    mediaRecorder.value.stop()
+    isRecording.value = false
+    if (recordingTimer.value) {
+      clearTimeout(recordingTimer.value)
+    }
+  }
+}
+
+const cancelRecording = () => {
+  if (mediaRecorder.value && isRecording.value) {
+    mediaRecorder.value.onstop = null
+    mediaRecorder.value.stop()
+    isRecording.value = false
+    if (recordingTimer.value) {
+      clearTimeout(recordingTimer.value)
+    }
+  }
+}
+
+const sendVoiceMessage = async (audioBlob, duration) => {
+  // 将 Blob 转换为 File
+  const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
+  // 发送语音消息
+  sendMessageDo({
+    messageContent: '[语音]',
+    messageType: 24, // VOICE
+    fileSize: file.size,
+    fileName: file.name,
+    filePath: file.path,
+    fileType: 3, // 语音类型
+    duration: duration
+  }, true)
+}
+
+const showEmojiPickerHandler = () => {
+  showEmojiPicker.value = !showEmojiPicker.value
+}
+
+const openEmojiPicker = () => {
+  document.addEventListener('click', closeEmojiPicker, false)
+}
+
+const closeEmojiPicker = () => {
+  showEmojiPicker.value = false
+  document.removeEventListener('click', closeEmojiPicker, false)
+}
+
+const selectEmoji = (emoji) => {
+  // 发送表情包消息
+  sendMessageDo({
+    messageContent: '[表情包]',
+    messageType: 2,
+    extraData: JSON.stringify({ emojiId: emoji.id, emojiPath: emoji.filePath })
+  }, true)
+  showEmojiPicker.value = false
+}
 
 const hidePopover = () => {
   showSendMsgPopover.value = false
@@ -817,6 +974,38 @@ onUnmounted(() => {
       cursor: pointer;
     }
 
+    .icon-voice-press {
+      &::before {
+        content: "\e7b8";
+      }
+
+      &.recording {
+        color: #07c160;
+        animation: voice-recording 1s ease-in-out infinite;
+      }
+    }
+
+    .icon-sticker {
+      &::before {
+        content: "\e7b7";
+      }
+    }
+
+    // @ 按钮：iconfont 无对应字形，用字符 @ 代替，保持与其它工具按钮一致的视觉尺寸
+    .at-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-left: 10px;
+      color: #494949;
+      font-size: 20px;
+      line-height: 1;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
     :deep(.el-tabs__header) {
       margin-bottom: 0px;
     }
@@ -984,6 +1173,15 @@ onUnmounted(() => {
       margin-top: 5px;
       text-align: right;
     }
+  }
+}
+
+@keyframes voice-recording {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
   }
 }
 </style>

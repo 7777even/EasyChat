@@ -16,12 +16,24 @@
         </el-input>
       </div>
       <div class="chat-session-list" v-show="!searchKey">
+        <!-- 文件传输助手 -->
+        <div class="chat-session-item file-transfer-assistant" @click="openFileTransferAssistant">
+          <div class="contact-tag">助手</div>
+          <AvatarBase :userId="robotUid"> </AvatarBase>
+          <div class="user-info">
+            <div class="user-name-panel">
+              <div class="user-name">文件传输助手</div>
+            </div>
+            <div class="last-message">发送文件/消息给自己</div>
+          </div>
+        </div>
         <template v-for="data in chatSessionList">
           <ChatSession
             @click="chatSessionClickHandler(data)"
             :data="data"
             :currentSession="data.contactId == currentChatSession.contactId"
             @contextmenu.stop="onContextMenu(data, $event)"
+            @floatingWindow="floatingWindowHandler"
           ></ChatSession>
         </template>
       </div>
@@ -136,6 +148,7 @@
                 @toggleSelect="toggleMessageSelect"
                 @deleteMessage="deleteMessageHandler"
                 @reportMessage="reportMessageHandler"
+                @laterHandle="laterHandleHandler"
               ></ChatMessage>
             </template>
             </div>
@@ -939,6 +952,9 @@ onMounted(() => {
   // 加载聊天背景
   loadChatBackground()
 
+  // 加载机器人UID
+  loadRobotUid()
+
   // 监听聊天记录导出结果
   onExportChatRecordCallback()
 
@@ -1159,6 +1175,56 @@ const showGroupDetail = () => {
 const groupFileRef = ref()
 const showGroupFile = () => {
   groupFileRef.value.show(currentChatSession.value.contactId)
+}
+
+//浮窗
+const floatingWindowHandler = (session) => {
+  window.ipcRenderer.send('floatingWindow', {
+    contactId: session.contactId,
+    contactName: session.contactName,
+    sessionId: session.sessionId
+  })
+}
+
+//稍后处理
+const laterHandleHandler = (message) => {
+  window.ipcRenderer.send('laterHandle', {
+    messageId: message.messageId,
+    sessionId: message.sessionId,
+    contactId: message.contactId,
+    contactName: message.contactName || currentChatSession.value.contactName,
+    content: message.messageContent || message.fileName || ''
+  })
+  proxy.Message.success('已标记稍后处理')
+}
+
+// ===== 文件传输助手 =====
+const robotUid = ref('')
+
+// 获取机器人UID
+const loadRobotUid = () => {
+  window.ipcRenderer.send('getSysSetting')
+  window.ipcRenderer.on('getSysSettingCallback', (e, sysSetting) => {
+    if (!sysSetting) return
+    try {
+      const parsed = JSON.parse(sysSetting)
+      // 从系统设置中获取机器人UID
+      robotUid.value = parsed.robotUid || 'robot'
+    } catch (error) {
+      robotUid.value = 'robot'
+    }
+  })
+}
+
+// 打开文件传输助手
+const openFileTransferAssistant = () => {
+  const session = {
+    contactId: robotUid.value,
+    contactName: '文件传输助手',
+    sessionId: `file_transfer_${robotUid.value}`,
+    contactType: 0
+  }
+  chatSessionClickHandler(session)
 }
 
 //消息搜索
@@ -1447,6 +1513,19 @@ const clearChatBackground = () => {
 
   &:hover {
     overflow: auto;
+  }
+
+  .file-transfer-assistant {
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+
+    &:hover {
+      background: #e8e8e8;
+    }
+
+    .contact-tag {
+      background: #ff9800;
+    }
   }
 }
 
