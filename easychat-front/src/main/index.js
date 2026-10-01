@@ -11,7 +11,8 @@ import {
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck,
   onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
-  onExportChatRecord, onExportChatBackup, onSendCallFrame
+  onExportChatRecord, onExportChatBackup, onSendCallFrame,
+  onFloatingWindow,
 } from "./ipc"
 import { saveWindow } from './windowProxy'
 import { stopBlink } from './notification'
@@ -115,6 +116,8 @@ function createWindow() {
 
   //设置本地store存储
   onSetLocalStore();
+  //浮窗窗口
+  onFloatingWindow();
 
   //获取本地store存储
   onGetLocalStore();

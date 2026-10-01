@@ -439,7 +439,64 @@ const openWindow = ({ windowId, title = "EasyChat", path, width = 960, height = 
     }
 }
 
+const onFloatingWindow = () => {
+    ipcMain.on("floatingWindow", (e, { contactId, contactName, sessionId }) => {
+        const windowId = `floating_${contactId}`;
+        let floatingWindow = getWindow(windowId);
+        if (!floatingWindow) {
+            floatingWindow = new BrowserWindow({
+                icon: icon,
+                width: 300,
+                height: 400,
+                fullscreenable: false,
+                fullscreen: false,
+                maximizable: false,
+                autoHideMenuBar: true,
+                resizable: false,
+                frame: false,
+                transparent: true,
+                alwaysOnTop: true,
+                webPreferences: {
+                    preload: join(__dirname, '../preload/index.js'),
+                    sandbox: false,
+                    contextIsolation: false
+                }
+            })
+            saveWindow(windowId, floatingWindow);
+
+            if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+                floatingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/chat`);
+            } else {
+                floatingWindow.loadFile(join(__dirname, `../renderer/index.html`), { hash: `/chat` });
+            }
+
+            floatingWindow.on('ready-to-show', () => {
+                floatingWindow.setTitle(contactName);
+                floatingWindow.show();
+            })
+
+            floatingWindow.once('show', () => {
+                setTimeout(() => {
+                    floatingWindow.webContents.send('pageInitData', {
+                        floating: true,
+                        contactId,
+                        contactName,
+                        sessionId
+                    });
+                }, 500);
+            })
+
+            floatingWindow.on('closed', () => {
+                delWindow(windowId);
+            });
+        } else {
+            floatingWindow.show();
+            floatingWindow.setSkipTaskbar(false);
+        }
+    });
+}
 export {
+onFloatingWindow,
     onLoginSuccess,
     onSetLocalStore,
     onGetLocalStore,

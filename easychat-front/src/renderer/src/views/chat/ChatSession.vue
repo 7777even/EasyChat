@@ -1,5 +1,5 @@
 <template>
-  <div :class="['chat-session-item', currentSession ? 'active' : '']">
+  <div :class="['chat-session-item', currentSession ? 'active' : '']" @contextmenu.stop="onContextMenu($event)">
     <div class="contact-tag" v-if="data.contactType == 1">群</div>
     <Badge :count="data.noReadCount" :top="2" :left="42"></Badge>
     <AvatarBase :userId="data.contactId"> </AvatarBase>
@@ -16,6 +16,8 @@
 
 <script setup>
 import AvatarBase from '@/components/AvatarBase.vue'
+import ContextMenu from '@imengyu/vue3-context-menu'
+import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
 const { proxy } = getCurrentInstance()
 
@@ -29,6 +31,31 @@ const props = defineProps({
     default: false
   }
 })
+
+const emit = defineEmits(['floatingWindow'])
+
+// 右键菜单
+const onContextMenu = (e) => {
+  const items = []
+
+  // 浮窗：仅单聊支持
+  if (props.data.contactType == 0) {
+    items.push({
+      label: '浮窗',
+      onClick: () => {
+        emit('floatingWindow', props.data)
+      }
+    })
+  }
+
+  if (items.length > 0) {
+    ContextMenu.showContextMenu({
+      x: e.x,
+      y: e.y,
+      items
+    })
+  }
+}
 </script>
 
 <style lang="scss" scoped>
