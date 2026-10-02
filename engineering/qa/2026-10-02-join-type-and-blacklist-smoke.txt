@@ -1,0 +1,64 @@
+===== 加我方式 + 黑名单管理 活体冒烟 =====
+时间: 2026-10-02T14:08:47
+A=test@qq.com(设置者)  B=karina7710@test.com(申请/被拉黑方)  C=3289228667@qq.com(仅SQL断言)
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] A 登录成功 U69630787860
+   [PASS] B 登录成功 U04259455805
+   （A 原 join_type=0，冒烟结束还原）
+
+=== 1. C1 加我方式可更新 ===
+   [PASS] 更新为「加我时需验证」(1) code=0 | success
+   [PASS] DB 已写入 1
+   [PASS] 更新为「直接加入」(0) code=0 | success
+   [PASS] DB 已写入 0
+   [PASS] 非法 joinType=2 → CODE_1001 | code=1001
+   [PASS] 非法 joinType=-1 → CODE_1001 | code=1001
+   [PASS] ★ 非法值未污染 DB（仍为 0）
+
+=== 2. C1 保存后立即对新申请生效 ===
+   [PASS] B 申请加 A 返回 code=0 | success
+   [PASS] join_type=0 时 B 直接成为好友（返回 0） | data=0
+   [PASS] DB 中 A→B 已是好友 status=1
+   [PASS] 改为 1 后 B 再次申请返回 1（需审批） | data=1
+   [PASS] 已落待处理申请单
+
+=== 3. C2 黑名单列表可查 ===
+   [PASS] 空黑名单返回 code=0 且空列表 | code=0 len=0
+   [PASS] A 拉黑 B code=0 | success
+   [PASS] A→B = 4 BLACKLIST
+   [PASS] B→A = 5 BLACKLIST_BE（双向生效）
+   [PASS] 黑名单含 B | len=1
+   [PASS] 含对方昵称 contactName | contactName=test
+   [PASS] ★ 「被拉黑」(status=5) 不入列（B→A 那行）
+   [PASS] ★ 只返回自己的黑名单（不含 B 拉黑的 C）
+   [PASS] B 的黑名单含 C
+
+=== 4. C3 解除黑名单（双向删行 + 可重新申请）===
+   [PASS] 解除 code=0 | success
+   [PASS] ★ 我→他 的行已删除
+   [PASS] ★ 他→我 的行也删除（无单向残留）
+   [PASS] 列表已清空 | len=0
+   [PASS] 重复解除 → CODE_2401 | code=2401
+   [PASS] 解除无关系对象 → CODE_2401 | code=2401
+   [PASS] ★ 解除后 B 可重新申请（落申请单，非直接加） | data=1
+
+=== 5. 安全红线 无权解除「别人对我的拉黑」 ===
+   [PASS] 前置：A→B=5 BLACKLIST_BE（他拉黑我）
+   [PASS] ★ 该对象不出现在我的黑名单
+   [PASS] ★ 我无法解除 → CODE_2401 | code=2401
+   [PASS] ★ 双方关系行均未被删除（他的拉黑仍有效） | A→B=5 B→A=4
+
+=== 5b. 双向拉黑时反向行保留 ===
+   [PASS] 我方解除 code=0 | code=0
+   [PASS] 我的拉黑行已删
+   [PASS] ★ 对方拉黑我的那行保留（不归我处置） | B→A=4
+
+=== 6. 群组不进入黑名单 ===
+   [PASS] 列表内无 groupId 形态的 contactId | ids=[]
+
+=== 清理 ===
+   临时关系行已清、A 的 join_type 已还原为 0
+
+===== 结论：39/39 通过 =====

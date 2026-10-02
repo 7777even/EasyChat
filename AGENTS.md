@@ -86,6 +86,8 @@ EasyChat/
 
 1. **任何写入 CI / Git hook / 门禁的脚本，交付前必须实跑一次并贴出退出码。** 「脚本存在」不等于「门禁有判别力」——本仓 `npm run lint` 长期 `exit 2`（`eslint .` 报 `No files matching`），却被接进 CI 导致流水线恒红（2026-10-02 事故，见 `engineering/retro/2026-10-02-group-join-approval.md` §三.1）。**门禁必须先在当前 main 上跑通，才允许接入。**
 2. **Windows 上一律用 `edit` / `write` 工具改源码，不得用 PowerShell 重定向或 `Set-Content` 改文件。** 实测三类事故：BOM 导致 `javac` 报 `非法字符 '\ufeff'`；`-replace` 正则批量替换产生重复行；换行丢失导致行粘连（2026-10-02 连续踩中三次）。
+3. **新增方法必须走完 TDD 红阶段**：先只加方法签名 + `throw new UnsupportedOperationException()` 桩让测试**编译通过并跑红**，再填实现。Java 中「测试引用不存在的方法 → 编译失败」容易让人顺手把实现一起写掉，从而跳过红阶段（2026-10-02 在 `join-type-and-blacklist` 实际发生）。若已跳过，须用**变异检验**（故意破坏守卫/逻辑，确认对应用例转红）补偿并在 QA 中说明。
+4. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
 
 ## 3. 接口契约规则
 
