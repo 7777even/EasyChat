@@ -17,7 +17,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/emoji")
-public class EmojiController {
+public class EmojiController extends ABaseController {
 
     @Resource
     private EmojiService emojiService;
@@ -55,7 +55,14 @@ public class EmojiController {
         return Result.success();
     }
 
+    /**
+     * 取当前登录用户。
+     * <p>
+     * 必须走 ABaseController#getTokenUserInfo（按 token 头查 Redis 会话），
+     * 不能读 request.getAttribute("userInfo")——全局拦截器只做校验、从不写入该
+     * attribute，读它恒为 null，会直接 NPE 变成 500（2026-10-02 修复）。
+     */
     private TokenUserInfoDto getUserInfo(HttpServletRequest request) {
-        return (TokenUserInfoDto) request.getAttribute("userInfo");
+        return getTokenUserInfo(request);
     }
 }

@@ -22,7 +22,7 @@
 
     <insert id="insert" parameterType="com.easychat.entity.po.UserStatus">
         INSERT INTO user_status (user_id, content, image_url, create_time, expire_time)
-        VALUES (#{userId}, #{content}, #{imageUrl}, #{createTime}, #{expireTime})
+        VALUES (#{bean.userId}, #{bean.content}, #{bean.imageUrl}, #{bean.createTime}, #{bean.expireTime})
     </insert>
 
     <update id="updateByParam" parameterType="map">
