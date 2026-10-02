@@ -173,6 +173,8 @@ const addContact2BlackList = () => {
       }
       //刷新我的群组列表
       delContactData(userInfo.value.userId)
+      //此前黑名单只能加不能解，误点即永久无法退出；现已有管理页，给出去路提示
+      proxy.Message.success('已加入黑名单，可在「设置 → 黑名单」中解除')
     }
   })
 }

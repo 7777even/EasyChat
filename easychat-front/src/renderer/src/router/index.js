@@ -127,6 +127,10 @@ const router = createRouter({
           name: "我的收藏",
           component: () => import('@/views/setting/Favorite.vue'),
         }, {
+          path: "/setting/blacklist",
+          name: "黑名单",
+          component: () => import('@/views/setting/Blacklist.vue'),
+        }, {
           path: "/setting/about",
           name: "关于",
           component: () => import('@/views/setting/About.vue'),

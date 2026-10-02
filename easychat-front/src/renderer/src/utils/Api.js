@@ -35,6 +35,9 @@ const api = {
     addContact2BlackList: "/contact/addContact2BlackList",//拉黑联系人
     delContact: "/contact/delContact",//删除联系人
     getContactInfo: "/contact/getContactInfo",//获取联系人信息
+    loadBlackList: "/contact/loadBlackList",//加载黑名单（我拉黑的用户）
+    removeBlackList: "/contact/removeBlackList",//解除黑名单
+    updateJoinType: "/userInfo/updateJoinType",//更新加我方式 0直接加入 1加我时需验证
     saveUserInfo: "/userInfo/saveUserInfo",//保存用户信息
     getUserInfo: "/userInfo/getUserInfo",//获取用户信息
     updatePassword: "/userInfo/updatePassword",

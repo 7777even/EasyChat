@@ -52,6 +52,13 @@ const settingMenuList = ref([
     bgColor: '#ff7a45'
   },
   {
+    // icon-lock 在 iconfont 中不存在（design §6 风险项已预警），改用实际存在的 close-bold
+    name: '黑名单',
+    icon: 'icon-close',
+    path: '/setting/blacklist',
+    bgColor: '#597ef7'
+  },
+  {
     name: '关于EasyChat',
     icon: 'icon-about',
     path: '/setting/about',
