@@ -33,7 +33,7 @@ easychat-front/
 │        ├─ components/            ← 通用组件
 │        ├─ router/                ← 前端路由
 │        ├─ stores/                ← Pinia 状态管理
-│        ├─ utils/                 ← 工具函数（request.js / 校验 / 上传）
+│        ├─ utils/                 ← 工具函数（Request.js / 校验 / 上传）
 │        └─ views/                 ← 页面视图（login / admin / chat / contact / moment / setting）
 ├─ package.json
 ├─ electron.vite.config.js         ← Electron-Vite 构建配置
@@ -75,6 +75,7 @@ Electron + Vue 3 (`<script setup>`) + Element Plus + Vite + Pinia + sql.js（本
 #### 主进程（`src/main/`）红线
 
 - `ipcMain.handle/channel` 必须在 `ipc.js` 集中注册，禁止在分散模块中注册。
+- **在 `ipc.js` 定义并 `export`，还必须在 `index.js` 的 import 列表 + 启动初始化中调用一次，通道才生效**。漏调用时构建完全无感、功能静默失效（真实事故：`onSendTypingStatus`/`onSendUserStatusChange` 漏注册，「正在输入」「状态变更」长期失效）。门禁：`node scripts/check-ipc-registration.mjs --strict`（缺失即 exit 1）。
 - 主进程不得直接操作 DOM / 调用渲染进程 webContents 发消息，应通过 `windowProxy.js` 窗口代理统一调度。
 - 本地文件操作 `file.js` 必须限制在用户数据目录 `app.getPath('userData')` 内，禁止任意路径读写。
 - 本地数据库操作必须经由 `db/` 下 Model 层，禁止在主进程业务代码中直接写 SQL。
@@ -89,7 +90,7 @@ Electron + Vue 3 (`<script setup>`) + Element Plus + Vite + Pinia + sql.js（本
 #### 渲染进程（`src/renderer/`）红线
 
 - **禁止**在渲染进程源码中直接使用 `window.require` / `window.ipcRenderer`（应通过 preload 暴露的封装调用）。
-- **禁止**在组件中直接使用 `axios`，必须经 `src/renderer/src/utils/request.js` 统一封装。
+- **禁止**在组件中直接使用 `axios`，必须经 `src/renderer/src/utils/Request.js` 统一封装（**注意大小写**，实际文件名为 `Request.js`）。
 - 响应拦截器统一处理三大分支：成功（code=0）、登录过期（code=2001 → 弹登录窗）、其他错误（Toast 提示）。
 - UI 渲染禁止使用后端 VO 对象透传渲染，必须经前端适配层转换成视图模型。
 
@@ -101,7 +102,7 @@ Electron + Vue 3 (`<script setup>`) + Element Plus + Vite + Pinia + sql.js（本
 4. **Node.js 依赖**：前端 `package.json` 依赖变更（含 Electron / Vite 版本）属 **L3**，需人工确认。
 5. **打包配置**：`electron-builder.yml` 改动（含签名、文件包含、asar 解包）属 **L4**。
 
-### 3.4 HTTP 请求层（`src/renderer/src/utils/request.js`）
+### 3.4 HTTP 请求层（`src/renderer/src/utils/Request.js`）
 
 ```javascript
 // 使用方式：所有组件必须通过 request 实例，禁止直接调用 axios
@@ -177,6 +178,6 @@ import request from '@/utils/request';
 | `ws`       | WebSocket 客户端链路 / 消息分发                     |
 | `db`       | 本地 SQLite db/ 模型层                              |
 | `ui`       | 通用组件或样式（components/、assets/）               |
-| `req`      | HTTP 请求层（utils/request.js / 分片上传）           |
+| `req`      | HTTP 请求层（utils/Request.js / 分片上传）           |
 
 仓库名（`frontend`）、架构层（`components / stores`）**不是 scope**；按改动所属域取名。
