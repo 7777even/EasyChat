@@ -100,6 +100,12 @@ jobs:
       - name: 运行时配置分层与硬编码凭据
         run: node scripts/verify/verify_no_hardcoded_secret.mjs
 
+      # 2026-10-02 新增。首次运行即抓出位置消息(25)/语音消息(24)端到端未接通：
+      # 服务端直推但客户端无 case → 对端实时收不到，且不崩不报错。
+      # 详见 scripts/README.md「WS 帧协议对账」。
+      - name: WebSocket 帧协议两端对账
+        run: node scripts/verify/verify_ws_frame_parity.mjs
+
       - name: 虚拟列表核心算法
         run: node scripts/verify/verify_virtual_core.mjs
 
