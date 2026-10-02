@@ -38,6 +38,8 @@ const api = {
     loadBlackList: "/contact/loadBlackList",//加载黑名单（我拉黑的用户）
     removeBlackList: "/contact/removeBlackList",//解除黑名单
     updateJoinType: "/userInfo/updateJoinType",//更新加我方式 0直接加入 1加我时需验证
+    updateMomentPrivacy: "/userInfo/updateMomentPrivacy",//更新朋友圈可见范围与自定义名单
+    updateOnlineStatusVisible: "/userInfo/updateOnlineStatusVisible",//更新是否对好友展示在线状态
     saveUserInfo: "/userInfo/saveUserInfo",//保存用户信息
     getUserInfo: "/userInfo/getUserInfo",//获取用户信息
     updatePassword: "/userInfo/updatePassword",

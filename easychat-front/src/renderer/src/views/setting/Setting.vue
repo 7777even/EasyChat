@@ -53,9 +53,9 @@ const settingMenuList = ref([
   },
   {
     // icon-lock 在 iconfont 中不存在（design §6 风险项已预警），改用实际存在的 close-bold
-    name: '黑名单',
+    name: '隐私',
     icon: 'icon-close',
-    path: '/setting/blacklist',
+    path: '/setting/privacy',
     bgColor: '#597ef7'
   },
   {

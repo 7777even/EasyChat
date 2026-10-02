@@ -392,6 +392,16 @@ const createWs = () => {
                 sender.send("onlineStatus", message);
                 break;
             }
+            case 27: { // ONLINE_STATUS_HIDDEN：对方关闭了「展示在线状态」
+                // 抹除该联系人已显示的在线状态点，否则好友会看到对方「卡在在线」直到其掉线
+                // （openspec/specs/privacy-settings）
+                sender.send("onlineStatusHidden", message);
+                break;
+            }
+            default:
+                // 未知帧类型必须显式忽略：服务端后续新增帧号时，
+                // 旧客户端不能因未匹配 case 而静默中断后续帧处理
+                break;
         }
     }
 

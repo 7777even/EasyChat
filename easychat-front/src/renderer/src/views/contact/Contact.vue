@@ -239,6 +239,16 @@ const onOnlineStatus = () => {
       [message.contactId]: status
     }
   })
+  // 在线状态已隐藏帧（messageType=27）：对方关闭了「展示在线状态」
+  // 必须抹除已显示的状态点，否则会一直「卡在在线」直到对方掉线
+  // openspec/specs/privacy-settings
+  window.ipcRenderer.on('onlineStatusHidden', (e, message) => {
+    if (!message || !message.contactId) return
+    if (!(message.contactId in onlineStatusMap.value)) return
+    const next = { ...onlineStatusMap.value }
+    delete next[message.contactId]
+    onlineStatusMap.value = next
+  })
 }
 
 onMounted(() => {

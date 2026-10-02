@@ -18,22 +18,6 @@
         </div>
       </div>
       <div class="part-item">
-        <div class="part-title">朋友权限</div>
-        <div class="part-content">
-          <el-radio-group v-model="joinType" size="small" :disabled="joinTypeSaving" @change="joinTypeChange">
-            <el-radio :label="0">直接加入</el-radio>
-            <el-radio :label="1">加我时需验证</el-radio>
-          </el-radio-group>
-          <div class="tips">
-            「直接加入」表示任何人可直接成为你的好友；「加我时需验证」表示需你同意后才成为好友。
-            保存后立即对之后发起的申请生效。
-          </div>
-          <div v-if="userInfo.joinType == null" class="tips">
-            当前账号未设置过（历史数据为 null），已按更保守的「加我时需验证」显示。
-          </div>
-        </div>
-      </div>
-      <div class="part-item">
         <div class="part-title">个性签名</div>
         <div class="part-content">{{ userInfo.personalSignature || '-' }}</div>
       </div>
@@ -110,44 +94,13 @@ const getUserInfo = async () => {
     return
   }
   userInfo.value = result.data
-  // joinType 为 null（历史数据未设置）时按保守项「加我时需验证」显示，并在 UI 提示
-  joinType.value = result.data.joinType == null ? JOIN_TYPE_APPLY : result.data.joinType
-  joinTypeBeforeSave.value = joinType.value
 }
 getUserInfo()
 
 const showType = ref(0)
 
-// ===== 朋友权限（加我方式 join_type，openspec/specs/privacy-settings C1）=====
-// 修复前此处为只读文本：getUserInfo 会返回 joinType，但没有任何写入路径，用户看得到却改不了。
-// 沿用本文件 themeChange 的「乐观更新 + 失败回滚」范式。
-const JOIN_TYPE_APPLY = 1
-const joinType = ref(JOIN_TYPE_APPLY)
-const joinTypeBeforeSave = ref(JOIN_TYPE_APPLY)
-const joinTypeSaving = ref(false)
-
-const joinTypeChange = async (value) => {
-  if (joinTypeSaving.value) return
-  joinTypeSaving.value = true
-  let result
-  try {
-    result = await proxy.Request({
-      url: proxy.Api.updateJoinType,
-      params: { joinType: value },
-      showLoading: true
-    })
-  } finally {
-    joinTypeSaving.value = false
-  }
-  if (!result) {
-    // 接口失败：回滚 UI，避免出现「界面显示已保存、实际未生效」
-    joinType.value = joinTypeBeforeSave.value
-    return
-  }
-  joinTypeBeforeSave.value = value
-  userInfo.value.joinType = value
-  proxy.Message.success('朋友权限已更新')
-}
+// 注：「加我的方式」原在���页（只读不可改，2②-A 曾改为可编辑），
+// 已于 2026-10-02 随隐私设置统一页迁移至 /setting/privacy（openspec/specs/privacy-settings ADR-003）。
 
 // ===== 新消息提醒开关：任务栏闪烁（openspec/changes/2026-09-24-desktop-notification C2） =====
 // 默认开；挂载时经主进程 getSysSetting 读 user_setting.sysSetting.notifySwitch（缺失视为开）

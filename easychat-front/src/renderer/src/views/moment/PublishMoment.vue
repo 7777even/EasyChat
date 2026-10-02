@@ -53,7 +53,7 @@
         </el-input>
       </div>
 
-      <!-- 可见范围 -->
+      <!-- 可见范围：初值取自隐私设置的「朋友圈可见范围」，本条可临时调整（不回写用户级） -->
       <div class="visibility-select">
         <span class="label">谁可以看</span>
         <el-select v-model="formData.visibility" size="small">
@@ -64,6 +64,30 @@
             :value="item.value"
           />
         </el-select>
+      </div>
+
+      <!-- 白名单（visibility=3）/ 黑名单（visibility=4）选人 -->
+      <div v-if="formData.visibility === 3" class="visibility-pick">
+        <span class="label">谁可以看</span>
+        <el-input
+          v-model="whiteNamesText"
+          size="small"
+          readonly
+          :placeholder="selectedCount === 0 ? '点击右侧「选择」指定可见的人' : ''"
+        />
+        <el-button size="small" @click="openPicker('white')">选择</el-button>
+        <span class="count-hint">已选 {{ selectedCount }} 人</span>
+      </div>
+      <div v-if="formData.visibility === 4" class="visibility-pick">
+        <span class="label">不让谁看</span>
+        <el-input
+          v-model="blackNamesText"
+          size="small"
+          readonly
+          :placeholder="selectedCount === 0 ? '点击右侧「选择」指定屏蔽的人' : ''"
+        />
+        <el-button size="small" @click="openPicker('black')">选择</el-button>
+        <span class="count-hint">已选 {{ selectedCount }} 人</span>
       </div>
 
       <!-- 上传进度显示 -->
@@ -98,11 +122,20 @@
       @change="handleMediaSelect"
     />
   </Dialog>
+
+  <!-- 白/黑名单选人（openspec/specs/privacy-settings） -->
+  <ContactPicker
+    v-model="pickerShow"
+    :title="pickerTarget === 'white' ? '选择谁可以看' : '选择不让谁看'"
+    :selected="pickerTarget === 'white' ? whiteSelected : blackSelected"
+    @confirm="onPickerConfirm"
+  />
 </template>
 
 <script setup>
-import { ref, reactive, getCurrentInstance, nextTick } from 'vue'
+import { ref, reactive, computed, getCurrentInstance, nextTick } from 'vue'
 import Dialog from '@/components/Dialog.vue'
+import ContactPicker from '@/components/ContactPicker.vue'
 import MomentChunkUploadApi from '@/utils/MomentChunkUploadApi'
 
 const { proxy } = getCurrentInstance()
@@ -129,11 +162,85 @@ const formData = reactive({
   visibility: 0
 })
 
+// 与后端 moment.visibility / user_info.moment_visibility 语义一一对齐
 const visibilityOptions = [
   { value: 0, label: '公开' },
   { value: 1, label: '好友可见' },
-  { value: 2, label: '仅自己可见' }
+  { value: 2, label: '仅自己可见' },
+  { value: 3, label: '自定义（白名单）' },
+  { value: 4, label: '黑名单' }
 ]
+
+// ===== 可见范围名单（白/黑名单）=====
+// 初值取自隐私设置的「朋友圈可见范围」（user_info.moment_visibility + 名单），
+// 本条可临时调整；**不回写用户级设置**（openspec/specs/privacy-settings ADR-001）
+const whiteSelected = ref([])
+const blackSelected = ref([])
+const friendNameMap = ref({})
+const pickerTarget = ref('')
+const pickerShow = ref(false)
+
+const selectedCount = computed(() =>
+  formData.visibility === 3 ? whiteSelected.value.length : formData.visibility === 4 ? blackSelected.value.length : 0
+)
+
+const whiteNamesText = computed(() =>
+  whiteSelected.value.map((id) => friendNameMap.value[id] || id).join('、')
+)
+const blackNamesText = computed(() =>
+  blackSelected.value.map((id) => friendNameMap.value[id] || id).join('、')
+)
+
+const parseIdList = (raw) => {
+  if (!raw) return []
+  try {
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string' && x) : []
+  } catch (e) {
+    return []
+  }
+}
+
+// 拉取好友昵称映射（名单展示用）
+const loadFriendNames = async () => {
+  let result = await proxy.Request({
+    url: proxy.Api.loadContact,
+    showLoading: false,
+    params: { contactType: 'USER' }
+  })
+  if (!result) return
+  const map = {}
+  ;(result.data || []).forEach((item) => {
+    map[item.contactId] = item.contactName || item.contactId
+  })
+  friendNameMap.value = map
+}
+
+// 读取用户级默认：打开发布页时继承
+const loadUserPrivacyDefault = async () => {
+  let result = await proxy.Request({
+    url: proxy.Api.getUserInfo,
+    showLoading: false
+  })
+  if (!result) return
+  const info = result.data || {}
+  formData.visibility = info.momentVisibility == null ? 0 : info.momentVisibility
+  whiteSelected.value = parseIdList(info.momentVisibleList)
+  blackSelected.value = parseIdList(info.momentInvisibleList)
+}
+
+const openPicker = (target) => {
+  pickerTarget.value = target
+  pickerShow.value = true
+}
+
+const onPickerConfirm = (ids) => {
+  if (pickerTarget.value === 'white') {
+    whiteSelected.value = ids
+  } else {
+    blackSelected.value = ids
+  }
+}
 
 const mediaList = ref([])
 const mediaInputRef = ref(null)
@@ -147,9 +254,14 @@ const show = () => {
   formData.content = ''
   formData.location = ''
   formData.visibility = 0
+  whiteSelected.value = []
+  blackSelected.value = []
   mediaList.value = []
   uploadingFiles.value = []
   isUploading.value = false
+  // 继承隐私设置里的「朋友圈可见范围」作为本条默认值
+  loadFriendNames()
+  loadUserPrivacyDefault()
 }
 
 const closeDialog = () => {
@@ -223,12 +335,22 @@ const publishMoment = async () => {
 
   console.log('开始发布朋友圈, 媒体数量:', mediaList.value.length)
 
+  // 白/黑名单模式必须已选人（后端也会拦，这里提前拦以免用户白跑一趟上传）
+  if ((formData.visibility === 3 || formData.visibility === 4) && selectedCount.value === 0) {
+    proxy.Message.warning(
+      formData.visibility === 3 ? '请先选择哪些人可以看到' : '请先选择不让谁看到'
+    )
+    return
+  }
+
   // 先发布朋友圈获取momentId
   const result = await proxy.Request({
     url: proxy.Api.publishMoment,
     params: {
       content: formData.content,
       visibility: formData.visibility,
+      visibleList: formData.visibility === 3 ? JSON.stringify(whiteSelected.value) : null,
+      invisibleList: formData.visibility === 4 ? JSON.stringify(blackSelected.value) : null,
       location: formData.location
     }
   })
@@ -475,6 +597,27 @@ defineExpose({
   .label {
     font-size: 14px;
     color: #666;
+  }
+}
+
+// 白/黑名单选人行（openspec/specs/privacy-settings）
+.visibility-pick {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .label {
+    width: 56px;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: #666;
+  }
+
+  .count-hint {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: #999;
   }
 }
 

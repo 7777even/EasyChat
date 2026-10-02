@@ -127,9 +127,14 @@ const router = createRouter({
           name: "我的收藏",
           component: () => import('@/views/setting/Favorite.vue'),
         }, {
+          path: "/setting/privacy",
+          name: "隐私",
+          component: () => import('@/views/setting/Privacy.vue'),
+        }, {
+          // 旧入口重定向：黑名单已并入隐私设置页（openspec/specs/privacy-settings ADR-003）
+          // 保留 redirect 而非删除，避免用户书签与历史栈 404
           path: "/setting/blacklist",
-          name: "黑名单",
-          component: () => import('@/views/setting/Blacklist.vue'),
+          redirect: "/setting/privacy",
         }, {
           path: "/setting/about",
           name: "关于",
