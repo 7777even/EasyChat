@@ -102,7 +102,9 @@ public class UserContactController extends ABaseController {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContactApplyQuery userContactApplyQuery = new UserContactApplyQuery();
         userContactApplyQuery.setOrderBy("last_apply_time desc");
-        userContactApplyQuery.setReceiveUserId(tokenUserInfoDto.getUserId());
+        // 用 currentUserId 而非 receiveUserId：申请单 receive_user_id 恒为群主，
+        // 群管理员/群主的群入群申请需一并可见（审批可见性判定见 Mapper query_condition）
+        userContactApplyQuery.setCurrentUserId(tokenUserInfoDto.getUserId());
         userContactApplyQuery.setQueryContactInfo(true);
         userContactApplyQuery.setPageNo(pageNo);
         userContactApplyQuery.setPageSize(PageSize.SIZE15.getSize());

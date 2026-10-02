@@ -41,6 +41,27 @@
         <if test="query.receiveUserId != null and query.receiveUserId!=''">
             and receive_user_id = #{query.receiveUserId}
         </if>
+        <!--
+          审批可见性（2026-10-02 群入群审批闭环）：
+          申请单 receive_user_id 恒为群主，群管理员虽可审批却不可见。
+          这里放宽为「我被直接申请」或「我（群主/管理员）所属群的入群申请」。
+          同一条件被 selectList 与 selectCount 共用 → 分页 total 与列表口径一致。
+          role 0=群主 1=管理员 2=成员；status 1=正常成员
+        -->
+        <if test="query.currentUserId != null and query.currentUserId != ''">
+            and (
+                receive_user_id = #{query.currentUserId}
+                or (
+                    contact_type = 1
+                    and contact_id in (
+                        select contact_id from user_contact
+                        where user_id = #{query.currentUserId}
+                          and role in (0, 1)
+                          and status = 1
+                    )
+                )
+            )
+        </if>
         <if test="query.contactType != null">
             and contact_type = #{query.contactType}
         </if>
@@ -101,8 +122,14 @@
         FROM
         user_contact_apply a
         <if test="query.queryContactInfo">
-            LEFT JOIN user_info u ON u.user_id = a.apply_user_id and a.receive_user_id = #{query.receiveUserId}
-            LEFT JOIN group_info g ON g.group_id = a.contact_id and a.receive_user_id = #{query.receiveUserId}
+            <!--
+              两侧均为主键（user_info.user_id / group_info.group_id），1:1 不会扇出，
+              故不再附加 a.receive_user_id 守卫：审批可见性已由 WHERE 的
+              currentUserId 分支保证，附加守卫会让群管理员分支恒不命中（= NULL），
+              导致 contactName 全为 null。可见性收窄请改 WHERE，不要加回这里。
+            -->
+            LEFT JOIN user_info u ON u.user_id = a.apply_user_id
+            LEFT JOIN group_info g ON g.group_id = a.contact_id
         </if>
         <include refid="query_condition"/>
         <if test="query.orderBy!=null">

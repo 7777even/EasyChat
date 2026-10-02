@@ -27,9 +27,36 @@ public class UserContactApplyQuery extends BaseParam {
     private String receiveUserIdFuzzy;
 
     /**
+     * 当前操作者 id（仅用于「我可见的申请」判定，非持久化字段）
+     * <p>
+     * 语义：待处理申请对我可见，当且仅当满足其一：
+     * <ol>
+     *   <li>{@code receive_user_id = currentUserId}（我被直接申请）</li>
+     *   <li>{@code contact_type = 1}（群入群申请）且我在该群 role ∈ {0 群主, 1 管理员} 且 status=1</li>
+     * </ol>
+     * 与 {@code receiveUserId} 的区别：后者是「申请单上的接收人字段」等值条件，
+     * 会漏掉群管理员（申请单 receive_user_id 恒为群主）；本字段专供可见性判定。
+     * <p>
+     * 对应 XML：{@code UserContactApplyMapper.xml#query_condition} 的
+     * {@code currentUserId} 分支。该条件同时作用于 {@code selectList} 与
+     * {@code selectCount}，保证分页 total 与列表、WS 申请红点三处口径一致。
+     *
+     * @since 2026-10-02 群入群审批闭环（openspec/specs/group-join-approval）
+     */
+    private String currentUserId;
+
+    /**
      * 联系人类型 0:好友 1:群组
      */
     private Integer contactType;
+
+    public String getCurrentUserId() {
+        return currentUserId;
+    }
+
+    public void setCurrentUserId(String currentUserId) {
+        this.currentUserId = currentUserId;
+    }
 
     /**
      * 联系人群组ID

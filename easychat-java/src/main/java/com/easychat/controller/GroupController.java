@@ -231,14 +231,13 @@ public class GroupController extends ABaseController {
     }
 
     /**
-     * 通过二维码加入群组
+     * 通过二维码加入群组（入群受群 join_type 管辖：0 直接加入 / 1 需审批）
      */
     @PostMapping(value = "/qrCode/join")
     @GlobalInterceptor
-    public Result<Void> joinByQrCode(HttpServletRequest request, @NotEmpty String qrCodeToken) {
+    public Result<Integer> joinByQrCode(HttpServletRequest request, @NotEmpty String qrCodeToken) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        groupQrCodeService.joinByQrCode(tokenUserInfoDto, qrCodeToken);
-        return success();
+        return success(groupQrCodeService.joinByQrCode(tokenUserInfoDto, qrCodeToken));
     }
 
     // ==================== 群邀请链接 ====================
@@ -259,9 +258,8 @@ public class GroupController extends ABaseController {
      */
     @PostMapping(value = "/invite/join")
     @GlobalInterceptor
-    public Result<Void> joinByInvite(HttpServletRequest request, @NotEmpty String inviteToken) {
+    public Result<Integer> joinByInvite(HttpServletRequest request, @NotEmpty String inviteToken) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        groupInviteService.joinByInvite(tokenUserInfoDto, inviteToken);
-        return success();
+        return success(groupInviteService.joinByInvite(tokenUserInfoDto, inviteToken));
     }
 }

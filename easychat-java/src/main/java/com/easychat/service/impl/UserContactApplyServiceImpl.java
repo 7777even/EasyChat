@@ -15,6 +15,7 @@ import com.easychat.mappers.GroupInfoMapper;
 import com.easychat.mappers.UserContactApplyMapper;
 import com.easychat.mappers.UserContactMapper;
 import com.easychat.mappers.UserInfoMapper;
+import com.easychat.service.GroupInfoService;
 import com.easychat.service.UserContactApplyService;
 import com.easychat.service.UserContactService;
 import com.easychat.utils.StringTools;
@@ -51,6 +52,9 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
 
     @Resource
     private UserContactService userContactService;
+
+    @Resource
+    private GroupInfoService groupInfoService;
 
     /**
      * 根据条件查询列表
@@ -267,9 +271,10 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
         }
 
         UserContactApply applyInfo = this.userContactApplyMapper.selectByApplyId(applyId);
-        if (applyInfo == null || !userId.equals(applyInfo.getReceiveUserId())) {
+        if (applyInfo == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
+        checkApplyAuthority(userId, applyInfo);
 
         //更新申请信息 只能由待处理更新为其他状态
         UserContactApply updateInfo = new UserContactApply();
@@ -302,6 +307,35 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
             userContact.setLastUpdateTime(curDate);
             userContactMapper.insertOrUpdate(userContact);
             return;
+        }
+    }
+
+    /**
+     * 申请处理权限校验（按 contactType 分流）。
+     * <p>
+     * <b>好友申请</b>：审批人恒为申请单上的 receive_user_id 本人。
+     * 不可放宽——好友申请只有被申请人本人能处理，语义与群治理无关。
+     * <p>
+     * <b>群入群申请</b>：审批人为群主或任一群管理员。
+     * 申请单的 receive_user_id 恒为群主（见 {@link #applyAdd}），若沿用强等判定
+     * 会导致管理员有权却不可见、也不可审，故改走 {@code checkGroupRole}。
+     * 群主 role=0 亦满足 ADMIN(1) 阈值（0 群主 &gt; 1 管理员 &gt; 2 成员），
+     * 无需对群主特判。
+     *
+     * @param userId   操作者 id
+     * @param applyInfo 申请单
+     * @throws BusinessException 好友申请非本人 → CODE_1001；
+     *                           群入群申请成员 → CODE_2305；非群成员 → CODE_2304
+     * @since 2026-10-02 群入群审批闭环（openspec/specs/group-join-approval）
+     */
+    private void checkApplyAuthority(String userId, UserContactApply applyInfo) {
+        if (UserContactTypeEnum.GROUP.getType().equals(applyInfo.getContactType())) {
+            // 成员/非成员分别抛 CODE_2305 / CODE_2304，语义由 GroupInfoService 给出
+            this.groupInfoService.checkGroupRole(userId, applyInfo.getContactId(), GroupMemberRoleEnum.ADMIN);
+            return;
+        }
+        if (!userId.equals(applyInfo.getReceiveUserId())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
     }
 }

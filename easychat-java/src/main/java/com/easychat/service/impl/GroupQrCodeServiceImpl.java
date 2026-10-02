@@ -12,6 +12,7 @@ import com.easychat.mappers.GroupInfoMapper;
 import com.easychat.mappers.UserContactMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.GroupQrCodeService;
+import com.easychat.service.UserContactApplyService;
 import com.easychat.service.UserContactService;
 import com.easychat.utils.StringTools;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,9 @@ import java.util.UUID;
 @Service("groupQrCodeService")
 public class GroupQrCodeServiceImpl implements GroupQrCodeService {
 
+    /** 扫码入群的申请附言（审批人在申请列表上据此识别来源） */
+    private static final String APPLY_INFO_FROM_QRCODE = "通过群二维码申请加入";
+
     @Resource
     private RedisComponet redisComponet;
 
@@ -38,6 +42,9 @@ public class GroupQrCodeServiceImpl implements GroupQrCodeService {
 
     @Resource
     private UserContactService userContactService;
+
+    @Resource
+    private UserContactApplyService userContactApplyService;
 
     @Override
     public String generateQrCode(TokenUserInfoDto tokenUserInfo, String groupId) {
@@ -65,7 +72,7 @@ public class GroupQrCodeServiceImpl implements GroupQrCodeService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void joinByQrCode(TokenUserInfoDto tokenUserInfo, String qrCodeToken) {
+    public Integer joinByQrCode(TokenUserInfoDto tokenUserInfo, String qrCodeToken) {
         // 根据 token 获取群组 ID
         String groupId = getGroupIdByToken(qrCodeToken);
         if (StringTools.isEmpty(groupId)) {
@@ -77,15 +84,14 @@ public class GroupQrCodeServiceImpl implements GroupQrCodeService {
             throw new BusinessException("群组不存在");
         }
         // 校验是否已经是群成员
-        UserContactQuery query = new UserContactQuery();
-        query.setUserId(tokenUserInfo.getUserId());
-        query.setContactId(groupId);
         UserContact existingContact = userContactMapper.selectByUserIdAndContactId(tokenUserInfo.getUserId(), groupId);
         if (existingContact != null && UserContactStatusEnum.FRIEND.getStatus().equals(existingContact.getStatus())) {
             throw new BusinessException("您已经是该群成员");
         }
-        // 加入群组
-        userContactService.addContact(tokenUserInfo.getUserId(), null, groupId, UserContactTypeEnum.GROUP.getType(), null);
+        // 委托既有申请链路：入群行为受 group_info.join_type 管辖
+        // （0 直接加入 / 1 落申请单待群主或管理员审批），此处不得自行入群
+        return userContactApplyService.applyAdd(tokenUserInfo, groupId,
+                UserContactTypeEnum.GROUP.name(), APPLY_INFO_FROM_QRCODE);
     }
 
     /**

@@ -134,10 +134,10 @@ public class ChannelContextUtils {
             wsInitData.setChatMessageList(chatMessageList);
 
             /**
-             * 3、查询好友申请
+             * 3、查询好友申请（与 /contact/loadApply 同一可见性口径，见 query_condition 的 currentUserId 分支）
              */
             UserContactApplyQuery applyQuery = new UserContactApplyQuery();
-            applyQuery.setReceiveUserId(userId);
+            applyQuery.setCurrentUserId(userId);
             applyQuery.setLastApplyTimestamp(sourceLastOffTime);
             applyQuery.setStatus(UserContactApplyStatusEnum.INIT.getStatus());
             Integer applyCount = userContactApplyMapper.selectCount(applyQuery);
