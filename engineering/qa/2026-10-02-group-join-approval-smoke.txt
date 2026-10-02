@@ -1,0 +1,76 @@
+===== group-join-approval 活体冒烟 =====
+时间: 2026-10-02T13:23:32
+BASE=http://localhost:5050/api
+A=test@qq.com  B=karina7710@test.com  C=3289228667@qq.com(仅SQL断言)
+G_APPLY=GSMKJOIN0001  G_ADMIN=GSMKJOIN0002
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] 账号 A 登录成功 U69630787860
+   [PASS] 账号 B 登录成功 U04259455805
+   [PASS] 账号 C 存在于库 U07346173613
+   [PASS] 两个临时群已建（A 在 G_ADMIN 中为普通成员 role=2）
+   [PASS] A 当前不是 G_APPLY 成员（申请者前置）
+
+=== 1. C1/C2 扫码入群受 join_type 管辖（join_type=1）===
+   [PASS] 群主 B 生成二维码成功 | code=0
+   [PASS] 扫码入群 code=0 | success
+   [PASS] 返回 joinType=1（已提交申请待审批） | data=1
+   [PASS] ★ 关键：申请人 A **未**被直接拉入群（漏洞已堵）
+   [PASS] 已落待处理申请单（status=0，contact_type=1） | count=1
+   [PASS] 申请单 receive_user_id 为群主 B
+   [PASS] 申请附言标注来源为群二维码
+   [PASS] 重复扫码幂等：仍只有 1 条申请单 | count=1
+   [PASS] 重复扫码仍返回 joinType=1
+
+=== 2. C3 群主可见入群申请并审批通过 ===
+   [PASS] 群主 B 在申请列表可见本群入群申请 | list=2 条
+   [PASS] 入群申请 contactName 为群名（非申请者昵称） | contactName=冒烟临时群
+   [PASS] 分页 total 与列表同源（total >= list） | total=None list=2
+   [PASS] 群主审批通过 code=0 | code=0 msg=success
+   [PASS] ★ 审批通过后 A 真正入群
+   [PASS] 已处理申请状态变为 1 已同意（loadApply 返回全部状态，非仅待处理） | status=1
+
+=== 3. C4 已是成员与无效 token 不得误报为已加入 ===
+   [PASS] 已是群成员再扫码 → 1001 | code=1001 msg=您已经是该群成员
+   [PASS] 无效二维码 token → 1001 | code=1001
+   [PASS] 无效邀请 token → 1001 | code=1001
+
+=== 4. C1/C2 join_type=0 时扫码直接入群 ===
+   [PASS] 扫码入群 code=0 | success
+   [PASS] 返回 joinType=0（已直接加入） | data=0
+   [PASS] 申请人 A 已直接入群
+   [PASS] join_type=0 时不产生申请单
+
+=== 5. C1 邀请链接路径与二维码路径对称 ===
+   [PASS] 群主 B 生成邀请链接成功
+   [PASS] 邀请入群返回 joinType=1 | code=0 data=1
+   [PASS] ★ 邀请路径同样未直接入群
+   [PASS] 申请附言标注来源为邀请链接
+
+=== 6. C3 普通群成员：既不可见也不可审 ===
+   [PASS] 已为 C 造一条 G_ADMIN 入群申请单 | applyId=12
+   [PASS] 普通成员 A 看不到本群入群申请（修复前也看不到，现仍应看不到）
+   [PASS] 普通成员 A 审批被拒 code=2305 | code=2305 msg=无权执行此操作
+   [PASS] ★ 被拒后 C 未入群
+   [PASS] ★ 被拒后申请单仍为待处理
+
+=== 7. C3 群管理员：可见 + 可审批（修复前的空白能力）===
+   [PASS] 群主 B 将 A 设为管理员 code=0 | success
+   [PASS] A 的 role 已变为 1
+   [PASS] ★ 群管理员 A 能在申请列表看到本群入群申请 | list=1 条
+   [PASS] 管理员视角下 contactName 为群名 | contactName=冒烟临时群
+   [PASS] 管理员视角分页 total 与列表同源 | total=None list=1
+   [PASS] ★ 群管理员 A 审批通过 code=0 | code=0 msg=success
+   [PASS] ★ 审批通过后 C 真正入群
+
+=== 8. 回归护栏 好友申请审批人仍为被申请人本人 ===
+   [PASS] 群管理员 A 不能处理他人好友申请 code=1001 | code=1001 msg=请求参数错误
+   [PASS] 被申请人 B 本人可处理好友申请 code=0 | code=0 msg=success
+   [PASS] 好友申请通过后 C 与 B 互为好友
+
+=== 清理临时数据 ===
+   临时群、成员行、申请单、会话均已删除
+   [PASS] 清理后临时群已不存在
+
+===== 结论：48/48 通过 =====

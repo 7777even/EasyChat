@@ -62,9 +62,11 @@ jobs:
         working-directory: easychat-front
         run: npm ci
 
-      - name: lint（只检查不修复）
-        working-directory: easychat-front
-        run: npx eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+      # 注：此处刻意**不**跑 `npm run lint`。
+      # 该脚本在改动前即已失效（`eslint .` 报 "No files matching the pattern"，
+      # 显式 glob 则有 311 errors / 20537 warnings 存量），把它设为 CI 闸门会让流水线恒红。
+      # 前端 lint 门禁缺失已登记为技术债，见 engineering/retro/2026-10-02-group-join-approval.md
+      # 与批次 5 清单。恢复条件见该 retro「改进方案」。
 
       - name: build
         working-directory: easychat-front

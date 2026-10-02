@@ -82,6 +82,11 @@ EasyChat/
 | 对外接口增删改 | 接口联冒烟 |
 | L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
+### 2.1 验证的两条硬纪律
+
+1. **任何写入 CI / Git hook / 门禁的脚本，交付前必须实跑一次并贴出退出码。** 「脚本存在」不等于「门禁有判别力」——本仓 `npm run lint` 长期 `exit 2`（`eslint .` 报 `No files matching`），却被接进 CI 导致流水线恒红（2026-10-02 事故，见 `engineering/retro/2026-10-02-group-join-approval.md` §三.1）。**门禁必须先在当前 main 上跑通，才允许接入。**
+2. **Windows 上一律用 `edit` / `write` 工具改源码，不得用 PowerShell 重定向或 `Set-Content` 改文件。** 实测三类事故：BOM 导致 `javac` 报 `非法字符 '\ufeff'`；`-replace` 正则批量替换产生重复行；换行丢失导致行粘连（2026-10-02 连续踩中三次）。
+
 ## 3. 接口契约规则
 
 1. **统一响应包络**：所有业务响应统一 `Result<T>`（`code` / `message` / `data`），`code=0` 为成功；非 0 由全局异常处理器统一转换。**禁止** Controller 自定义第二套响应外壳或裸返实体。
