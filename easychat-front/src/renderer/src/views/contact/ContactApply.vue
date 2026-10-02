@@ -6,8 +6,9 @@
   >
     <div>
       <div class="apply-item" v-for="item in applyList">
+        <!-- contactType 0=好友申请 1=群入群申请（群名由后端 contactName 给出，openspec/specs/group-join-approval） -->
         <div :class="['contact-type', item.contactType == 0 ? 'user-contact' : '']">
-          {{ item.contactType == 0 ? '好友' : '群聊' }}
+          {{ item.contactType == 0 ? '好友' : '入群申请' }}
         </div>
         <Avatar
           :width="50"

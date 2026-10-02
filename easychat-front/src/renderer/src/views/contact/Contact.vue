@@ -8,6 +8,11 @@
             <span class="iconfont icon-search"></span>
           </template>
         </el-input>
+        <el-tooltip content="通过群二维码或邀请链接加入群聊" placement="right">
+          <div class="join-group-btn" @click="joinDialogShow = true">
+            <span class="iconfont icon-add-group"></span>
+          </div>
+        </el-tooltip>
       </div>
       <div class="contact-list" v-show="!searchKey">
         <template v-for="item in partList">
@@ -66,9 +71,12 @@
       </router-view>
     </template>
   </Layout>
+  <!-- 加入群聊（群二维码 / 邀请链接），openspec/specs/group-join-approval -->
+  <GroupJoinDialog v-model="joinDialogShow" @joined="onGroupJoined" />
 </template>
 <script setup>
 import ContactSearchResult from './ContactSearchResult.vue'
+import GroupJoinDialog from '@/components/GroupJoinDialog.vue'
 import {getCurrentInstance, ref, watch} from 'vue'
 import {useContactStateStore} from '@/stores/ContactStateStore'
 import {useMessageCountStore} from '@/stores/MessageCountStore'
@@ -76,6 +84,9 @@ import {useRoute, useRouter} from 'vue-router'
 
 const { proxy } = getCurrentInstance()
 const contactStateStore = useContactStateStore()
+
+//加入群聊对话框
+const joinDialogShow = ref(false)
 
 const messageCountStore = useMessageCountStore()
 
@@ -189,6 +200,15 @@ const loadMyGroup = async () => {
   partList.value[1].contactData = groupList
 }
 loadMyGroup()
+
+//加入群聊结果回调（GroupJoinDialog 抛出）
+// joinType=0 已直接入群 → 刷新群列表；joinType=1 仅提交申请，群列表不变
+const onGroupJoined = ({ approved }) => {
+  if (approved) {
+    loadMyGroup()
+    loadContact('GROUP')
+  }
+}
 
 //联系人详情
 const contactDetail = (contact, part) => {
@@ -315,6 +335,25 @@ watch(
   align-items: center;
   .iconfont {
     font-size: 12px;
+  }
+  //加入群聊入口（群二维码 / 邀请链接）
+  .join-group-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-left: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--ec-text-secondary);
+    transition: background 0.2s, color 0.2s;
+
+    &:hover {
+      background: var(--ec-surface-raised);
+      color: var(--ec-brand);
+    }
   }
 }
 .contact-list {
