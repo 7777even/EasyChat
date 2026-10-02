@@ -1,0 +1,15 @@
+target/
+out/
+dist/
+node_modules/
+.git/
+.gitignore
+*.class
+*.jar
+*.jar.original
+*.log
+easychat-java/logs/
+easychat-java/log.path_IS_UNDEFINED/
+worktree/
+.idea/
+.vscode/

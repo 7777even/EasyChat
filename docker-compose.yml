@@ -1,0 +1,86 @@
+# EasyChat 本地开发环境自举：MySQL + Redis + 后端
+# 用法：
+#   docker compose up -d              # 起全套
+#   docker compose logs -f backend    # 看后端日志
+#   docker compose down               # 停（保留数据卷）
+#   docker compose down -v            # 停并清空数据（会丢聊天数据，慎用）
+#
+# 说明：前端（Electron）不在容器里跑，需本机 npm run dev，
+#       客户端内配置 API/WS 域名指向 localhost:5050 / localhost:5051。
+#
+# ⚠️ backend **不可 --scale 横向扩容**：CallService 的通话房间注册表是进程内
+#    ConcurrentHashMap，多实例时呼叫信令找不到对方（详见 CallService 类注释
+#    与 docs/system-facts.md §1.1）。消息广播走 RTopic 不受影响。
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: easychat-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-easychat}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次启动自动导入最新基线；已存在的库不会重复执行
+      - ./easychat.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: easychat-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: easychat-java/Dockerfile
+    container_name: easychat-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      # 默认即 prod：忘加 `--env-file .env` 时也不至于静默跑在 dev profile 上。
+      # 仍强烈建议 `docker compose --env-file .env up -d` 以注入真实凭据。
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easychat?serverTimezone=GMT%2B8&useUnicode=true&characterEncoding=utf8&useSSL=false&allowMultiQueries=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      # 文件落盘根目录（对应 project.folder），挂卷以免容器重建丢文件
+      PROJECT_FOLDER: /data/
+    ports:
+      - "5050:5050"   # HTTP，context-path /api
+      - "5051:5051"   # WebSocket
+    volumes:
+      - backend-files:/data
+
+volumes:
+  mysql-data:
+  redis-data:
+  backend-files:

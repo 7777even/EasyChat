@@ -1,0 +1,105 @@
+name: CI
+
+# 与本地 scripts/ 门禁同款，main 推送与 PR 自动执行。
+# 与本地 Git hooks 的分工：hooks 管提交与推送前的快速拦截，CI 是权威判定。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端编译与单测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 Maven 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: m2-${{ runner.os }}-${{ hashFiles('easychat-java/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: 安装 JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+          cache-dependency-path: easychat-java/pom.xml
+
+      - name: mvn test（单测）
+        working-directory: easychat-java
+        run: mvn -B test
+
+      - name: mvn package（构建产物）
+        working-directory: easychat-java
+        run: mvn -B package -DskipTests
+
+      - name: 校验构建产物存在
+        run: test -f easychat-java/target/easychat-1.0.jar
+
+  frontend:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: easychat-front/package-lock.json
+
+      - name: npm ci
+        working-directory: easychat-front
+        run: npm ci
+
+      - name: lint（只检查不修复）
+        working-directory: easychat-front
+        run: npx eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+
+      - name: build
+        working-directory: easychat-front
+        run: npm run build
+
+  gates:
+    name: 契约与规范门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 前后端接口契约一致性
+        run: node scripts/check-api-contract.mjs --strict
+
+      - name: IPC 通道注册完整性
+        run: node scripts/check-ipc-registration.mjs --strict
+
+      - name: OpenSpec 规格卫生（四件套 / 归档闭环）
+        run: node scripts/check-openspec-hygiene.mjs
+
+      - name: Mapper @Param 与 XML 占位符一致性
+        run: node scripts/verify/verify_mapper_params.mjs
+
+      - name: 密码明文交接红线
+        run: node scripts/verify/verify_password_handoff.mjs
+
+      - name: 运行时配置分层与硬编码凭据
+        run: node scripts/verify/verify_no_hardcoded_secret.mjs
+
+      - name: 虚拟列表核心算法
+        run: node scripts/verify/verify_virtual_core.mjs
+
+      - name: 通话核心逻辑
+        run: node scripts/verify/verify_call_core.mjs
