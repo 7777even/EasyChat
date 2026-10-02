@@ -11,9 +11,10 @@ import {
   onOpenLocalFolder, onDownloadUpdate, onOpenUrl, onSaveClipBoardFile, onLoadLocalUser, onDelChatSession,
   onTopChatSession, onReloadChatSession, onRegisterPendingAck,
   onSaveOrUpdateMessage, onDelLocalMessage, onCopyText, onSetSessionNoDisturb, onSaveSessionDraft,
-  onExportChatRecord, onExportChatBackup, onSendCallFrame, onFloatingWindow, onLaterHandle
+  onExportChatRecord, onExportChatBackup, onSendCallFrame, onFloatingWindow, onLaterHandle,
+  onSendTypingStatus, onSendUserStatusChange
 } from "./ipc"
-import { saveWindow } from './windowProxy'
+import { saveWindow, getWindow } from './windowProxy'
 import { stopBlink } from './notification'
 import { selectNeedRemindLaterHandle, deleteExpiredLaterHandle } from './db/LaterHandleModel'
 import { Notification } from 'electron'
@@ -79,7 +80,7 @@ function createWindow() {
     mainWindow.setResizable(false);
   });
 
-  mainWindow.on('close', (e) => {
+  mainWindow.on('close', () => {
     mainWindow.hide();
   })
 
@@ -309,6 +310,12 @@ function createWindow() {
 
   //稍后处理
   onLaterHandle();
+
+  //正在输入状态帧发送通道（渲染端 → 主进程 → WS 5051），必须注册否则静默失效
+  onSendTypingStatus();
+
+  //用户在线状态变更帧发送通道（渲染端 → 主进程 → WS 5051），必须注册否则静默失效
+  onSendUserStatusChange();
 
   //稍后处理提醒：每分钟检查一次，到时间则发送系统通知
   setInterval(async () => {
