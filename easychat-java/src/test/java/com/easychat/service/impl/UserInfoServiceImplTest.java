@@ -26,6 +26,7 @@ import com.easychat.config.EasyChatProperties;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -206,6 +207,104 @@ public class UserInfoServiceImplTest {
         when(userInfoMapper.selectByEmail(email)).thenReturn(null);
 
         userInfoService.login(email, "password123");
+    }
+
+    // ==================== 密码传递口径（BCrypt 回归，2026-10-01） ====================
+    // 背景：BCrypt 改造后前端登录仍发 md5(明文)、注册发明文，口径分裂导致登录必失败。
+    // 以下用例把「客户端发明文、服务端 BCrypt 校验」这一契约固化，防复发。
+
+    /** BCrypt 账号：明文登录成功 */
+    @Test
+    public void login_bcryptStoredPassword_withPlaintext_success() {
+        String email = "bcrypt@example.com";
+        String password = "password123";
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("U12345678902");
+        userInfo.setEmail(email);
+        userInfo.setNickName("BCrypt用户");
+        userInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(password));
+        userInfo.setStatus(UserStatusEnum.ENABLE.getStatus());
+        userInfo.setCreateTime(new Date());
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(userInfo);
+        when(userContactMapper.selectList(any(UserContactQuery.class))).thenReturn(new ArrayList<>());
+
+        UserInfoVO result = userInfoService.login(email, password);
+
+        assertNotNull(result);
+        assertEquals("U12345678902", result.getUserId());
+    }
+
+    /** 注册入库的是 BCrypt 哈希，且该哈希可用同一明文通过登录校验 */
+    @Test
+    public void register_storesBcryptAndPlaintextCanLogin() {
+        String email = "newbcrypt@example.com";
+        String password = "password123";
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(null);
+        when(userInfoBeautyMapper.selectByEmail(email)).thenReturn(null);
+        when(userInfoMapper.insert(any(UserInfo.class))).thenReturn(1);
+
+        userInfoService.register(email, "新用户", password);
+
+        ArgumentCaptor<UserInfo> captor = ArgumentCaptor.forClass(UserInfo.class);
+        verify(userInfoMapper).insert(captor.capture());
+        String stored = captor.getValue().getPassword();
+
+        assertTrue("注册应写入 BCrypt 哈希", com.easychat.utils.PasswordEncoder.isBCrypt(stored));
+        assertEquals("BCrypt 哈希长度应为 60", 60, stored.length());
+        assertTrue("同一明文应能通过校验", com.easychat.utils.PasswordEncoder.matches(password, stored));
+    }
+
+    /** 存量 MD5 账号：明文登录成功后自动升级为 BCrypt */
+    @Test
+    public void login_md5Password_autoUpgradedToBcrypt() {
+        String email = "legacy@example.com";
+        String password = "password123";
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("U12345678903");
+        userInfo.setEmail(email);
+        userInfo.setNickName("老用户");
+        userInfo.setPassword(com.easychat.utils.StringTools.encodeByMD5(password));
+        userInfo.setStatus(UserStatusEnum.ENABLE.getStatus());
+        userInfo.setCreateTime(new Date());
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(userInfo);
+        when(userContactMapper.selectList(any(UserContactQuery.class))).thenReturn(new ArrayList<>());
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), eq("U12345678903"))).thenReturn(1);
+
+        UserInfoVO result = userInfoService.login(email, password);
+
+        assertNotNull(result);
+        ArgumentCaptor<UserInfo> captor = ArgumentCaptor.forClass(UserInfo.class);
+        verify(userInfoMapper).updateByUserId(captor.capture(), eq("U12345678903"));
+        String upgraded = captor.getValue().getPassword();
+        assertTrue("老账号密码应升级为 BCrypt", com.easychat.utils.PasswordEncoder.isBCrypt(upgraded));
+        assertTrue("升级后同一明文仍可校验", com.easychat.utils.PasswordEncoder.matches(password, upgraded));
+    }
+
+    /** 已升级为 BCrypt 的账号：客户端若仍发 md5 摘要，登录必须失败且不写库 */
+    @Test(expected = BusinessException.class)
+    public void login_bcryptStored_rejectsMd5Digest() {
+        String email = "bcrypt@example.com";
+        String password = "password123";
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("U12345678902");
+        userInfo.setEmail(email);
+        userInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(password));
+        userInfo.setStatus(UserStatusEnum.ENABLE.getStatus());
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(userInfo);
+
+        try {
+            // 模拟旧版客户端行为：把明文先做一次 MD5 再提交
+            userInfoService.login(email, com.easychat.utils.StringTools.encodeByMD5(password));
+        } finally {
+            verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+        }
     }
 
     // ======================== 修改密码 ========================

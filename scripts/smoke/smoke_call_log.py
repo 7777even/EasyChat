@@ -128,7 +128,7 @@ def login(email):
     if not code:
         raise RuntimeError("captcha empty for key=%s" % key)
     body = {"email": email,
-            "password": hashlib.md5(PWD_RAW.encode()).hexdigest(),
+            "password": PWD_RAW,
             "checkCodeKey": key, "checkCode": code}
     _, r = http_req("/account/login", fields=body)
     if code_of(r) != 0:

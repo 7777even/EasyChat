@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """只读探测：admin 标记与管理端拦截（不写库，不入库）"""
-import json, hashlib, subprocess, urllib.request, urllib.parse, urllib.error
+import json, subprocess, urllib.request, urllib.parse, urllib.error
 
 BASE = "http://localhost:5050/api"
 REDIS = r"C:\Program Files\Redis\redis-cli.exe"
-PWD = hashlib.md5(b"Test@123456").hexdigest()
+PWD = "Test@123456"
 
 
 def req(path, token=None, fields=None):

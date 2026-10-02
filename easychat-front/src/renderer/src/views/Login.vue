@@ -178,7 +178,6 @@ import { ref, reactive, getCurrentInstance, nextTick, onMounted, onUnmounted } f
 const { proxy } = getCurrentInstance()
 import { useRouter } from 'vue-router'
 const router = useRouter()
-import md5 from 'js-md5'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 const userInfoStore = useUserInfoStore()
 
@@ -354,7 +353,7 @@ const submit = async () => {
     showError: false,
     params: {
       email: formData.value.email,
-      password: isLogin.value ? md5(formData.value.password) : formData.value.password,
+      password: formData.value.password,
       checkCode: formData.value.checkCode,
       nickName: formData.value.nickName,
       checkCodeKey: localStorage.getItem('checkCodeKey')
