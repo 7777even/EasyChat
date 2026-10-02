@@ -13,6 +13,24 @@
 | MySQL | `3306` | 库 `easychat`，用户名 `root` |
 | Redis | `6379` | 索引 0 |
 
+## 1.1 运行时配置分层
+
+| 文件 | 角色 | 敏感项策略 |
+|------|------|-----------|
+| `easychat-java/src/main/resources/application.properties` | **公共基线**，跨环境一致；含 `spring.profiles.active=dev` | 全部敏感键为 `${ENV_VAR:默认值}` 占位符，**无裸值**；不含 `easychat.turn.*`（环境专属） |
+| `…/application-dev.properties` | 本地开发 / 本机双实例联调 | 含公共 TURN 凭据（`guest/guess`）+ 本地 DB 口令 + `test@qq.com` |
+| `…/application-prod.properties` | 生产模板（入库） | **DB 密码无默认可用值**（`${SPRING_DATASOURCE_PASSWORD:}`，未注入即启动失败，属预期）；TURN 三项留空 → 降级纯 STUN |
+| 仓库根 `.env.example` | 凭据模板，入库 | 仅占位值 |
+| 仓库根 `.env` | 真实凭据载体，**不入库**（`.gitignore`） | — |
+
+- 优先级：`application.properties` → `application-${profile}.properties` → 系统环境变量
+- **Spring Boot 2.6 不自动读 `.env`**（自动导入是 3.0+ 的 `spring.config.import`），须用 `docker compose --env-file .env` 或 shell `set -a; . ./.env; set +a` 注入
+- 生产启用：`export SPRING_PROFILES_ACTIVE=prod`
+- 容器化：`easychat-java/Dockerfile`（多阶段，非 root）+ 根 `docker-compose.yml`（MySQL 8 + Redis 7 + 后端，首启动自动导入 `easychat.sql`）
+- 门禁：`node scripts/verify/verify_no_hardcoded_secret.mjs`（19 项断言，已入 CI）
+- 已知冗余：`easychat.project-folder` 为**死键**（全仓无人读 `EasyChatProperties#getProjectFolder`），落盘目录实际由 `project.folder` 经 `AppConfig#getProjectFolder` 提供；`EasyChatProperties` 的 Java 字段默认值仍在，待清理
+- 容器部署注意：`CallService.rooms` / `USER_CONTEXT_MAP` 为进程内 `ConcurrentHashMap`，**后端多实例部署时通话房间路由会失效**（单实例约束，未解决）
+
 ## 2. 后端依赖版本（`pom.xml`）
 
 | 依赖 | 版本 |
@@ -26,6 +44,8 @@
 | fastjson | `1.2.66` |
 | logback | `1.2.10` |
 | easy-captcha | `1.6.2` |
+
+> 已知技术债：`spring-boot-maven-plugin` 显式锁 `2.2.6.RELEASE`，与 parent `2.6.1` 版本倒挂（打包产物 `Spring-Boot-Version: 2.2.6.RELEASE`，即 loader/repackage 2.2.6 跑 2.6.1 的类）。属 AGENTS §8 L4「依赖与框架版本」，待批次 5 随依赖升级一并处理。
 
 ## 3. 前端依赖版本（`easychat-front/package.json`）
 
@@ -227,4 +247,5 @@
 > | 2026-09-29 | **管理端消息删除位（L4 四件套过人工关卡）**：`chat_message.delete_flag BIGINT`（migration-009 已执行 + 基线同步）+ 用户侧查询无条件过滤 + 管理端证据 PK 读保留；新增 WS 帧 `20 ADMIN_DELETE`（单聊双方/群成员在线直推，离线入缓冲，补推转换规则①sendUserId=收件人跳过、②contactType=1 群帧跳过）；已删消息 recall/download/locate 返回 2201；`dealReport handleAction=1` 接真实删除（afterCommit 推帧 + 幂等守卫）；前端 `wsClient case 20`/`Chat.vue`/`ChatMessage.vue` 墓碑渲染 + `ReportList` 警示改删除语义。冒烟 43/43 PASS + contract/hygiene 双绿。**双实例渲染侧（在线收帧/补推不出脏会话/右键隐藏/不闪）待用户本机验证** | openspec 2026-09-29-admin-message-delete |
 > | 2026-10-02 | **登录必然失败修复（L4）**：BCrypt 改造（2026-09-30）只改了服务端，前端登录仍发 `md5(明文)`、注册发明文，口径分裂导致登录 100% 失败。`Login.vue` 去掉客户端哈希，四条链路统一发明文；**根因还有 DDL 只改基线没写迁移**——存量库 `user_info.password` 实为 `varchar(32)`，BCrypt 写不进去导致升级抛 `Data too long`、登录返回 500，补 `easychat-migration-010-password-and-im-tables.sql`（password 32→60 + 补建 `emoji`/`favorite`/`user_status`/`operation_log` 四张存量库缺失表）并已执行。另修：`index.js` 补注册 `onSendTypingStatus`/`onSendUserStatusChange`（原缺失致「正在输入/状态变更」静默失效）与 `getWindow` 未导入（稍后处理通知点击报错）。单测 120 例、守卫 `verify_password_handoff.mjs` 21/21、活体登录/改密往返全通 | openspec 2026-10-01-password-handoff-unify |
 > | 2026-10-02 | **两处「表建好仍 500」缺陷修复（L2）**：`/userStatus/set` 是 `UserStatusMapper.xml` 的 `insert` 用裸属性 `#{userId}` 而 `BaseMapper.insert` 带 `@Param("bean")` → `BindingException`；`/emoji/list` 是 `EmojiController` 读 `request.getAttribute("userInfo")`（拦截器只校验、从不写入该 attribute）→ 恒 null → NPE，改为继承 `ABaseController` 用 `getTokenUserInfo(request)`。两者此前都被「表不存在」的 500 掩盖，migration-010 建表后才浮出。配套新增 `scripts/verify/verify_mapper_params.mjs`（Mapper `@Param` 与 XML 占位符一致性审计，全仓 27 个通过）；复测五个端点全 200 | 遗留项清理 |
+> | 2026-10-02 | **工程化骨架 + 运行时配置外置（L4）**：① 批次 1 骨架（L2）—— 新增 `README.md`、`LICENSE`(MIT)、`docker-compose.yml`、`easychat-java/Dockerfile`(多阶段/非 root)、`.github/workflows/ci.yml`(3 job：后端 test+package、前端 lint+build、8 个门禁)，并移除前端 3 个零引用死依赖 `fluent-ffmpeg`/`js-md5`/`less`（`ffmpeg` **仍在用**，`src/main/file.js` 裸调 `assets/ffmpeg.exe` 做视频封面与头像裁剪，二进制不入库 → 新克隆必缺且静默失败，已写入 README §4.1）。② 配置外置（L4，四件套 `openspec/archive/2026-10-02-config-externalization`）—— `application.properties` 拆为公共基线 + `application-dev` + `application-prod` 三段，敏感项全部 `${ENV_VAR:默认值}`，TURN 公共凭据移入 dev、prod 留空降级纯 STUN，DB 密码 prod 无默认可用值；新增 `.env.example`(入库) / `.env`(gitignore) 与门禁 `verify_no_hardcoded_secret.mjs`(19/19，已入 CI)。实跑验证：dev 正常起(5050/5051)且 admin 鉴权无回归、prod 无注入时按设计启动失败(`using password: NO`)、prod 注入口令后正常起。**新发现待办**：`easychat.project-folder` 是死键；`CallService.rooms` 内存单例导致后端多实例部署时通话路由失效 | openspec 2026-10-02-config-externalization + L2 骨架 |
 > | 2026-10-02 | **5 个滞留 Change 全部闭环，`openspec/changes/` 清空**：① `typing-online-status` 补 spec + 归档；② `password-bcrypt` 取消「批量迁移接口」任务（登录自动升级已覆盖）并归档；③ `favorite` 补前端（右键收藏 + `Favorite.vue` 列表页 + 设置页入口 + 路由）；④ `location-share` 补前端（工具栏位置弹窗 + `ChatMessageLocation.vue`，**不引地图 SDK**）；⑤ `group-qrcode-invite` 补前端（`GroupDetail.vue` 两弹窗 + `qrcode` 依赖）**并修后端三处 `getGroupIdByToken` 桩**（原 join 永远失败，现活体验证扫码/邀请加入均成功）。`check-api-contract.mjs` 孤路由 **7 → 0** | 遗留项清理 |

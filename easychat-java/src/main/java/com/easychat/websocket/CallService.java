@@ -30,6 +30,14 @@ import java.util.concurrent.ConcurrentMap;
  * - 复用现有 Netty WS 连接（5051）与 {@link ChannelContextUtils#USER_CONTEXT_MAP} 会话映射，不新增端口/HTTP 接口。
  * - TURN 配置由服务端随信令引导帧下发（{@code iceServers}），前端源码不含凭据。
  * - 通话结束（任一方式）落 {@code call_log}。
+ * <p>
+ * <b>⚠️ 单实例约束（已知限制，勿用 --scale 横向扩后端）</b><br>
+ * 本类的 {@code rooms} / {@code userCall} 是进程内 {@link ConcurrentHashMap}，
+ * {@link ChannelContextUtils#USER_CONTEXT_MAP} 同理。信令能跨实例是因为广播走 Redisson RTopic，
+ * 但**通话房间注册表不跨实例**：一旦后端跑多份，A 用户与 B 用户被负载均衡打到不同实例时，
+ * 呼叫/接听信令将找不到对方，通话直接建立失败。
+ * 修复方向：房间注册表迁 Redis（与离线缓冲同一套 Redis 基础设施）。当前部署形态为单实例，见
+ * {@code docs/system-facts.md} §1.1 与仓库根 {@code docker-compose.yml}。
  */
 @Component("callService")
 public class CallService {

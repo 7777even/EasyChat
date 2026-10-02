@@ -17,3 +17,8 @@ easychat-front/assets/ffmpeg.exe
 
 # AI 工具本地记忆目录（不入库）
 .workbuddy/
+
+# 运行时真实凭据（模板见 .env.example，入库）
+.env
+.env.local
+.env.*.local
