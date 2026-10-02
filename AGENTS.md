@@ -191,6 +191,10 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 5. 新建表必须包含 `create_time` 字段
 6. 逻辑删除优先使用 `status` 字段标记而非物理删除
 7. **Mapper XML 占位符须与方法签名匹配**：带 `@Param` 的方法必须写限定名（`#{bean.x}` / `#{query.x}`）；无 `@Param` 且单参数才可用裸属性。写错会在运行期抛 `BindingException` 且编译期无感。守卫：`node scripts/verify/verify_mapper_params.mjs`
+8. **「DB 加列」必须改满三处，缺一即全量写操作 500**：① `easychat.sql` 基线 ② 迁移脚本 ③ **Mapper XML**。第 ③ 处指 `<resultMap>` 加 `<result>`、`<sql id="base_column_list">` 加列名、以及目标 `<update>`/`<insert>` 内加 `<if test="bean.xxx != null">`。
+   **漏改第 ③ 处的典型症状**：`<if>` 全部不命中 → SET 子句为空 → 拼出 `UPDATE t  where id=?` 语法错 → 接口返回 `CODE_1002`。
+   **Service 层单测抓不到**（Mapper 被 mock 掉），只有活体冒烟能发现（2026-10-02 隐私设置改造实际踩中）。DoD 必须含「XML 三处已改」勾选项。
+9. **Entity/PO 新增字段一律不设 Java 字段初始值**，默认值只由 DDL 的 `NOT NULL DEFAULT` 承担。`<if test="bean.xxx != null">` 会把 `new PO()` 携带的初始值一并写进 SQL，导致「改 A 列时顺手把 B 列重置为默认值」的串列 bug（2026-10-02 被 TDD 抓出）。
 
 ## 7. 前端规范
 

@@ -1,0 +1,76 @@
+===== 朋友圈可见范围 + 在线状态可见性 活体冒烟 =====
+时间: 2026-10-02T15:34:09
+A=test@qq.com  B=karina7710@test.com(好友)  C=3289228667@qq.com(非好友)
+
+=== 0. 前置条件 ===
+   [PASS] 后端 /account/checkCode 可达
+   [PASS] A 登录成功 U69630787860
+   [PASS] B 登录成功 U04259455805
+   （A 原值 mv=0 osv=1，结束还原）
+   [PASS] 列 moment_visibility 已存在（migration-011 已执行）
+   [PASS] 列 moment_visible_list 已存在（migration-011 已执行）
+   [PASS] 列 moment_invisible_list 已存在（migration-011 已执行）
+   [PASS] 列 online_status_visible 已存在（migration-011 已执行）
+   [PASS] A 与 B 已是好友（供名单子集校验）
+
+=== 1. 存量用户默认值与行为不变 ===
+   [PASS] B 的 moment_visibility 默认 0（公开，与改动前发布页默认一致）
+   [PASS] B 的 online_status_visible 默认 1（展示，与改动前无条件广播一致）
+   [PASS] C 的 moment_visibility 默认 0（公开，与改动前发布页默认一致）
+   [PASS] C 的 online_status_visible 默认 1（展示，与改动前无条件广播一致）
+   [PASS] getUserInfo 带出 4 个隐私字段 | keys=['momentVisibility', 'momentVisibleList', 'momentInvisibleList', 'onlineStatusVisible']
+
+=== 2. C1 朋友圈可见范围 0–4 可配置 ===
+   [PASS] 设为 0 code=0 | success
+   [PASS]   DB 写入 0
+   [PASS] 设为 1 code=0 | success
+   [PASS]   DB 写入 1
+   [PASS] 设为 2 code=0 | success
+   [PASS]   DB 写入 2
+   [PASS] 设为 3（白名单，含好友 B）code=0 | success
+   [PASS]   白名单已落库且含 B | ["U04259455805"]
+   [PASS] 设为 4（黑名单，含好友 B）code=0 | success
+   [PASS]   黑名单已落库且含 B
+   [PASS] ★ 切回公开后白名单仍保留（便于切回）
+
+=== 3. C1 校验：空名单 / 非好友 / 非法值 / 超长 ===
+   [PASS] ★ visibility=3 但白名单为空 → CODE_1001 | code=1001
+   [PASS] ★ visibility=4 但黑名单为 [] → CODE_1001 | code=1001
+   [PASS] ★ 被拒后 DB 仍为上一次合法值 3
+   [PASS] ★ 名单含非好友 C → CODE_1001 | code=1001
+   [PASS] ★ 非法 JSON → CODE_1001 | code=1001
+   [PASS] ★ 超长名单 → CODE_1001 | code=1001
+   [PASS] 非法 visibility=-1 → CODE_1001 | code=1001
+   [PASS] 非法 visibility=5 → CODE_1001 | code=1001
+   [PASS] 非法 visibility=99 → CODE_1001 | code=1001
+   [PASS] visibility 缺省 → HTTP 400
+
+=== 4. 只写隐私列，不串列 ===
+   [PASS] ★ 改在线状态开关不重置朋友圈可见范围（前三段不变） | before=3|["U04259455805"]|["U04259455805"]|1 after=3|["U04259455805"]|["U04259455805"]|1
+   [PASS] ★ 改朋友圈可见范围不重置在线状态开关（第四段不变） | before=3|["U04259455805"]|["U04259455805"]|1 after=2|["U04259455805"]|["U04259455805"]|1
+   [PASS] ★ 昵称未被隐私设置覆盖 | nick=0.0
+
+=== 5. C2 用户级默认被发布页继承（端到端）===
+   [PASS] getUserInfo 返回 momentVisibility=1（发布页据此设初值） | momentVisibility=1
+   [PASS] 白名单模式：getUserInfo 带出名单供发布页预选 | list=["U04259455805"]
+   [PASS] 单条发布 visibility=2 code=0 | success
+   [PASS] ★ 单条覆盖后用户级仍为 3（未被回写） | user_mv=3
+   [PASS] ★ 该条动态自身 visibility=2（判定走单条，不受用户级影响）
+
+=== 6. C3 在线状态可见性开关 ===
+   [PASS] 关闭 code=0 | success
+   [PASS]   DB 写入 0
+   [PASS] getUserInfo 回读 0
+   [PASS] 重新开启 code=0 | success
+   [PASS]   DB 写入 1
+   [PASS] 非法 visible=-1 → CODE_1001 | code=1001
+   [PASS] 非法 visible=2 → CODE_1001 | code=1001
+   [PASS] ★ 非法值未污染 DB（仍为 1）
+
+=== 7. 越权防护：接口不接受 userId ===
+   [PASS] 携带他人 userId 时仍只改自己（B 的值未变） | B_osv=1
+
+=== 清理 ===
+   A 的 4 列已还原：mv=0 osv=1
+
+===== 结论：51/51 通过 =====
