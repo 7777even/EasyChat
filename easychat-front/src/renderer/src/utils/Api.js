@@ -22,6 +22,10 @@ const api = {
     groupFileUpload: "/group/file/upload",//群文件：合并分片并入库
     groupFileList: "/group/file/list",//群文件列表
     groupFileDelete: "/group/file/delete",//群文件删除
+    generateGroupQrCode: "/group/qrCode/generate",//生成群二维码
+    joinGroupQrCode: "/group/qrCode/join",//扫码加入群组
+    generateGroupInvite: "/group/invite/generate",//生成群邀请链接
+    joinGroupInvite: "/group/invite/join",//通过邀请链接加入群组
     search: "/contact/search",//搜索好友
     applyAdd: "/contact/applyAdd",//申请加入
     loadApply: "/contact/loadApply",//获取申请列表
@@ -42,6 +46,9 @@ const api = {
     mergeChunks: "/upload/mergeChunks",//合并文件分片
     checkChunks: "/upload/checkChunks",//检查已上传分片
     recallMessage: "/chat/recallMessage",//撤回消息
+    addFavorite: "/favorite/add",//收藏消息
+    cancelFavorite: "/favorite/cancel",//取消收藏
+    listFavorite: "/favorite/list",//收藏列表
     loadAdminAccount: "/admin/loadUser",//后台获取用户列表
     updateUserStatus: "/admin/updateUserStatus",//后台更新用户状态
     forceOffLine: "/admin/forceOffLine",//强制下线

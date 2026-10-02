@@ -111,7 +111,41 @@
         </template>
       </el-popover>
       <div class="iconfont icon-search" @click="showSearchDialog" title="搜索消息"></div>
+      <!-- 位置分享 -->
+      <div class="iconfont icon-top" @click="showLocationDialog" title="位置"></div>
     </div>
+    <!-- 位置分享弹窗 -->
+    <el-dialog
+      v-model="locationDialogVisible"
+      title="发送位置"
+      width="420px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <div class="location-dialog">
+        <el-input
+          v-model="locationForm.address"
+          placeholder="输入地点名称，如：北京市朝阳区望京 SOHO"
+          clearable
+        />
+        <div class="location-actions">
+          <el-button size="small" @click="fillCurrentLocation">
+            <span class="iconfont icon-top"></span>
+            获取当前位置
+          </el-button>
+          <span class="location-coord" v-if="locationForm.latitude">
+            {{ locationForm.latitude.toFixed(6) }}, {{ locationForm.longitude.toFixed(6) }}
+          </span>
+        </div>
+        <div class="location-tip">位置信息将随消息一起发送，仅会话成员可见</div>
+      </div>
+      <template #footer>
+        <el-button @click="locationDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="sendLocation" :disabled="!locationForm.address">
+          发送
+        </el-button>
+      </template>
+    </el-dialog>
     <div class="quote-panel" v-if="quoteInfo">
       <div class="quote-text">
         <span class="quote-name">{{ quoteInfo.quoteNickName || '引用' }}</span>
@@ -588,6 +622,61 @@ const sendEmoji = (emoji) => {
 
 const showEmojiPopoverHandler = () => {
   showEmojiPopover.value = true
+}
+
+// ===== 位置分享（消息类型 25） =====
+const locationDialogVisible = ref(false)
+const locationForm = ref({ address: '', latitude: null, longitude: null })
+
+const showLocationDialog = () => {
+  locationForm.value = { address: '', latitude: null, longitude: null }
+  locationDialogVisible.value = true
+}
+
+// 获取当前位置：走浏览器 Geolocation，失败时仅提示，不阻塞发送
+const fillCurrentLocation = () => {
+  if (!navigator.geolocation) {
+    proxy.Message.warning('当前环境不支持定位')
+    return
+  }
+  proxy.Message.success('正在获取位置...')
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      locationForm.value.latitude = pos.coords.latitude
+      locationForm.value.longitude = pos.coords.longitude
+      if (!locationForm.value.address) {
+        locationForm.value.address = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`
+      }
+      proxy.Message.success('已获取当前位置')
+    },
+    () => {
+      proxy.Message.warning('定位失败，请手动输入地点名称')
+    },
+    { timeout: 10000, enableHighAccuracy: false }
+  )
+}
+
+const sendLocation = () => {
+  const address = (locationForm.value.address || '').trim()
+  if (!address) {
+    proxy.Message.warning('请输入地点名称')
+    return
+  }
+  const extraData = {
+    location: address,
+    latitude: locationForm.value.latitude,
+    longitude: locationForm.value.longitude
+  }
+  locationDialogVisible.value = false
+  sendMessageDo(
+    {
+      messageContent: address,
+      messageType: 25,
+      extraData: JSON.stringify(extraData)
+    },
+    false,
+    true
+  )
 }
 
 const showSendMsgPopover = ref(false)

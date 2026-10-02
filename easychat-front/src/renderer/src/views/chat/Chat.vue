@@ -149,6 +149,7 @@
                 @deleteMessage="deleteMessageHandler"
                 @reportMessage="reportMessageHandler"
                 @laterHandle="laterHandleHandler"
+                @favoriteMessage="favoriteMessageHandler"
               ></ChatMessage>
             </template>
             </div>
@@ -1196,6 +1197,24 @@ const laterHandleHandler = (message) => {
     content: message.messageContent || message.fileName || ''
   })
   proxy.Message.success('已标记稍后处理')
+}
+
+// 收藏消息：文本存正文，媒体存文件名 + 文件路径
+const favoriteMessageHandler = (message) => {
+  const content = message.messageType == 5 ? (message.fileName || '') : (message.messageContent || '')
+  proxy.Request({
+    url: proxy.Api.addFavorite,
+    params: {
+      messageId: message.messageId,
+      content: content,
+      filePath: message.filePath || ''
+    },
+    showLoading: false
+  }).then((result) => {
+    if (result) {
+      proxy.Message.success('收藏成功')
+    }
+  })
 }
 
 // ===== 文件传输助手 =====

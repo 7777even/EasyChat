@@ -46,6 +46,12 @@ const settingMenuList = ref([
     bgColor: '#7c5cff'
   },
   {
+    name: '我的收藏',
+    icon: 'icon-folder',
+    path: '/setting/favorite',
+    bgColor: '#ff7a45'
+  },
+  {
     name: '关于EasyChat',
     icon: 'icon-about',
     path: '/setting/about',

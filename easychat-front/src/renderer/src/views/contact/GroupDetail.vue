@@ -75,9 +75,44 @@
       <div class="group-title"></div>
       <div class="group-value">
         <el-button type="primary" @click="sendMessage">发送群消息</el-button>
+        <template v-if="isAdmin">
+          <el-button @click="showQrCodeDialog">群二维码</el-button>
+          <el-button @click="showInviteDialog">群邀请链接</el-button>
+        </template>
       </div>
     </div>
   </ContentPanel>
+
+  <!-- 群二维码 -->
+  <el-dialog
+    :show="qrCodeDialog.show"
+    title="群二维码"
+    width="360px"
+    append-to-body
+    @close="qrCodeDialog.show = false"
+  >
+    <div class="qrcode-panel">
+      <img v-if="qrCodeDialog.img" :src="qrCodeDialog.img" alt="群二维码" class="qrcode-img" />
+      <div class="qrcode-tip">扫描二维码加入本群，7 天内有效</div>
+      <div class="qrcode-token">{{ qrCodeDialog.token }}</div>
+      <el-button size="small" @click="copyToken(qrCodeDialog.token)">复制</el-button>
+    </div>
+  </el-dialog>
+
+  <!-- 群邀请链接 -->
+  <el-dialog
+    :show="inviteDialog.show"
+    title="群邀请链接"
+    width="420px"
+    append-to-body
+    @close="inviteDialog.show = false"
+  >
+    <div class="invite-panel">
+      <div class="invite-tip">把链接发给好友，对方打开即可申请加入本群，7 天内有效</div>
+      <div class="invite-token">{{ inviteDialog.token }}</div>
+      <el-button size="small" @click="copyToken(inviteDialog.token)">复制链接</el-button>
+    </div>
+  </el-dialog>
   <GroupEditDialog ref="groupEditDialogRef" @reloadGroupInfo="getGroupInfo"></GroupEditDialog>
 
   <!-- 群成员管理 -->
@@ -133,6 +168,7 @@ const route = useRoute()
 const router = useRouter()
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 const userInfoStore = useUserInfoStore()
+import QRCode from 'qrcode'
 import { useContactStateStore } from '@/stores/ContactStateStore'
 const contactStateStore = useContactStateStore()
 
@@ -184,6 +220,52 @@ const loadMyRole = async () => {
 const groupEditDialogRef = ref()
 const eidtGroupInfo = () => {
   groupEditDialogRef.value.show(groupInfo.value)
+}
+
+// ===== 群二维码 / 群邀请链接（仅群主/管理员可生成） =====
+const qrCodeDialog = ref({ show: false, token: '', img: '' })
+const inviteDialog = ref({ show: false, token: '' })
+
+const renderQrCode = async (token) => {
+  try {
+    return await QRCode.toDataURL(token, { width: 220, margin: 1 })
+  } catch (e) {
+    return ''
+  }
+}
+
+const showQrCodeDialog = async () => {
+  let result = await proxy.Request({
+    url: proxy.Api.generateGroupQrCode,
+    params: { groupId: groupId.value },
+    showLoading: false
+  })
+  if (!result) return
+  qrCodeDialog.value = {
+    show: true,
+    token: result.data,
+    img: await renderQrCode(result.data)
+  }
+}
+
+const showInviteDialog = async () => {
+  let result = await proxy.Request({
+    url: proxy.Api.generateGroupInvite,
+    params: { groupId: groupId.value },
+    showLoading: false
+  })
+  if (!result) return
+  inviteDialog.value = { show: true, token: result.data }
+}
+
+const copyToken = (text) => {
+  if (!text) return
+  if (window.ipcRenderer) {
+    window.ipcRenderer.send('copyText', text)
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text)
+  }
+  proxy.Message.success('已复制')
 }
 
 //解散群组

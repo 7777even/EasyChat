@@ -123,6 +123,10 @@ const router = createRouter({
           name: "数据备份",
           component: () => import('@/views/setting/DataBackup.vue'),
         }, {
+          path: "/setting/favorite",
+          name: "我的收藏",
+          component: () => import('@/views/setting/Favorite.vue'),
+        }, {
           path: "/setting/about",
           name: "关于",
           component: () => import('@/views/setting/About.vue'),

@@ -24,7 +24,8 @@
             <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
-          <div class="content" v-html="renderContent" v-if="data.messageType != 5"></div>
+          <ChatMessageLocation :data="data" v-if="data.messageType == 25" />
+          <div class="content" v-html="renderContent" v-else-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
               <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -80,7 +81,8 @@
             <span class="quote-name">{{ quoteInfo.quoteNickName || '消息' }}</span>
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
-          <div class="content" v-html="renderContent" v-if="data.messageType != 5"></div>
+          <ChatMessageLocation :data="data" v-if="data.messageType == 25" />
+          <div class="content" v-html="renderContent" v-else-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
               <ChatMessageImage :data="data" @click="showDetail"></ChatMessageImage>
@@ -102,6 +104,7 @@
 import ChatMessageVideo from './ChatMessageVideo.vue'
 import ChatMessageImage from './ChatMessageImage.vue'
 import ChatMessageFile from './ChatMessageFile.vue'
+import ChatMessageLocation from './ChatMessageLocation.vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 import { ref, reactive, getCurrentInstance, nextTick, computed } from 'vue'
@@ -144,7 +147,8 @@ const emit = defineEmits([
   'multiSelect',
   'toggleSelect',
   'deleteMessage',
-  'reportMessage'
+  'reportMessage',
+  'favoriteMessage'
 ])
 
 /**
@@ -216,7 +220,8 @@ const getRecallText = () => {
 const onContextMenu = (e) => {
   const isMyMessage = props.data.sendUserId == userInfoStore.getInfo().userId
   const isRecalled = props.data.messageType == 14
-  const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5
+  // 可操作消息：文本(2) / 媒体(5) / 位置(25)
+  const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5 || props.data.messageType == 25
 
   if (isRecalled || !isNormalMessage) {
     return
@@ -261,6 +266,14 @@ const onContextMenu = (e) => {
     label: '稍后处理',
     onClick: () => {
       emit('laterHandle', props.data)
+    }
+  })
+
+  // 收藏：文本 / 媒体 / 位置消息均可收藏
+  items.push({
+    label: '收藏',
+    onClick: () => {
+      emit('favoriteMessage', props.data)
     }
   })
 
