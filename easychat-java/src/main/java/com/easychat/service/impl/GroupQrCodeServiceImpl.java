@@ -90,12 +90,12 @@ public class GroupQrCodeServiceImpl implements GroupQrCodeService {
 
     /**
      * 根据 token 获取群组 ID
-     * 注意：这是一个简化的实现，实际生产环境可能需要更高效的方式
+     * <p>
+     * 反查索引由 {@code RedisComponet.saveGroupQrCode} 在生成 token 时同步写入
+     * （{@code easychat:group:qrcode:token:{token}} → groupId，同 TTL 7 天）。
+     * 原实现为 {@code return null} 桩，导致 join 接口永远报「二维码已过期或无效」。
      */
     private String getGroupIdByToken(String token) {
-        // 遍历所有群组，查找匹配的 token
-        // 由于 Redis 没有直接的方法来根据 value 查找 key，这里需要遍历
-        // 实际生产环境可以使用额外的映射表来优化
-        return null;
+        return redisComponet.getGroupIdByToken(token);
     }
 }

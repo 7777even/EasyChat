@@ -233,6 +233,8 @@ public class RedisComponet {
      */
     public void saveGroupQrCode(String groupId, String token) {
         redisUtils.setex(Constants.REDIS_KEY_GROUP_QRCODE + groupId, token, Constants.REDIS_KEY_EXPIRES_DAY * 7);
+        // 反查索引：join 时按 token 找 groupId，与正向同 TTL
+        redisUtils.setex(Constants.REDIS_KEY_GROUP_QRCODE_TOKEN + token, groupId, Constants.REDIS_KEY_EXPIRES_DAY * 7);
     }
 
     /**
@@ -253,6 +255,8 @@ public class RedisComponet {
      */
     public void saveGroupInvite(String groupId, String token) {
         redisUtils.setex(Constants.REDIS_KEY_GROUP_INVITE + groupId, token, Constants.REDIS_KEY_EXPIRES_DAY * 7);
+        // 反查索引：join 时按 token 找 groupId，与正向同 TTL
+        redisUtils.setex(Constants.REDIS_KEY_GROUP_INVITE_TOKEN + token, groupId, Constants.REDIS_KEY_EXPIRES_DAY * 7);
     }
 
     /**
@@ -267,14 +271,23 @@ public class RedisComponet {
 
     /**
      * 根据 token 获取群组 ID
+     * <p>
+     * 二维码与邀请链接共用本方法：先查二维码反查索引，再查邀请链接反查索引。
+     * 反查索引在 {@link #saveGroupQrCode} / {@link #saveGroupInvite} 时与正向映射同 TTL 写入，
+     * 因此无需遍历全量群组（原实现为 {@code return null} 桩，导致 join 接口永远失败）。
      *
      * @param token 二维码/邀请链接 token
      * @return 群组 ID，不存在返回 null
      */
     public String getGroupIdByToken(String token) {
-        // 遍历所有群组，查找匹配的 token
-        // 注意：这是一个简化的实现，实际生产环境可能需要更高效的方式
-        return null;
+        if (StringTools.isEmpty(token)) {
+            return null;
+        }
+        String groupId = (String) redisUtils.get(Constants.REDIS_KEY_GROUP_QRCODE_TOKEN + token);
+        if (groupId != null) {
+            return groupId;
+        }
+        return (String) redisUtils.get(Constants.REDIS_KEY_GROUP_INVITE_TOKEN + token);
     }
 
     /**

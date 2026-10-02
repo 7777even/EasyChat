@@ -102,8 +102,14 @@ public class Constants {
     // 群二维码 token
     public static final String REDIS_KEY_GROUP_QRCODE = "easychat:group:qrcode:";
 
+    // 群二维码 token → groupId 反查（join 时用，与正向同 TTL）
+    public static final String REDIS_KEY_GROUP_QRCODE_TOKEN = "easychat:group:qrcode:token:";
+
     // 群邀请链接 token
     public static final String REDIS_KEY_GROUP_INVITE = "easychat:group:invite:";
+
+    // 群邀请链接 token → groupId 反查（join 时用，与正向同 TTL）
+    public static final String REDIS_KEY_GROUP_INVITE_TOKEN = "easychat:group:invite:token:";
 
     // 消息可靠性 ACK 帧类型标识（在 WS 推送 extendData.messageType 中使用 -1）
     public static final Integer WS_ACK_MESSAGE_TYPE = -1;
