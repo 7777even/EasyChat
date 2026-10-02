@@ -27,6 +27,26 @@ public class UserInfoVO implements Serializable {
     private Integer joinType;
 
     /**
+     * 朋友圈默认可见范围：0 公开 / 1 仅好友 / 2 仅自己 / 3 自定义白名单 / 4 黑名单
+     * <p>
+     * 与 {@code UserInfo#momentVisibility} 同名同类型，
+     * 靠 {@code CopyTools.copy}（Spring {@code BeanUtils.copyProperties}）自动带出。
+     * 隐私设置页与发布页据此回填。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    private Integer momentVisibility;
+
+    /** 朋友圈自定义白名单，JSON 数组字符串（visibility=3 生效） */
+    private String momentVisibleList;
+
+    /** 朋友圈自定义黑名单，JSON 数组字符串（visibility=4 生效） */
+    private String momentInvisibleList;
+
+    /** 是否对好友展示在线状态：1 展示 / 0 隐藏 */
+    private Integer onlineStatusVisible;
+
+    /**
      * 个性签名
      */
     private String personalSignature;
@@ -145,5 +165,48 @@ public class UserInfoVO implements Serializable {
 
     public void setJoinType(Integer joinType) {
         this.joinType = joinType;
+    }
+
+    /**
+     * 朋友圈默认可见范围：0 公开 / 1 仅好友 / 2 仅自己 / 3 自定义白名单 / 4 黑名单
+     * <p>
+     * 与 {@code UserInfo#momentVisibility} 同名同类型，
+     * 靠 {@code CopyTools.copy}（Spring {@code BeanUtils.copyProperties}）自动带出。
+     *
+     * @since 2026-10-02 隐私设置
+     */
+    public Integer getMomentVisibility() {
+        return momentVisibility;
+    }
+
+    public void setMomentVisibility(Integer momentVisibility) {
+        this.momentVisibility = momentVisibility;
+    }
+
+    /** 朋友圈自定义白名单，JSON 数组字符串 */
+    public String getMomentVisibleList() {
+        return momentVisibleList;
+    }
+
+    public void setMomentVisibleList(String momentVisibleList) {
+        this.momentVisibleList = momentVisibleList;
+    }
+
+    /** 朋友圈自定义黑名单，JSON 数组字符串 */
+    public String getMomentInvisibleList() {
+        return momentInvisibleList;
+    }
+
+    public void setMomentInvisibleList(String momentInvisibleList) {
+        this.momentInvisibleList = momentInvisibleList;
+    }
+
+    /** 是否对好友展示在线状态：1 展示 / 0 隐藏 */
+    public Integer getOnlineStatusVisible() {
+        return onlineStatusVisible;
+    }
+
+    public void setOnlineStatusVisible(Integer onlineStatusVisible) {
+        this.onlineStatusVisible = onlineStatusVisible;
     }
 }

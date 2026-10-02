@@ -122,6 +122,57 @@ public class UserInfoController extends ABaseController {
     }
 
     /**
+     * 更新朋友圈可见范围（用户级默认）
+     * <p>
+     * 该设置**只是发布朋友圈时的默认值**，不参与 {@code canView} 判定——
+     * 改它不影响已发布的历史动态（与微信一致）。
+     * <p>
+     * 安全：<b>不接受 userId 入参</b>。名单成员必须全是当前用户好友（Service 一次性查好友集合做子集断言）。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    @PostMapping("/updateMomentPrivacy")
+    @GlobalInterceptor
+    public Result<Void> updateMomentPrivacy(HttpServletRequest request,
+                                            @NotNull(message = "朋友圈可见范围不能为空") Integer momentVisibility,
+                                            String visibleList,
+                                            String invisibleList) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userInfoService.updateMomentPrivacy(tokenUserInfoDto.getUserId(),
+                momentVisibility, visibleList, invisibleList);
+        return success();
+    }
+
+    /**
+     * 更新「是否对好友展示在线状态」
+     * <p>
+     * 保存后<b>立即生效</b>：置 0 立即向在线好友推 {@code ONLINE_STATUS_HIDDEN(27)} 抹除其界面上的状态点；
+     * 置 1 立即广播一次我的当前状态。放在 Controller 层编排是为了让 Service 保持「只管数据」。
+     * <p>
+     * 安全：<b>不接受 userId 入参</b>。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    @PostMapping("/updateOnlineStatusVisible")
+    @GlobalInterceptor
+    public Result<Void> updateOnlineStatusVisible(HttpServletRequest request,
+                                                  @NotNull(message = "在线状态可见性不能为空") Integer visible) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userInfoService.updateOnlineStatusVisible(tokenUserInfoDto.getUserId(), visible);
+        if (visible == 0) {
+            // 关闭：立即抹除好友端已显示的在线状态
+            channelContextUtils.pushOnlineStatusHidden(tokenUserInfoDto.getUserId());
+        } else {
+            // 重新开启：立即广播一次当前状态（在线则推在线/忙碌值，离线则由后续上线广播）
+            Integer current = channelContextUtils.isUserOnline(tokenUserInfoDto.getUserId())
+                    ? com.easychat.entity.enums.OnlineStatusEnum.ONLINE.getStatus()
+                    : com.easychat.entity.enums.OnlineStatusEnum.OFFLINE.getStatus();
+            channelContextUtils.broadcastOnlineStatus(tokenUserInfoDto.getUserId(), current);
+        }
+        return success();
+    }
+
+    /**
      * 退出登录
      */
     @PostMapping("/logout")

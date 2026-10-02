@@ -25,6 +25,7 @@ import com.easychat.service.ChatSessionUserService;
 import com.easychat.service.UserContactService;
 import com.easychat.service.UserInfoService;
 import com.easychat.utils.CopyTools;
+import com.easychat.utils.IdListTools;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.MessageHandler;
 import org.apache.commons.lang3.ArrayUtils;
@@ -36,7 +37,9 @@ import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -531,6 +534,121 @@ public class UserInfoServiceImpl implements UserInfoService {
         UserInfo updateInfo = new UserInfo();
         updateInfo.setUserId(userId);
         updateInfo.setJoinType(joinType);
+        this.userInfoMapper.updateByUserId(updateInfo, userId);
+    }
+
+    // ==================== 隐私设置 ====================
+
+    /** 朋友圈可见范围：0 公开 / 1 仅好友 / 2 仅自己 / 3 白名单 / 4 黑名单 */
+    private static final Integer MOMENT_VISIBILITY_PUBLIC = 0;
+    private static final Integer MOMENT_VISIBILITY_FRIENDS = 1;
+    private static final Integer MOMENT_VISIBILITY_SELF = 2;
+    private static final Integer MOMENT_VISIBILITY_WHITE_LIST = 3;
+    private static final Integer MOMENT_VISIBILITY_BLACK_LIST = 4;
+
+    /**
+     * 更新朋友圈可见范围（用户级默认）
+     * <p>
+     * <b>只作为发布朋友圈时的默认值</b>，不参与 {@code MomentServiceImpl#canView} 判定
+     * （ADR-001：改用户级设置不追溯已发布的历史动态，与微信一致）。
+     * <p>
+     * 三条业务约束（缺一即 CODE_1001 且不落库）：
+     * <ol>
+     *   <li>{@code momentVisibility} 必须落在 0–4</li>
+     *   <li>{@code =3} 必须给非空白名单；{@code =4} 必须给非空黑名单
+     *       ——空名单会让「白名单=谁都看不到」或「黑名单=谁都能看」，属用户误操作</li>
+     *   <li>名单中每个 id 都必须是当前用户的<b>好友</b>（一次性查好友集合做子集断言，非逐个查询）</li>
+     * </ol>
+     * {@code 0/1/2} 时不传名单则<b>不覆盖</b>已有名单列，便于用户切回 3/4 时名单还在。
+     *
+     * @throws BusinessException 上述任一约束不满足 → CODE_1001；用户不存在 → CODE_2101
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateMomentPrivacy(String userId, Integer momentVisibility,
+                                    String visibleList, String invisibleList) {
+        if (momentVisibility == null
+                || momentVisibility < MOMENT_VISIBILITY_PUBLIC
+                || momentVisibility > MOMENT_VISIBILITY_BLACK_LIST) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        if (this.userInfoMapper.selectByUserId(userId) == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+
+        // 只构造这 3 列，避免覆盖昵称/密码/加我方式
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setUserId(userId);
+        updateInfo.setMomentVisibility(momentVisibility);
+
+        if (MOMENT_VISIBILITY_WHITE_LIST.equals(momentVisibility)) {
+            List<String> white = requireFriendSubset(userId, visibleList, "白名单");
+            updateInfo.setMomentVisibleList(IdListTools.serialize(white));
+        } else if (MOMENT_VISIBILITY_BLACK_LIST.equals(momentVisibility)) {
+            List<String> black = requireFriendSubset(userId, invisibleList, "黑名单");
+            updateInfo.setMomentInvisibleList(IdListTools.serialize(black));
+        }
+        // 0/1/2：不带名单列，保留原值（用户切回 3/4 时名单还在）
+        this.userInfoMapper.updateByUserId(updateInfo, userId);
+    }
+
+    /**
+     * 校验名单：合法 JSON 数组 → 非空 → 全部是好友。任一不满足抛 CODE_1001。
+     *
+     * @param label 名单名称，仅用于异常场景可读性
+     * @return 去重后的 id 列表
+     */
+    private List<String> requireFriendSubset(String userId, String rawList, String label) {
+        // 1) 严格 JSON 校验（非法格式 / 元素非字符串 / 超长 → CODE_1001）
+        IdListTools.validate(rawList);
+        List<String> ids = IdListTools.parse(rawList);
+        if (ids.isEmpty()) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        // 2) 一次性查好友集合做子集断言（避免逐个主键查询）
+        Set<String> friendSet = new HashSet<>();
+        UserContactQuery friendQuery = new UserContactQuery();
+        friendQuery.setUserId(userId);
+        friendQuery.setContactType(UserContactTypeEnum.USER.getType());
+        friendQuery.setStatusArray(new Integer[]{UserContactStatusEnum.FRIEND.getStatus()});
+        List<UserContact> friends = this.userContactService.findListByParam(friendQuery);
+        if (friends != null) {
+            for (UserContact friend : friends) {
+                if (friend != null && !StringTools.isEmpty(friend.getContactId())) {
+                    friendSet.add(friend.getContactId());
+                }
+            }
+        }
+        for (String id : ids) {
+            if (!friendSet.contains(id)) {
+                logger.warn("隐私设置{}含非好友 id，userId={}, id={}", label, userId, id);
+                throw new BusinessException(ResponseCodeEnum.CODE_1001);
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * 更新「是否对好友展示在线状态」
+     * <p>
+     * 本方法<b>只落库</b>；推帧/停播由 Controller 按新旧值编排（置 0 推 ONLINE_STATUS_HIDDEN 抹除，
+     * 置 1 立即广播当前状态）。拆开是为了让 Service 保持「只管数据」的单测友好。
+     *
+     * @throws BusinessException visible 非 0/1 → CODE_1001；用户不存在 → CODE_2101
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateOnlineStatusVisible(String userId, Integer visible) {
+        if (visible == null || (visible != 0 && visible != 1)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        if (this.userInfoMapper.selectByUserId(userId) == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+        // 只构造这 1 列
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setUserId(userId);
+        updateInfo.setOnlineStatusVisible(visible);
         this.userInfoMapper.updateByUserId(updateInfo, userId);
     }
 }

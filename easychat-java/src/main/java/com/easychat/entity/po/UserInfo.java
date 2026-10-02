@@ -87,6 +87,37 @@ public class UserInfo implements Serializable {
      */
     private Long lastOffTime;
 
+    /**
+     * 朋友圈默认可见范围（用户级）
+     * <p>
+     * 语义与既有 {@code moment.visibility} 完全对齐：
+     * 0 公开 / 1 仅好友 / 2 仅自己 / 3 自定义白名单 / 4 黑名单。
+     * 仅作为**发布时的默认值**参与，不参与 {@code canView} 判定。
+     * <p>
+     * <b>刻意不设 Java 字段初始值</b>：默认值由 DDL 的 {@code NOT NULL DEFAULT 0} 与读取路径承担。
+     * 若在此处写 {@code = 0}，则 {@code new UserInfo()} 天然带 0，
+     * 而 {@code UserInfoMapper.xml#updateByUserId} 的 {@code <if test="bean.xxx != null">}
+     * 会把它一并写进 SQL —— 导致「改在线状态开关时顺带把朋友圈可见范围重置为 0」这类串列 bug。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    private Integer momentVisibility;
+
+    /** 朋友圈自定义白名单，JSON 数组字符串（momentVisibility=3 生效） */
+    private String momentVisibleList;
+
+    /** 朋友圈自定义黑名单，JSON 数组字符串（momentVisibility=4 生效） */
+    private String momentInvisibleList;
+
+    /**
+     * 是否对好友展示在线状态：1 展示（默认）/ 0 隐藏
+     * <p>
+     * 同上，<b>不设 Java 字段初始值</b>，默认值由 DDL {@code NOT NULL DEFAULT 1} 承担。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    private Integer onlineStatusVisible;
+
     private Integer onlineType;
 
     public Integer getOnlineType() {
@@ -203,6 +234,38 @@ public class UserInfo implements Serializable {
 
     public Long getLastOffTime() {
         return this.lastOffTime;
+    }
+
+    public Integer getMomentVisibility() {
+        return momentVisibility;
+    }
+
+    public void setMomentVisibility(Integer momentVisibility) {
+        this.momentVisibility = momentVisibility;
+    }
+
+    public String getMomentVisibleList() {
+        return momentVisibleList;
+    }
+
+    public void setMomentVisibleList(String momentVisibleList) {
+        this.momentVisibleList = momentVisibleList;
+    }
+
+    public String getMomentInvisibleList() {
+        return momentInvisibleList;
+    }
+
+    public void setMomentInvisibleList(String momentInvisibleList) {
+        this.momentInvisibleList = momentInvisibleList;
+    }
+
+    public Integer getOnlineStatusVisible() {
+        return onlineStatusVisible;
+    }
+
+    public void setOnlineStatusVisible(Integer onlineStatusVisible) {
+        this.onlineStatusVisible = onlineStatusVisible;
     }
 
     @Override

@@ -31,6 +31,14 @@
         <result column="area_code" property="areaCode"/>
         <!--最后离开时间-->
         <result column="last_off_time" property="lastOffTime"/>
+        <!--朋友圈默认可见范围 0公开 1仅好友 2仅自己 3白名单 4黑名单（2026-10-02 隐私设置）-->
+        <result column="moment_visibility" property="momentVisibility"/>
+        <!--朋友圈自定义白名单 JSON 数组-->
+        <result column="moment_visible_list" property="momentVisibleList"/>
+        <!--朋友圈自定义黑名单 JSON 数组-->
+        <result column="moment_invisible_list" property="momentInvisibleList"/>
+        <!--是否对好友展示在线状态 1展示 0隐藏-->
+        <result column="online_status_visible" property="onlineStatusVisible"/>
     </resultMap>
 
 
@@ -39,7 +47,8 @@
         user_id
         ,email,nick_name,join_type,
 		 sex,password,personal_signature,status,create_time,
-		 last_login_time,area_name,area_code,last_off_time
+		 last_login_time,area_name,area_code,last_off_time,
+		 moment_visibility,moment_visible_list,moment_invisible_list,online_status_visible
     </sql>
 
     <sql id="base_condition_filed">
@@ -502,6 +511,21 @@
             </if>
             <if test="bean.nickName != null">
                 nick_name = #{bean.nickName},
+            </if>
+            <!-- 隐私设置 4 列（2026-10-02）。刻意只加在 updateByUserId：
+                 insert / insertOrUpdate 仍不写这 4 列，避免注册机器人等路径
+                 在未显式赋值时插出 NULL——列虽 NOT NULL DEFAULT，显式 NULL 仍会报错。 -->
+            <if test="bean.momentVisibility != null">
+                moment_visibility = #{bean.momentVisibility},
+            </if>
+            <if test="bean.momentVisibleList != null">
+                moment_visible_list = #{bean.momentVisibleList},
+            </if>
+            <if test="bean.momentInvisibleList != null">
+                moment_invisible_list = #{bean.momentInvisibleList},
+            </if>
+            <if test="bean.onlineStatusVisible != null">
+                online_status_visible = #{bean.onlineStatusVisible},
             </if>
             <if test="bean.joinType != null">
                 join_type = #{bean.joinType},

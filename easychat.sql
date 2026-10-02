@@ -164,6 +164,10 @@ CREATE TABLE `user_info`  (
   `area_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '地区',
   `area_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '地区编号',
   `last_off_time` bigint(13) NULL DEFAULT NULL COMMENT '最后离开时间',
+  `moment_visibility` tinyint(1) NOT NULL DEFAULT 0 COMMENT '朋友圈默认可见范围 0公开 1仅好友 2仅自己 3白名单 4黑名单',
+  `moment_visible_list` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '朋友圈自定义白名单 JSON 数组（visibility=3 生效）',
+  `moment_invisible_list` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '朋友圈自定义黑名单 JSON 数组（visibility=4 生效）',
+  `online_status_visible` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否对好友展示在线状态 1展示 0隐藏',
   PRIMARY KEY (`user_id`) USING BTREE,
   UNIQUE INDEX `idx_key_email`(`email`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4  COMMENT = '用户信息';

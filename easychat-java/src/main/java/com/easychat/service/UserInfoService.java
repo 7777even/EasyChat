@@ -127,4 +127,36 @@ public interface UserInfoService {
      * @since 2026-10-02 加我方式与黑名单管理
      */
     void updateJoinType(String userId, Integer joinType);
+
+    /**
+     * 更新朋友圈可见范围（用户级默认）
+     * <p>
+     * <b>仅作为发布朋友圈时的默认值</b>，不参与 {@code MomentServiceImpl#canView} 判定
+     * （ADR-001：改用户级设置不追溯已发布的历史动态，与微信一致）。
+     *
+     * @param userId           当前登录用户 id（接口不接受前端传入）
+     * @param momentVisibility 0 公开 / 1 仅好友 / 2 仅自己 / 3 白名单 / 4 黑名单
+     * @param visibleList      白名单 JSON 数组字符串，visibility=3 时**必填且非空**
+     * @param invisibleList    黑名单 JSON 数组字符串，visibility=4 时**必填且非空**
+     * @throws com.easychat.exception.BusinessException
+     *         visibility 非法 / 名单与 visibility 不匹配 / 名单含非好友 / 名单超长 / 非法 JSON → CODE_1001；
+     *         用户不存在 → CODE_2101
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    void updateMomentPrivacy(String userId, Integer momentVisibility,
+                             String visibleList, String invisibleList);
+
+    /**
+     * 更新「是否对好友展示在线状态」
+     * <p>
+     * 本方法只落库；推帧/停播由调用方（Controller）按新旧值编排：
+     * 置 0 立即推 {@code ONLINE_STATUS_HIDDEN(27)} 抹除好友端已有状态，
+     * 置 1 立即广播一次当前状态。
+     *
+     * @param userId  当前登录用户 id
+     * @param visible 1 展示 / 0 隐藏
+     * @throws com.easychat.exception.BusinessException visible 非法 → CODE_1001；用户不存在 → CODE_2101
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    void updateOnlineStatusVisible(String userId, Integer visible);
 }

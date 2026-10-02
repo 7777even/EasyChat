@@ -47,6 +47,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.easychat.utils.IdListTools;
+
 @Service("momentService")
 public class MomentServiceImpl implements MomentService {
 
@@ -400,25 +402,15 @@ public class MomentServiceImpl implements MomentService {
         return contactSet.contains(viewerId);
     }
 
+    /**
+     * 解析朋友圈可见范围名单（{@code visible_list} / {@code invisible_list}）。
+     * <p>
+     * 已改为委托 {@link com.easychat.utils.IdListTools#parse(String)}（2026-10-02 隐私设置）。
+     * 解析体逐字搬移，{@code canView} 判定行为**不变**；目的是让「用户级默认名单」与
+     * 「单条动态名单」共用同一解析器，杜绝两套格式解析漂移。
+     */
     private List<String> parseList(String json) {
-        if (StringTools.isEmpty(json)) {
-            return new ArrayList<>();
-        }
-        String temp = json.trim();
-        if (temp.startsWith("[") && temp.endsWith("]")) {
-            temp = temp.substring(1, temp.length() - 1);
-        }
-        if (StringTools.isEmpty(temp)) {
-            return new ArrayList<>();
-        }
-        String[] arr = temp.split(",");
-        Set<String> set = new HashSet<>();
-        for (String s : arr) {
-            if (!StringTools.isEmpty(s)) {
-                set.add(s.trim().replaceAll("\"", ""));
-            }
-        }
-        return new ArrayList<>(set);
+        return IdListTools.parse(json);
     }
 
     private UserInfo copyUserInfo(TokenUserInfoDto tokenUserInfoDto) {

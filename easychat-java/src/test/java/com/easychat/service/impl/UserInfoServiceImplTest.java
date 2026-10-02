@@ -660,6 +660,242 @@ public class UserInfoServiceImplTest {
         return userInfo;
     }
 
+    // ======================== 朋友圈可见范围（隐私设置）=======================
+    // 覆盖 openspec/changes/2026-10-02-privacy-moment-and-status C1
+
+    @Test
+    public void updateMomentVisibility_public() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        stubFriends("U_f1", "U_f2");
+
+        userInfoService.updateMomentPrivacy("U_self", 0, null, null);
+
+        UserInfo captured = captureUpdatedUser();
+        assertEquals(Integer.valueOf(0), captured.getMomentVisibility());
+    }
+
+    @Test
+    public void updateMomentVisibility_friendsOnly() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        stubFriends("U_f1");
+
+        userInfoService.updateMomentPrivacy("U_self", 1, null, null);
+
+        assertEquals(Integer.valueOf(1), captureUpdatedUser().getMomentVisibility());
+    }
+
+    @Test
+    public void updateMomentVisibility_selfOnly() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateMomentPrivacy("U_self", 2, null, null);
+
+        assertEquals(Integer.valueOf(2), captureUpdatedUser().getMomentVisibility());
+    }
+
+    @Test
+    public void updateMomentVisibility_whiteList() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        stubFriends("U_f1", "U_f2");
+
+        userInfoService.updateMomentPrivacy("U_self", 3, "[\"U_f1\",\"U_f2\"]", null);
+
+        UserInfo captured = captureUpdatedUser();
+        assertEquals(Integer.valueOf(3), captured.getMomentVisibility());
+        assertTrue("白名单应落 JSON 数组", captured.getMomentVisibleList().contains("U_f1"));
+    }
+
+    @Test
+    public void updateMomentVisibility_blackList() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        stubFriends("U_f1");
+
+        userInfoService.updateMomentPrivacy("U_self", 4, null, "[\"U_f1\"]");
+
+        UserInfo captured = captureUpdatedUser();
+        assertEquals(Integer.valueOf(4), captured.getMomentVisibility());
+        assertTrue("黑名单应落 JSON 数组", captured.getMomentInvisibleList().contains("U_f1"));
+    }
+
+    /**
+     * 白名单模式却没给名单 → 拒绝。否则「白名单=空」会让所有人都看不到。
+     */
+    @Test
+    public void updateMomentPrivacy_whiteListRequiredWhenVisibility3() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        try {
+            userInfoService.updateMomentPrivacy("U_self", 3, null, null);
+            org.junit.Assert.fail("visibility=3 但白名单为空应抛 CODE_1001");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateMomentPrivacy_blackListRequiredWhenVisibility4() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        for (String empty : new String[]{null, "", "[]"}) {
+            try {
+                userInfoService.updateMomentPrivacy("U_self", 4, null, empty);
+                org.junit.Assert.fail("visibility=4 但黑名单为空(" + empty + ")应抛 CODE_1001");
+            } catch (BusinessException e) {
+                assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+            }
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    /**
+     * 安全/数据质量：名单里塞非好友 id 必须被拒，防止任意 userId 混入名单。
+     */
+    @Test
+    public void updateMomentPrivacy_nonFriendRejected() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        stubFriends("U_f1");
+        try {
+            userInfoService.updateMomentPrivacy("U_self", 3, "[\"U_f1\",\"U_stranger\"]", null);
+            org.junit.Assert.fail("名单含非好友应抛 CODE_1001");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateMomentPrivacy_illegalVisibility() {
+        for (Integer bad : new Integer[]{-1, 5, 99, null}) {
+            try {
+                userInfoService.updateMomentPrivacy("U_self", bad, null, null);
+                org.junit.Assert.fail("visibility=" + bad + " 应抛 CODE_1001");
+            } catch (BusinessException e) {
+                assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+            }
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateMomentPrivacy_oversizedListRejected() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+        // 每项形如 "U_f1234", 约 10 字符；需 8000 项才超过 60000 上限
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < 8000; i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"U_f").append(i).append("\"");
+        }
+        sb.append("]");
+        String huge = sb.toString();
+        assertTrue("构造的超长名单应超过上限 60000，实际 " + huge.length(), huge.length() > 60000);
+        // 不 stub 好友：超长校验在「查好友」之前就应拒绝，避免无用 stub
+        try {
+            userInfoService.updateMomentPrivacy("U_self", 3, huge, null);
+            org.junit.Assert.fail("超长名单应抛 CODE_1001");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateMomentPrivacy_userNotFound() {
+        when(userInfoMapper.selectByUserId("U_ghost")).thenReturn(null);
+        try {
+            userInfoService.updateMomentPrivacy("U_ghost", 0, null, null);
+            org.junit.Assert.fail("用户不存在应抛 CODE_2101");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_2101.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    /**
+     * 护栏：只写这 3 列，不得覆盖昵称/密码/加我方式。
+     */
+    @Test
+    public void updateMomentPrivacy_onlyWritesPrivacyColumns() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateMomentPrivacy("U_self", 0, null, null);
+
+        UserInfo captured = captureUpdatedUser();
+        assertNull("昵称不得被覆盖", captured.getNickName());
+        assertNull("密码不得被覆盖", captured.getPassword());
+        assertNull("加我方式不得被覆盖", captured.getJoinType());
+        assertNull("在线状态可见性不得被本方法写", captured.getOnlineStatusVisible());
+    }
+
+    // ======================== 在线状态可见性 ========================
+
+    @Test
+    public void updateOnlineStatusVisible_hide() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateOnlineStatusVisible("U_self", 0);
+
+        assertEquals(Integer.valueOf(0), captureUpdatedUser().getOnlineStatusVisible());
+    }
+
+    @Test
+    public void updateOnlineStatusVisible_show() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateOnlineStatusVisible("U_self", 1);
+
+        assertEquals(Integer.valueOf(1), captureUpdatedUser().getOnlineStatusVisible());
+    }
+
+    @Test
+    public void updateOnlineStatusVisible_illegalValue() {
+        for (Integer bad : new Integer[]{-1, 2, null}) {
+            try {
+                userInfoService.updateOnlineStatusVisible("U_self", bad);
+                org.junit.Assert.fail("visible=" + bad + " 应抛 CODE_1001");
+            } catch (BusinessException e) {
+                assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+            }
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateOnlineStatusVisible_userNotFound() {
+        when(userInfoMapper.selectByUserId("U_ghost")).thenReturn(null);
+        try {
+            userInfoService.updateOnlineStatusVisible("U_ghost", 0);
+            org.junit.Assert.fail("用户不存在应抛 CODE_2101");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_2101.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    /** 护栏：只写 onlineStatusVisible 一列 */
+    @Test
+    public void updateOnlineStatusVisible_onlyWritesThatColumn() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateOnlineStatusVisible("U_self", 0);
+
+        UserInfo captured = captureUpdatedUser();
+        assertNull("昵称不得被覆盖", captured.getNickName());
+        assertNull("朋友圈可见范围不得被本方法写", captured.getMomentVisibility());
+    }
+
+    /** 构造好友集合（一次性查询，名单做子集断言） */
+    private void stubFriends(String... friendIds) {
+        List<UserContact> friends = new ArrayList<>();
+        for (String fid : friendIds) {
+            UserContact c = new UserContact();
+            c.setUserId("U_self");
+            c.setContactId(fid);
+            c.setContactType(0);
+            c.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+            friends.add(c);
+        }
+        when(userContactService.findListByParam(any(UserContactQuery.class))).thenReturn(friends);
+    }
+
     private UserInfo captureUpdatedUser() {
         ArgumentCaptor<UserInfo> captor = ArgumentCaptor.forClass(UserInfo.class);
         verify(userInfoMapper).updateByUserId(captor.capture(), eq("U_self"));
