@@ -218,6 +218,24 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 - 简单组件内状态使用 `ref` / `reactive`
 - 跨页面共享状态使用 Store
 
+### 7.4 WebSocket 帧协议（跨进程契约）
+
+WS 帧号是**服务端 `MessageTypeEnum` ↔ 客户端 `wsClient.js` case** 的跨进程契约，错位后的表现是
+「不崩但功能静默失效」，最难靠人工回归发现。硬要求：
+
+1. **新增/改号帧必须两端同步**，且服务端 `case` 与客户端 `case` 号一致
+2. **投递前会被服务端改写的帧**（如 `ADD_FRIEND_SELF(13)` 经 `applyContactConvert` 转成 `ADD_FRIEND(1)`）
+   客户端**不得**有 case
+3. **落库白名单**（`ChatMessageServiceImpl` 的 `ArraysUtil.contains(new Integer[]{...})`）里的帧是持久化消息，
+   客户端**必须**有 case，否则历史漫游（`loadHistoryMessage`）都拿不到
+4. **新增帧号后必须显式声明意图**：需实时处理 → 加进门禁的 `MUST_HANDLE`；
+   服务端内部/请求帧 → `INTERNAL_FRAMES`；已知未接通 → `KNOWN_GAP`。不允许「不声明」
+5. **改动帧协议或 WS 逻辑后，必须跑变异检验**证明门禁/测试有判别力：
+   `node scripts/verify/mutation_ws_frame_parity.mjs`、`node scripts/verify/mutation_channel_online_status.cjs`
+   （详见 §2.1 第 1 条「门禁须实跑有判别力」）
+
+守卫：`node scripts/verify/verify_ws_frame_parity.mjs`（缺失/多余/漂移/重复/空洞/意图未声明 → exit 1）
+
 ## 7. 工程记录闭环
 
 实施任务的唯一真源是 `openspec/changes/<name>/tasks.md`。
@@ -316,6 +334,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/check-api-contract.mjs` | 推送前（`pre-push` hook）/ CI | 后端 Controller 路由 vs 前端调用路径漂移（`--strict` 时阻断） |
 | `scripts/check-ipc-registration.mjs` | 推送前（`pre-push` hook）/ CI | `ipc.js` 导出与 `index.js` 调用不匹配（漏注册即静默失效） |
 | `scripts/verify/verify_no_hardcoded_secret.mjs` | 推送前（`pre-push` hook）/ CI | 公共配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 密码有默认可用值、`.env` 入库 |
+| `scripts/verify/verify_ws_frame_parity.mjs` | 推送前（`pre-push` hook）/ CI | WS 帧号两端漂移（客户端 case 服务端不存在）、服务端帧号重复/空洞、落库帧或 MUST_HANDLE 帧客户端无 case、新增帧未声明意图、KNOWN_GAP 登记过期 |
 
 **安装 hook**：`node scripts/setup-git-hooks.mjs`
 

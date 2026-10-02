@@ -344,8 +344,9 @@
 
 | 项 | 说明 |
 |----|------|
-| **WS 帧 27 端到端效果** | `wsClient.js` case 27 与 `Contact.vue` 订阅已实现、build 通过，但**关闭后好友端状态点是否立即消失**只有 GUI 验证覆盖（冒烟走 HTTP 未起 WS）。**需 `verify_ws_frame_parity.mjs` 门禁把「漏加 case」从静默失效变阻断** |
-| **`ChannelContextUtils` 2 个方法缺单测** | `broadcastOnlineStatus` 开关判定与 `pushOnlineStatusHidden` 帧结构为纯逻辑、可测，2026-10-02 遗漏，**待补 ≥5 例** |
+| **WS 帧 27 端到端效果** | `wsClient.js` case 27 与 `Contact.vue` 订阅已实现、build 通过，但**关闭后好友端状态点是否立即消失**只有 GUI 验证覆盖（冒烟走 HTTP 未起 WS）。「漏加 case」已由 `verify_ws_frame_parity.mjs` 门禁阻断，但**渲染层效果仍需 GUI** |
+| **`ChannelContextUtils` 2 个方法单测** | ✅ 已补 `ChannelContextUtilsOnlineStatusTest`（13 例：开关=0 不推帧 / 不查好友列表 / 只推在线好友 / 所有状态值均被拦截 / 查不到用户与 NULL 开关按展示 / 空 userId 提前返回 / 帧 27 结构与 `hidden:true` / 抹除帧不受开关影响 / 无好友不推帧 / 帧号 27≠22 / 开关不误伤消息投递），**已过 8 项变异检验** |
+| **位置消息(25) / 语音消息(24) 端到端未接通** | 由 `verify_ws_frame_parity.mjs` 于 2026-10-03 首次运行时发现（**既有缺陷，非本次引入**）：DB 中 `message_type` 仅 1/2，0 条 24/25 记录 → 两功能从未被真实使用。三层断裂：① `ChatMessageServiceImpl` 落库白名单（仅 CHAT/GROUP_CREATE/ADD_FRIEND/MEDIA_CHAT）不含 24/25 → **不落库** ② `wsClient.js` 无 case 24/25 → **对端实时收不到** ③ `Chat.vue:136` 分发条件不含 → **即使有也不渲染**，且 `ChatMessageVoice.vue` 从未被 import（死组件）。修复需改服务端落库白名单（业务能力变更，L3），暂登记于门禁 `KNOWN_GAP` 保持技术债可见 |
 | 前端 GUI 验证与截图 | 沙箱无 GUI，隐私页四区块 / 发布页 5 项选人 / 旧路由 redirect / `ContactPicker` 交互均待本机验证 |
 | 黑名单分页 | 刻意不分页（与既有 `/contact/loadContact` 范式一致）；量级变大时再补 |
 | 屏蔽某人（不看其朋友圈） | `moment_visibility` 体系已就位，缺的只是「用户级屏蔽名单」与 `canView` 判定联动（独立 L3） |
