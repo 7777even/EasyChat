@@ -114,4 +114,17 @@ public interface UserInfoService {
      * 通过邮箱验证码重置密码（忘记密码找回）
      */
     void resetPasswordByEmail(String email, String code, String newPassword);
+
+    /**
+     * 更新「加我的方式」（{@code user_info.join_type}）
+     * <p>
+     * 0 直接加入 / 1 加我时需验证。Service 直读 DB（{@code applyAdd} 亦直读），
+     * 故保存后对之后发起的好友申请立即生效，无需失效任何缓存。
+     *
+     * @param userId   当前登录用户 id（由 Controller 从 token 取得，接口不接受前端传入）
+     * @param joinType 0 或 1
+     * @throws com.easychat.exception.BusinessException joinType 非法 → CODE_1001；用户不存在 → CODE_2101
+     * @since 2026-10-02 加我方式与黑名单管理
+     */
+    void updateJoinType(String userId, Integer joinType);
 }

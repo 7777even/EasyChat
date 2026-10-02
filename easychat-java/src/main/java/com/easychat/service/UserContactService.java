@@ -117,4 +117,31 @@ public interface UserContactService {
      * 拍一拍
      */
     void sendNudge(String userId, String contactId, String suffix);
+
+    /**
+     * 加载我拉黑的用户列表（黑名单管理页）
+     * <p>
+     * 只含 {@code status=BLACKLIST(4)}（我拉黑他人），
+     * <b>不含</b> {@code BLACKLIST_BE(5)}（他人拉黑我）——解除他人的拉黑不在我的权限内。
+     * 只查好友维度（contactType=0），群组不进入黑名单。
+     *
+     * @param userId 当前登录用户 id
+     * @return 黑名单行，按最近拉黑倒序，含对方昵称
+     * @since 2026-10-02 加我方式与黑名单管理
+     */
+    java.util.List<UserContact> loadBlackList(String userId);
+
+    /**
+     * 解除黑名单：删除我与对方的关系行，并清双向缓存
+     * <p>
+     * 守卫：{@code (我, 他)} 行必须存在<b>且</b> {@code status=BLACKLIST(4)}，否则抛 {@code CODE_2401}。
+     * 反向行仅当 {@code status=BLACKLIST_BE(5)} 时才删除——若对方也拉黑了我，
+     * 他的拉黑记录不归我处置。
+     *
+     * @param userId    当前登录用户 id
+     * @param contactId 被解除拉黑的用户 id
+     * @throws com.easychat.exception.BusinessException 目标不在我的黑名单中 → CODE_2401
+     * @since 2026-10-02 加我方式与黑名单管理
+     */
+    void removeBlackList(String userId, String contactId);
 }

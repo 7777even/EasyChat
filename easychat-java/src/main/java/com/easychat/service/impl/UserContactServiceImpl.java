@@ -377,16 +377,26 @@ public class UserContactServiceImpl implements UserContactService {
         //移除好友
         UserContact userContact = new UserContact();
         userContact.setStatus(statusEnum.getStatus());
-        userContactMapper.updateByUserIdAndContactId(userContact, userId, contactId);
+        if (UserContactStatusEnum.BLACKLIST == statusEnum) {
+            // 拉黑必须 upsert：搜索到的陌生人此前从未成为好友，user_contact 里根本没有行，
+            // update 对不存在的行是 no-op → 拉黑会「静默失效」（界面上看着加了黑，实际没加）。
+            // 这是在 2026-10-02 黑名单可查可解改造中由活体冒烟发现的既有缺陷。
+            fillContactRow(userContact, userId, contactId);
+            this.userContactMapper.insertOrUpdate(userContact);
+        } else {
+            this.userContactMapper.updateByUserIdAndContactId(userContact, userId, contactId);
+        }
 
         //好友中也移除自己
         UserContact friendContact = new UserContact();
         if (UserContactStatusEnum.DEL == statusEnum) {
             friendContact.setStatus(UserContactStatusEnum.DEL_BE.getStatus());
+            this.userContactMapper.updateByUserIdAndContactId(friendContact, contactId, userId);
         } else if (UserContactStatusEnum.BLACKLIST == statusEnum) {
             friendContact.setStatus(UserContactStatusEnum.BLACKLIST_BE.getStatus());
+            fillContactRow(friendContact, contactId, userId);
+            this.userContactMapper.insertOrUpdate(friendContact);
         }
-        userContactMapper.updateByUserIdAndContactId(friendContact, contactId, userId);
         //将我从对方的好友缓存中删除
         redisComponet.removeUserContact(contactId, userId);
         //将对方从我的列表中删除
@@ -587,5 +597,88 @@ public class UserContactServiceImpl implements UserContactService {
         // 8. 发送消息
         MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
         messageHandler.sendMessage(messageSendDto);
+    }
+
+    // ==================== 黑名单管理 ====================
+
+    /**
+     * 补齐 insertOrUpdate 所需的主键与维度字段
+     * <p>
+     * {@code UserContactMapper.xml#insertOrUpdate} 的列由 {@code <if test="bean.xxx != null">} 决定，
+     * 未设的列不会出现在 INSERT 里。故 upsert 前必须显式补齐 userId/contactId/contactType，
+     * 否则会插入一条缺主键的脏行。
+     * <p>
+     * role 显式置 {@link GroupMemberRoleEnum#MEMBER}：好友维度的 role 语义上无意义，
+     * 但 DB 列可空且既有行多为 NULL；统一写 2 便于后续按 role 过滤时不会漏。
+     */
+    private void fillContactRow(UserContact bean, String userId, String contactId) {
+        bean.setUserId(userId);
+        bean.setContactId(contactId);
+        bean.setContactType(UserContactTypeEnum.USER.getType());
+        bean.setRole(GroupMemberRoleEnum.MEMBER.getRole());
+        bean.setCreateTime(new Date());
+    }
+    /**
+     * 加载我拉黑的用户列表
+     * <p>
+     * 修复前只能加黑、没有列表，用户点错一次就永久无法退出。
+     * <p>
+     * 条件精确性（改动时勿放宽）：
+     * <ul>
+     *   <li>{@code statusArray} 只含 {@link UserContactStatusEnum#BLACKLIST}（我拉黑他人）——
+     *       <b>不含</b> {@link UserContactStatusEnum#BLACKLIST_BE}（他人拉黑我）</li>
+     *   <li>{@code contactType=USER}——群组不进入黑名单</li>
+     * </ul>
+     *
+     * @param userId 当前登录用户 id
+     * @return 黑名单行，按最近拉黑倒序，含对方昵称；空黑名单返回空列表
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @Override
+    public List<UserContact> loadBlackList(String userId) {
+        UserContactQuery contactQuery = new UserContactQuery();
+        contactQuery.setUserId(userId);
+        contactQuery.setContactType(UserContactTypeEnum.USER.getType());
+        contactQuery.setStatusArray(new Integer[]{
+                UserContactStatusEnum.BLACKLIST.getStatus()});
+        contactQuery.setQueryContactUserInfo(true);
+        contactQuery.setOrderBy("last_update_time desc");
+        return this.findListByParam(contactQuery);
+    }
+
+    /**
+     * 解除黑名单：删除我与对方的关系行并清双向缓存
+     * <p>
+     * 拉黑是<b>双向</b>写的（我→他=4 BLACKLIST，他→我=5 BLACKLIST_BE），
+     * 只删自己那行会留下「我已解除、对方仍显示被拉黑」的单向不一致，故反向行也删。
+     * <p>
+     * <b>安全红线</b>：守卫必须校验 status。若只判「行存在」，
+     * 面对 {@code status=5}（他拉黑了我）我就能单方解除别人的拉黑。
+     * 同理反向 DELETE 只在 status=BLACKLIST_BE 时执行——
+     * 对方也拉黑了我时（反向 status=4），他的拉黑记录不归我处置。
+     *
+     * @param userId    当前登录用户 id
+     * @param contactId 被解除拉黑的用户 id
+     * @throws BusinessException 目标不在我的黑名单中 → CODE_2401
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeBlackList(String userId, String contactId) {
+        UserContact myContact = this.userContactMapper.selectByUserIdAndContactId(userId, contactId);
+        if (myContact == null
+                || !UserContactStatusEnum.BLACKLIST.getStatus().equals(myContact.getStatus())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2401);
+        }
+        this.userContactMapper.deleteByUserIdAndContactId(userId, contactId);
+        // 仅当反向行是「被拉黑」时才删；反向为 BLACKLIST 说明对方也拉黑了我，保留
+        UserContact otherContact = this.userContactMapper.selectByUserIdAndContactId(contactId, userId);
+        if (otherContact != null
+                && UserContactStatusEnum.BLACKLIST_BE.getStatus().equals(otherContact.getStatus())) {
+            this.userContactMapper.deleteByUserIdAndContactId(contactId, userId);
+        }
+        // 双向清联系人缓存
+        this.redisComponet.removeUserContact(contactId, userId);
+        this.redisComponet.removeUserContact(userId, contactId);
     }
 }

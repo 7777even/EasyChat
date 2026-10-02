@@ -14,6 +14,7 @@ import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -242,12 +243,40 @@ public class UserContactServiceImplTest {
         String userId = "U12345678901";
         String contactId = "U99999999999";
 
-        when(userContactMapper.updateByUserIdAndContactId(any(UserContact.class), eq(userId), eq(contactId)))
-                .thenReturn(1);
-
         userContactService.removeUserContact(userId, contactId, UserContactStatusEnum.BLACKLIST);
 
+        // 修复：拉黑改走 insertOrUpdate（upsert）。
+        // 原实现用 updateByUserIdAndContactId，对「搜索到的陌生人」这种尚无关系行的情况是 no-op，
+        // 拉黑会静默失效（2026-10-02 由活体冒烟 smoke_blacklist.py 发现）。
+        ArgumentCaptor<UserContact> captor = ArgumentCaptor.forClass(UserContact.class);
+        verify(userContactMapper, times(2)).insertOrUpdate(captor.capture());
+
+        List<UserContact> rows = captor.getAllValues();
+        // 第 1 条：我拉黑他
+        assertEquals(userId, rows.get(0).getUserId());
+        assertEquals(contactId, rows.get(0).getContactId());
+        assertEquals(UserContactStatusEnum.BLACKLIST.getStatus(), rows.get(0).getStatus());
+        // 第 2 条：他那边标记「被拉黑」
+        assertEquals(contactId, rows.get(1).getUserId());
+        assertEquals(userId, rows.get(1).getContactId());
+        assertEquals(UserContactStatusEnum.BLACKLIST_BE.getStatus(), rows.get(1).getStatus());
+
+        // 拉黑不再走 update 路径
+        verify(userContactMapper, never()).updateByUserIdAndContactId(any(UserContact.class), anyString(), anyString());
+    }
+
+    /**
+     * 回归护栏：删除好友（DEL）语义未被 upsert 改动波及，仍走 update。
+     */
+    @Test
+    public void removeUserContact_delStillUsesUpdate() {
+        String userId = "U12345678901";
+        String contactId = "U99999999999";
+
+        userContactService.removeUserContact(userId, contactId, UserContactStatusEnum.DEL);
+
         verify(userContactMapper, times(2)).updateByUserIdAndContactId(any(UserContact.class), anyString(), anyString());
+        verify(userContactMapper, never()).insertOrUpdate(any(UserContact.class));
     }
 
     @Test

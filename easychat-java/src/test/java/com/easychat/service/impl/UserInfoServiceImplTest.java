@@ -571,4 +571,98 @@ public class UserInfoServiceImplTest {
 
         assertEquals(Integer.valueOf(5), count);
     }
+
+    // ======================== 更新加我方式（join_type）=======================
+    // 覆盖 openspec/changes/2026-10-02-join-type-and-blacklist C1
+    // 修复前：join_type 无任何更新入口，UserUpdateDTO 也不含该字段
+
+    @Test
+    public void updateJoinType_toZero() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateJoinType("U_self", 0);
+
+        UserInfo captured = captureUpdatedUser();
+        assertEquals(Integer.valueOf(0), captured.getJoinType());
+        assertEquals("U_self", captured.getUserId());
+    }
+
+    @Test
+    public void updateJoinType_toOne() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateJoinType("U_self", 1);
+
+        assertEquals(Integer.valueOf(1), captureUpdatedUser().getJoinType());
+    }
+
+    /**
+     * 护栏：updateJoinType 只写 join_type 一列，
+     * 绝不能把 nickname/password/status 等一起覆盖掉。
+     */
+    @Test
+    public void updateJoinType_onlyWritesJoinTypeColumn() {
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(existingUser());
+
+        userInfoService.updateJoinType("U_self", 0);
+
+        UserInfo captured = captureUpdatedUser();
+        assertNull("昵称不得被 join_type 更新覆盖", captured.getNickName());
+        assertNull("密码不得被 join_type 更新覆盖", captured.getPassword());
+        assertNull("状态不得被 join_type 更新覆盖", captured.getStatus());
+        assertNull("性别不得被 join_type 更新覆盖", captured.getSex());
+    }
+
+    @Test
+    public void updateJoinType_illegalValue_rejected() {
+        for (Integer illegal : new Integer[]{2, -1, 99}) {
+            try {
+                userInfoService.updateJoinType("U_self", illegal);
+                org.junit.Assert.fail("joinType=" + illegal + " 应抛 CODE_1001");
+            } catch (BusinessException e) {
+                assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+            }
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    @Test
+    public void updateJoinType_nullValue_rejected() {
+        try {
+            userInfoService.updateJoinType("U_self", null);
+            org.junit.Assert.fail("joinType 为 null 应抛 CODE_1001");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    /**
+     * 护栏：用户不存在 → CODE_2101，且不落库。
+     */
+    @Test
+    public void updateJoinType_userNotFound() {
+        when(userInfoMapper.selectByUserId("U_ghost")).thenReturn(null);
+        try {
+            userInfoService.updateJoinType("U_ghost", 0);
+            org.junit.Assert.fail("用户不存在时应抛 CODE_2101");
+        } catch (BusinessException e) {
+            assertEquals(com.easychat.entity.enums.ResponseCodeEnum.CODE_2101.getCode(), e.getCode());
+        }
+        verify(userInfoMapper, never()).updateByUserId(any(UserInfo.class), anyString());
+    }
+
+    private UserInfo existingUser() {
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("U_self");
+        userInfo.setNickName("原昵称");
+        userInfo.setJoinType(1);
+        return userInfo;
+    }
+
+    private UserInfo captureUpdatedUser() {
+        ArgumentCaptor<UserInfo> captor = ArgumentCaptor.forClass(UserInfo.class);
+        verify(userInfoMapper).updateByUserId(captor.capture(), eq("U_self"));
+        return captor.getValue();
+    }
 }

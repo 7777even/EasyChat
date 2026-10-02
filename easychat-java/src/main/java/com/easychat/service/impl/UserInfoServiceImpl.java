@@ -457,8 +457,7 @@ public class UserInfoServiceImpl implements UserInfoService {
     }
 
     @Override
-    public void resetPasswordByEmail(String email, String code, String newPassword) {
-        if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
+    public void resetPasswordByEmail(String email, String code, String newPassword) {        if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         EmailVerifyCodeQuery query = new EmailVerifyCodeQuery();
@@ -500,5 +499,38 @@ public class UserInfoServiceImpl implements UserInfoService {
         messageHandler.sendMessage(sendDto);
         // 记录强制下线日志
         operationLogService.recordLog(userId, "FORCE_OFFLINE", "被强制下线", null);
+    }
+
+    // ==================== 加我方式 ====================
+
+    /**
+     * 更新「加我的方式」（join_type）
+     * <p>
+     * 修复前 join_type 无任何更新入口（{@code UserUpdateDTO} 不含该字段），
+     * 用户看得到自己的设置却改不了。
+     * <p>
+     * 只写 join_type 一列：绝不构造带 nickName/password/status 的对象去 update，
+     * 否则会把这几列一起覆盖成 null。
+     *
+     * @param userId   当前登录用户 id
+     * @param joinType 0 直接加入 / 1 加我时需验证
+     * @throws BusinessException joinType 非法 → CODE_1001；用户不存在 → CODE_2101
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateJoinType(String userId, Integer joinType) {
+        if (!JoinTypeEnum.JOIN.getType().equals(joinType)
+                && !JoinTypeEnum.APPLY.getType().equals(joinType)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        if (this.userInfoMapper.selectByUserId(userId) == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2101);
+        }
+        // 只带 userId + joinType 两个字段，避免覆盖昵称/密码等
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setUserId(userId);
+        updateInfo.setJoinType(joinType);
+        this.userInfoMapper.updateByUserId(updateInfo, userId);
     }
 }

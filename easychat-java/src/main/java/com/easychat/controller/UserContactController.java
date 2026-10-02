@@ -204,6 +204,38 @@ public class UserContactController extends ABaseController {
     }
 
     /**
+     * 加载黑名单（我拉黑的用户列表）
+     * <p>
+     * 修复前只能加黑、没有列表也没有解除，用户点错一次就永久无法退出。
+     * 只含 {@code status=BLACKLIST(4)}；「被拉黑」(5) 不在我的黑名单内，也不可由我解除。
+     * 复用 {@code UserContact} 出参（与 {@code /contact/loadContact} 同一范式），不新建 VO。
+     *
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @PostMapping("/loadBlackList")
+    @GlobalInterceptor
+    public Result<List<UserContact>> loadBlackList(HttpServletRequest request) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        return success(userContactService.loadBlackList(tokenUserInfoDto.getUserId()));
+    }
+
+    /**
+     * 解除黑名单
+     * <p>
+     * 删除我与对方的双向关系行并清缓存；目标不在我的黑名单中返回 {@code CODE_2401}。
+     * 守卫在 Service 层校验 status —— 我无权解除「别人对我的拉黑」。
+     *
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @PostMapping("/removeBlackList")
+    @GlobalInterceptor
+    public Result<Void> removeBlackList(HttpServletRequest request, @NotEmpty String contactId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userContactService.removeBlackList(tokenUserInfoDto.getUserId(), contactId);
+        return success();
+    }
+
+    /**
      * 拍一拍
      */
     @PostMapping("/nudge")

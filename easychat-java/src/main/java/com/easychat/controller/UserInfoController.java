@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
 import java.io.IOException;
 
@@ -96,6 +97,27 @@ public class UserInfoController extends ABaseController {
         userInfoService.updatePassword(tokenUserInfoDto.getUserId(), oldPassword, password);
         // 关闭 WebSocket 连接，强制重新登录
         channelContextUtils.closeContext(tokenUserInfoDto.getUserId());
+        return success();
+    }
+
+    /**
+     * 更新「加我的方式」
+     * <p>
+     * 修复前 join_type 只读：{@code getUserInfo} 会返回、{@code UserInfo.vue} 会显示，
+     * 但没有任何写入路径（{@code UserUpdateDTO} 不含该字段），用户看得到却改不了。
+     * <p>
+     * 安全：<b>不接受 userId 入参</b>，只能改当前登录用户自己。
+     * 0 直接加入 / 1 加我时需验证；非法值由 Service 抛 {@code CODE_1001}。
+     * 保存后立即生效——{@code applyAdd} 直读 DB，无缓存需失效。
+     *
+     * @since 2026-10-02 加我方式与黑名单管理（openspec/specs/privacy-settings）
+     */
+    @PostMapping("/updateJoinType")
+    @GlobalInterceptor
+    public Result<Void> updateJoinType(HttpServletRequest request,
+                                       @NotNull(message = "加我方式不能为空") Integer joinType) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        userInfoService.updateJoinType(tokenUserInfoDto.getUserId(), joinType);
         return success();
     }
 
