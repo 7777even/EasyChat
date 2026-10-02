@@ -26,7 +26,9 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -550,12 +552,22 @@ public class ChannelContextUtils {
 
     /**
      * 向指定用户的所有好友广播在线状态变更。
+     * <p>
+     * 若该用户关闭了「展示在线状态」（{@code user_info.online_status_visible=0}），
+     * <b>不广播任何帧</b>——好友端不应因该用户的状态变化而更新。
+     * 查询为单次主键读，且本方法仅在状态变更时调用（上线/掉线/手动切换），
+     * 频率是「每人每天几十次」量级而非「每条消息」，开销可忽略。
      *
      * @param userId 状态变更的用户 ID
      * @param status 新状态值（1=在线 2=忙碌 3=离线）
+     * @since 2026-10-02 隐私设置：新增 online_status_visible 开关判定
      */
     public void broadcastOnlineStatus(String userId, Integer status) {
         if (StringTools.isEmpty(userId)) {
+            return;
+        }
+        if (!isOnlineStatusVisible(userId)) {
+            logger.debug("用户{}已关闭在线状态展示，跳过广播", userId);
             return;
         }
         // 获取用户的所有好友
@@ -579,5 +591,58 @@ public class ChannelContextUtils {
             }
         }
         logger.info("用户{}状态变更为{}，已广播给{}个好友", userId, status, contactList.size());
+    }
+
+    /**
+     * 读取用户的「是否对好友展示在线状态」开关。
+     * <p>
+     * 缺省为 {@code true}（展示）——与改动前「无条件广播」一致，且列不可为 NULL（DDL NOT NULL DEFAULT 1），
+     * 查不到用户时也按展示处理，避免因查不到而误伤正常用户。
+     *
+     * @param userId 用户 id
+     * @return true=展示（可广播），false=隐藏
+     * @since 2026-10-02 隐私设置
+     */
+    private boolean isOnlineStatusVisible(String userId) {
+        UserInfo userInfo = userInfoMapper.selectByUserId(userId);
+        if (userInfo == null || userInfo.getOnlineStatusVisible() == null) {
+            return true;
+        }
+        return userInfo.getOnlineStatusVisible() != 0;
+    }
+
+    /**
+     * 向指定用户的所有<b>在线</b>好友推送「在线状态已隐藏」帧。
+     * <p>
+     * 场景：用户关闭「展示在线状态」时立即调用，把好友端<b>已经显示的</b>状态点抹掉——
+     * 否则对方会看到你「卡在在线」直到你掉线，与微信「关了朋友立刻就看不到」的直觉不符。
+     * 取好友与判定在线的逻辑与 {@link #broadcastOnlineStatus} 保持一致。
+     *
+     * @param userId 关闭展示的用户 id
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    public void pushOnlineStatusHidden(String userId) {
+        if (StringTools.isEmpty(userId)) {
+            return;
+        }
+        List<String> contactList = redisComponet.getUserContactList(userId);
+        if (contactList == null || contactList.isEmpty()) {
+            return;
+        }
+        for (String friendId : contactList) {
+            if (StringTools.isEmpty(friendId) || !isUserOnline(friendId)) {
+                continue;
+            }
+            MessageSendDto hiddenDto = new MessageSendDto();
+            hiddenDto.setMessageType(MessageTypeEnum.ONLINE_STATUS_HIDDEN.getType());
+            hiddenDto.setContactId(userId);
+            hiddenDto.setSendUserId(userId);
+            // extendData 用对象 {hidden:true}；好友端只需按 messageType 判断，不依赖此字段
+            Map<String, Object> extend = new HashMap<>();
+            extend.put("hidden", Boolean.TRUE);
+            hiddenDto.setExtendData(extend);
+            sendRawToUser(friendId, JsonUtils.convertObj2Json(hiddenDto));
+        }
+        logger.info("用户{}已关闭在线状态展示，已向{}个在线好友推送抹除帧", userId, contactList.size());
     }
 }

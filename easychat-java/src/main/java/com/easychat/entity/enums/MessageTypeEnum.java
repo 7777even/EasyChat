@@ -28,7 +28,18 @@ public enum MessageTypeEnum {
     USER_STATUS_CHANGE(23, "", "用户状态变更请求"),
     VOICE(24, "", "语音消息"),
     LOCATION(25, "", "位置消息"),
-    NUDGE(26, "%s拍了拍你", "拍一拍");
+    NUDGE(26, "%s拍了拍你", "拍一拍"),
+    /**
+     * 在线状态已隐藏（该用户关闭了「展示在线状态」）
+     * <p>
+     * 好友端收到后<b>立即抹除</b>该联系人的在线状态展示，无需等对方掉线。
+     * 用新增帧而非扩展 {@link #ONLINE_STATUS} 的 extendData：后者现为裸 Integer，
+     * 改成对象会让旧客户端读到 undefined 而状态点错乱。
+     * 旧客户端走 default 分支忽略即可（向后兼容）。
+     *
+     * @since 2026-10-02 隐私设置（openspec/specs/privacy-settings）
+     */
+    ONLINE_STATUS_HIDDEN(27, "", "在线状态已隐藏");
 
     private Integer type;
     private String initMessage;
