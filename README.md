@@ -142,16 +142,27 @@ npm run build:win  # Windows 打包（NSIS）
 自动化门禁（CI 与本地同款）：
 
 ```bash
-node scripts/check-api-contract.mjs --strict   # 前后端路由漂移
-node scripts/check-ipc-registration.mjs --strict # IPC 通道漏注册
-node scripts/check-openspec-hygiene.mjs         # 四件套/归档闭环
-node scripts/verify/verify_mapper_params.mjs   # Mapper @Param 与 XML 占位符一致性
-node scripts/verify/verify_password_handoff.mjs # 密码明文交接红线
+node scripts/check-api-contract.mjs --strict      # 前后端路由漂移
+node scripts/check-ipc-registration.mjs --strict  # IPC 通道漏注册
+node scripts/check-openspec-hygiene.mjs            # 四件套/归档闭环
 node scripts/verify/verify_no_hardcoded_secret.mjs # 运行时配置分层与硬编码凭据
+node scripts/verify/verify_mapper_params.mjs      # Mapper @Param 与 XML 占位符一致性
+node scripts/verify/verify_password_handoff.mjs   # 密码明文交接红线
+node scripts/verify/verify_virtual_core.mjs       # 虚拟列表核心算法
+node scripts/verify/verify_call_core.mjs          # 通话核心逻辑
 ```
 
-Git hooks：`node scripts/setup-git-hooks.mjs`（commit-msg 格式、pre-commit 黑名单、pre-push 规格卫生）。
-CI 流水线见 `.github/workflows/ci.yml`，`main` 推送与 PR 自动执行上述全部门禁。
+以上全部为纯静态检查，无需启动服务。
+
+Git hooks：`node scripts/setup-git-hooks.mjs`
+
+| Hook | 触发 | 执行 |
+|------|------|------|
+| `commit-msg` | 提交时 | 格式 `type(scope): 描述`、type/scope 枚举、描述含中文、禁 body |
+| `pre-commit` | 提交时 | 暂存区黑名单（`target/`、`dist/`、`node_modules/`、`*.log` 等） |
+| `pre-push` | 推送时 | 契约 → IPC → 规格卫生 → 配置凭据，任一失败即阻断 |
+
+CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 3 个 job（后端 `mvn test` + `package`、前端 `lint` + `build`、全部门禁）。
 
 ## 6. 协作规范
 

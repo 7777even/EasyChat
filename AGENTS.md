@@ -302,7 +302,9 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/commit-msg-lint.mjs` | 提交时（`commit-msg` hook） | 格式不符 `type(scope): 描述`、type / scope 不在枚举、描述无中文、带 body |
 | `scripts/pre-commit-guard.mjs` | 提交时（`pre-commit` hook） | 暂存区命中黑名单（`target/`、`dist/`、`node_modules/`、`*.log`、`*-out.txt` 等） |
 | `scripts/check-openspec-hygiene.mjs` | 推送前（`pre-push` hook） | 进行中 Change 缺四件套、tasks.md 全勾但未归档、已归档但 tasks.md 存在未勾选任务 |
-| `scripts/check-api-contract.mjs` | 手动 / CI | 后端 Controller 路由 vs 前端调用路径漂移（`--strict` 时阻断） |
+| `scripts/check-api-contract.mjs` | 推送前（`pre-push` hook）/ CI | 后端 Controller 路由 vs 前端调用路径漂移（`--strict` 时阻断） |
+| `scripts/check-ipc-registration.mjs` | 推送前（`pre-push` hook）/ CI | `ipc.js` 导出与 `index.js` 调用不匹配（漏注册即静默失效） |
+| `scripts/verify/verify_no_hardcoded_secret.mjs` | 推送前（`pre-push` hook）/ CI | 公共配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 密码有默认可用值、`.env` 入库 |
 
 **安装 hook**：`node scripts/setup-git-hooks.mjs`
 
