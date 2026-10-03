@@ -136,6 +136,13 @@ jobs:
       - name: 通话核心逻辑
         run: node scripts/verify/verify_call_core.mjs
 
+      # 2026-10-03 新增。csvCell 的「= + - @ 前置单引号」是**安全控制**
+      # （聊天内容来自对方，公式注入载荷会在受害者 Excel 中执行）。
+      # 原先该逻辑藏在 exportChat.js 的模块私有实现里，而该模块 import electron，
+      # node 中无法 import → 零测试。抽离纯核心后才有断言。
+      - name: 聊天记录导出纯逻辑核心
+        run: node scripts/verify/verify_export_chat_core.mjs
+
   # 2026-10-03 新增。AGENTS §6.4 早已点名「verify_schema_drift.mjs 尚未实现」。
   # 该门禁需要活库，故独立成 job（不能塞进 gates —— 那里没有 DB）。
   #

@@ -2,6 +2,16 @@ import { dialog } from 'electron'
 import fs from 'fs'
 import { selectAllMessageList } from './db/ChatMessageModel'
 import store from './store'
+import {
+    buildTxt,
+    buildCsv,
+    buildDefaultPath,
+    normalizeCloudRow,
+    sortRowsBySendTime,
+    buildBackupDefaultPath,
+    buildBackupTxt,
+    buildBackupCsv
+} from './exportChatCore.mjs'
 
 // ===== 聊天记录导出（openspec/changes/2026-09-26-chat-record-export） =====
 // 数据源二选一：
@@ -9,103 +19,12 @@ import store from './store'
 //   2) 云端漫游全量：渲染进程用 loadHistoryMessage 翻页拉全后传入 list（camelCase），
 //      此处归一化为本地行形状（snake_case），复用同一套格式化与落盘逻辑。
 // 职责：取数 → 归一化 → 组装文本 → 保存对话框选路径 → 落盘 → 回传结果。
-
-/** 文件类型：0图片 1视频 2文件（与渲染层 Constants.File_TYPE 对齐） */
-const FILE_TYPE_LABEL = { 0: '图片', 1: '视频', 2: '文件' }
-
-const pad = (n) => (n < 10 ? '0' + n : '' + n)
-
-const formatTime = (ts) => {
-    if (!ts) return ''
-    const d = new Date(Number(ts))
-    if (isNaN(d.getTime())) return ''
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-/** 展示用内容：媒体消息文本化无意义，降级为占位符 */
-const buildContent = (row) => {
-    const type = Number(row.message_type)
-    if (type === 5) {
-        const label = FILE_TYPE_LABEL[Number(row.file_type)] || '文件'
-        if (Number(row.file_type) === 2) {
-            return `[${label}] ${row.file_name || ''}`.trim()
-        }
-        return `[${label}]`
-    }
-    return row.message_content == null ? '' : String(row.message_content)
-}
-
-/** TXT：[时间] 昵称: 内容 */
-const buildTxt = (list, sessionTitle) => {
-    const lines = []
-    lines.push(`会话：${sessionTitle || ''}`)
-    lines.push(`导出时间：${formatTime(Date.now())}`)
-    lines.push(`消息条数：${list.length}`)
-    lines.push('----------------------------------------')
-    list.forEach((row) => {
-        const name = row.send_user_nick_name || row.send_user_id || ''
-        lines.push(`[${formatTime(row.send_time)}] ${name}: ${buildContent(row)}`)
-    })
-    return lines.join('\n')
-}
-
-/**
- * CSV 单元格转义：双引号翻倍、换行转空格；
- * 以 = + - @ 开头前置单引号，避免被 Excel 当公式执行。
- */
-const csvCell = (value) => {
-    let v = value == null ? '' : String(value)
-    v = v.replace(/\r?\n/g, ' ')
-    if (/^[=+\-@]/.test(v)) {
-        v = "'" + v
-    }
-    return '"' + v.replace(/"/g, '""') + '"'
-}
-
-/** CSV：UTF-8 BOM + 表头，Excel 直接打开不乱码 */
-const buildCsv = (list) => {
-    const header = ['消息ID', '时间', '发送人ID', '昵称', '消息类型', '内容', '文件名']
-    const rows = [header.map(csvCell).join(',')]
-    list.forEach((row) => {
-        rows.push([
-            row.message_id,
-            formatTime(row.send_time),
-            row.send_user_id,
-            row.send_user_nick_name,
-            Number(row.message_type) === 5 ? (FILE_TYPE_LABEL[Number(row.file_type)] || '文件') : '文本',
-            buildContent(row),
-            row.file_name
-        ].map(csvCell).join(','))
-    })
-    return '\uFEFF' + rows.join('\r\n')
-}
-
-const safeFileName = (name) => {
-    // 去掉 Windows 文件名非法字符，避免保存失败
-    return String(name || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50) || 'chat'
-}
-
-const buildDefaultPath = (sessionTitle, format) => {
-    const d = new Date()
-    const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
-    const ext = format === 'csv' ? 'csv' : 'txt'
-    return `EasyChat-${safeFileName(sessionTitle)}-${date}.${ext}`
-}
-
-/**
- * 云端漫游行归一化：服务端下发 camelCase，本地 SQLite 行是 snake_case。
- * 统一成本地行形状后，buildTxt / buildCsv 可无差别复用。
- */
-const normalizeCloudRow = (row) => ({
-    message_id: row.messageId,
-    message_type: row.messageType,
-    message_content: row.messageContent,
-    send_user_id: row.sendUserId,
-    send_user_nick_name: row.sendUserNickName,
-    send_time: row.sendTime,
-    file_type: row.fileType,
-    file_name: row.fileName
-})
+//
+// 2026-10-03：纯计算部分已抽离到 ./exportChatCore.mjs —— 本模块 import 了
+//   electron / fs / db / store，在 node 中无法 import，故原先那些模块私有函数
+//   **完全不可测**（含 CSV 公式注入防护这条安全控制）。抽离后由
+//   scripts/verify/verify_export_chat_core.mjs 直接 import 校验（零新依赖，已入 CI）。
+//   本文件现在只保留 IO 与弹窗编排。
 
 /**
  * 导出单个会话的聊天记录。
@@ -123,7 +42,7 @@ const exportChatRecord = async (params) => {
         let list
         if (Array.isArray(cloudList) && cloudList.length > 0) {
             // 云端全量：归一化 + 按发送时间升序（服务端是 messageId desc 分页返回）
-            list = cloudList.map(normalizeCloudRow).sort((a, b) => Number(a.send_time) - Number(b.send_time))
+            list = sortRowsBySendTime(cloudList.map(normalizeCloudRow))
         } else {
             list = await selectAllMessageList({ sessionId })
         }
@@ -151,59 +70,6 @@ const exportChatRecord = async (params) => {
     }
 }
 
-/** 群聊 / 单聊标签（contactType：0 单聊 1 群聊） */
-const contactTypeLabel = (contactType) => (Number(contactType) === 1 ? '群聊' : '单聊')
-
-/** 备份默认文件名：EasyChat-备份-YYYYMMDD.<ext> */
-const buildBackupDefaultPath = (format) => {
-    const d = new Date()
-    const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
-    return `EasyChat-备份-${date}.${format === 'csv' ? 'csv' : 'txt'}`
-}
-
-/** 跨会话 TXT：文件头 + 每个会话一段分隔块 */
-const buildBackupTxt = (groups, totalCount) => {
-    const lines = []
-    lines.push(`EasyChat 聊天记录备份（跨会话全量）`)
-    lines.push(`备份时间：${formatTime(Date.now())}`)
-    lines.push(`会话数：${groups.length}`)
-    lines.push(`消息条数：${totalCount}`)
-    lines.push('========================================')
-    groups.forEach((g) => {
-        lines.push('')
-        lines.push(`会话：${g.title || g.sessionId || ''}（${contactTypeLabel(g.contactType)}）`)
-        lines.push(`消息数：${g.rows.length}`)
-        lines.push('----------------------------------------')
-        g.rows.forEach((row) => {
-            const name = row.send_user_nick_name || row.send_user_id || ''
-            lines.push(`[${formatTime(row.send_time)}] ${name}: ${buildContent(row)}`)
-        })
-    })
-    return lines.join('\n')
-}
-
-/** 跨会话 CSV：在既有列基础上增加首列「会话」「会话类型」 */
-const buildBackupCsv = (groups) => {
-    const header = ['会话', '会话类型', '消息ID', '时间', '发送人ID', '昵称', '消息类型', '内容', '文件名']
-    const rows = [header.map(csvCell).join(',')]
-    groups.forEach((g) => {
-        g.rows.forEach((row) => {
-            rows.push([
-                g.title || g.sessionId || '',
-                contactTypeLabel(g.contactType),
-                row.message_id,
-                formatTime(row.send_time),
-                row.send_user_id,
-                row.send_user_nick_name,
-                Number(row.message_type) === 5 ? (FILE_TYPE_LABEL[Number(row.file_type)] || '文件') : '文本',
-                buildContent(row),
-                row.file_name
-            ].map(csvCell).join(','))
-        })
-    })
-    return '\uFEFF' + rows.join('\r\n')
-}
-
 /**
  * 跨会话全量备份：把渲染层已取全的多个会话消息导出为单个文件。
  * @param {{format:'txt'|'csv', groups:Array<{sessionId:string, title:string, contactType:number, messages:Array}>}} params
@@ -220,9 +86,9 @@ const exportChatBackup = async (params) => {
                 sessionId: g.sessionId,
                 title: g.title,
                 contactType: g.contactType,
-                rows: (Array.isArray(g.messages) ? g.messages : [])
-                    .map(normalizeCloudRow)
-                    .sort((a, b) => Number(a.send_time) - Number(b.send_time))
+                rows: sortRowsBySendTime(
+                    (Array.isArray(g.messages) ? g.messages : []).map(normalizeCloudRow)
+                )
             }))
             .filter((g) => g.rows.length > 0)
 
