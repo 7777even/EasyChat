@@ -185,7 +185,7 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 ### 6.4 数据库规则
 
 1. 表结构变更必须同步更新 `easychat.sql`
-2. **改了基线必须同批产出迁移脚本**（`easychat-migration-<NNN>-*.sql`）并在目标库执行——只改基线是最隐蔽的故障源：`easychat.sql` 是最新基线，不代表存量库已对齐。真实事故：`user_info.password` 列宽只改基线未迁移，BCrypt 哈希写入被截断，登录直接 500；`emoji`/`favorite`/`user_status`/`operation_log` 四张表在存量库根本不存在。**门禁建议**：`node scripts/verify/verify_schema_drift.mjs`（尚未实现，见 Retro 改进方案）
+2. **改了基线必须同批产出迁移脚本**（`easychat-migration-<NNN>-*.sql`）并在目标库执行——只改基线是最隐蔽的故障源：`easychat.sql` 是最新基线，不代表存量库已对齐。真实事故：`user_info.password` 列宽只改基线未迁移，BCrypt 哈希写入被截断，登录直接 500；`emoji`/`favorite`/`user_status`/`operation_log` 四张表在存量库根本不存在。**门禁**：`node scripts/verify/verify_schema_drift.mjs`（2026-10-03 已实现，接 pre-push + CI 独立 job；比对基线与活库 `information_schema`，另钉死 `user_info.password` 需 `varchar(≥60)` 硬不变量）
 3. 迁移脚本必须**幂等**（建表用 `IF NOT EXISTS`、列宽放宽向后兼容），并写明执行方式与重复执行的影响
 4. 字段变更需评估存量数据影响
 5. 新建表必须包含 `create_time` 字段
@@ -342,6 +342,12 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_no_hardcoded_secret.mjs` | 推送前（`pre-push` hook）/ CI | 公共配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 密码有默认可用值、`.env` 入库 |
 | `scripts/verify/verify_ws_frame_parity.mjs` | 推送前（`pre-push` hook）/ CI | WS 帧号两端漂移（客户端 case 服务端不存在）、服务端帧号重复/空洞、落库帧或 MUST_HANDLE 帧客户端无 case、新增帧未声明意图、KNOWN_GAP 登记过期 |
 | `scripts/verify/verify_file_type_content_type.mjs` | 推送前（`pre-push` hook）/ CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 缺前端在用的 fileType（→ content-type 拼成 `undefined<ext>`、浏览器无法解码、静默失败）、MIME 前缀不合法、语音 `fileType=3` 非 `audio/*` |
+| `scripts/verify/verify_password_session.mjs` | 推送前（`pre-push` hook）/ CI | 改密 / 找回密码成功后未吊销该用户全部端 Token、未推 `FORCE_OFF_LINE`；验证码被交给 logger；未登录端点限流存在「token 缺失直接 return」早退；邮件未配置时未 fail-closed；邮件主题拼接用户邮箱 |
+| `scripts/verify/verify_schema_drift.mjs` | 推送前（`pre-push` hook）/ CI（独立 job + MySQL service） | 基线有的表 / 列活库没有（**迁移未执行**）、列类型漂移、`user_info.password` 列宽不足 60（BCrypt 截断）、解析器静默漏表、迁移脚本编号缺口 |
+
+> `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
+> 它按 **fail-closed** 设计：连不上库即 `exit 1`（错误信息说明如何用 `SCHEMA_DB_*` 指定连接参数），
+> 需要离线跑时显式加 `--no-live`（此时只能发现基线自身的问题，发现不了「迁移未执行」）。
 
 **安装 hook**：`node scripts/setup-git-hooks.mjs`
 

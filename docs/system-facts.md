@@ -229,11 +229,12 @@
 | 1 | `email_verify_code` 无失败次数字段，6 位码 10 分钟有效**可暴力**；仅有 60 秒防重发 + IP 限流（60/min）兜底 | 补 `try_count` 列属 DB 结构变更（L4），刻意与鉴权改造解耦 | 独立 Change，需 migration-013 + 同步 `easychat.sql` |
 | 2 | `operation_log.ip_address` **恒为 null**：6 处 `recordLog` 调用（`UserInfoServiceImpl:270/275/280/420/504`、`ChatMessageServiceImpl:673`）全传 `null`，登录失败/强制下线这类最需 IP 溯源的事件没有 IP | Service 不得感知 `HttpServletRequest`，需 AOP 取 `RequestContextHolder`（横切面改造） | 独立 Change |
 | 3 | `@所有人` 权限**仅在客户端生效**：Java 侧无 role 校验，普通成员手工构造 `extraData.atAll` 即可冒用群主/管理员身份 | 涉权限语义（L4） | 独立 Change，`saveMessage` 校验发送者 `role ∈ {0,1}` |
-| 4 | 无 `verify_schema_drift.mjs`：改了 `easychat.sql` 基线而忘写/忘执行迁移，只能靠人记（已造成 2 次真实事故：BCrypt 截断 500、`emoji`/`favorite`/`user_status`/`operation_log` 四表存量库不存在） | AGENTS §6.4 早已建议，独立工程化 Change | 独立 Change，走活库比对 `information_schema` |
+| 4 | ~~无 `verify_schema_drift.mjs`~~ → **2026-10-03 已实现**：`scripts/verify/verify_schema_drift.mjs` 比对基线与活库 `information_schema`，接 pre-push + CI 独立 job（MySQL 8 service），fail-closed；钉死 `user_info.password` 需 `varchar(≥60)` 硬不变量；含迁移编号连续性检查。**残余**：`docker-compose.yml` 仍只在 MySQL **首次启动**导入 `easychat.sql`，存量卷不会重放迁移 → 「新环境按 001~012 顺序执行」目前仍靠人记 | compose 中加迁移执行步骤属部署配置基线变更 | 独立 Change（L4） |
 | 5 | **JDK 三方不一致**：`pom.xml` `java.version=1.8` / `Dockerfile` temurin-8 / `ci.yml` temurin 8，但本机 `mvn -v` 为 **JDK 17.0.12** → 232 个单测从未在与生产相同的 JVM 上跑过；且 `spring-boot-maven-plugin` 配了 Java 9+ 专有的 `--add-opens`，在目标 JDK 8 上 `mvn spring-boot:run` 会直接启动失败 | 依赖与框架面（L4） | 独立 Change；恢复条件：统一 JDK 并实跑 CI |
 | 6 | `spring-boot-maven-plugin` 显式锁 `2.2.6.RELEASE` 与 parent `2.6.1` 倒挂（产物 loader 2.2.6 跑 2.6.1 的类） | 同上（L4） | 随 #5 一并处理 |
 | 7 | 前端零自动化测试：`package.json` 无 `test` script、无 vitest，渲染层/主进程质量全靠静态门禁 + 本机 GUI 手验 | 结构性缺口，需引入测试框架 | 独立 Change |
 | 8 | `GlobalInterceptor` 注解**矩阵未纳入测试**：`checkLogin`/`checkAdmin`/`checkRateLimit` 的组合散落各 Controller，`GlobalOperationAspectTest` 只覆盖了若干代表端点 | 低危但易漂移 | 在 `GlobalOperationAspectTest` 补一条「遍历全仓注解输出矩阵」用例 |
+| 9 | 「新环境按 001~012 顺序执行迁移」无自动化：`docker-compose.yml` 只在 MySQL **首次启动**导入 `easychat.sql`，存量数据卷永不重放迁移，也没有版本表记录「这个库跑到第几号了」 | 加迁移执行步骤 / 版本表属 DB 结构与部署配置变更（L4） | 独立 Change；`verify_schema_drift.mjs` 已能发现漂移，但不能执行迁移 |
 
 ---
 

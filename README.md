@@ -150,7 +150,15 @@ node scripts/verify/verify_mapper_params.mjs      # Mapper @Param 与 XML 占位
 node scripts/verify/verify_password_handoff.mjs   # 密码明文交接红线
 node scripts/verify/verify_virtual_core.mjs       # 虚拟列表核心算法
 node scripts/verify/verify_call_core.mjs          # 通话核心逻辑
+node scripts/verify/verify_ws_frame_parity.mjs    # WS 帧号两端对账
+node scripts/verify/verify_file_type_content_type.mjs  # 文件类型与 content-type 一致性
+node scripts/verify/verify_password_session.mjs   # 改密后会话失效 + 验证码投递契约
+node scripts/verify/verify_schema_drift.mjs       # 基线 ⇄ 活库 表结构漂移（需 MySQL）
 ```
+
+> 末条 `verify_schema_drift.mjs` 是**唯一需要活库**的门禁：连不上库即失败（fail-closed）。
+> 连接参数可用 `SCHEMA_DB_HOST` / `SCHEMA_DB_PORT` / `SCHEMA_DB_USER` / `SCHEMA_DB_PASSWORD` /
+> `SCHEMA_DB_NAME` 覆盖；离线场景显式加 `--no-live`。
 
 以上全部为纯静态检查，无需启动服务。
 
@@ -160,9 +168,9 @@ Git hooks：`node scripts/setup-git-hooks.mjs`
 |------|------|------|
 | `commit-msg` | 提交时 | 格式 `type(scope): 描述`、type/scope 枚举、描述含中文、禁 body |
 | `pre-commit` | 提交时 | 暂存区黑名单（`target/`、`dist/`、`node_modules/`、`*.log` 等） |
-| `pre-push` | 推送时 | 契约 → IPC → 规格卫生 → 配置凭据，任一失败即阻断 |
+| `pre-push` | 推送时 | 契约 → IPC → 规格卫生 → 配置凭据 → WS 帧对账 → 文件 MIME → 密码会话 → 表结构漂移，任一失败即阻断 |
 
-CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 3 个 job（后端 `mvn test` + `package`、前端 `lint` + `build`、全部门禁）。
+CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个 job（后端 `mvn test` + `package`、前端 `build`、静态门禁、表结构对账）。
 
 ## 6. 协作规范
 
