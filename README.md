@@ -8,7 +8,7 @@
 | 层 | 选型 | 版本 |
 |----|------|------|
 | 后端框架 | Spring Boot | 2.6.1 |
-| 后端语言 | Java | 1.8 |
+| 后端语言 | Java | 17 |
 | 持久层 | MyBatis（XML 映射） | 1.3.2 |
 | 数据库 | MySQL | 8.0.23 |
 | 缓存/会话 | Redis + Redisson | 3.12.3 |
@@ -89,7 +89,13 @@ mvn package -DskipTests
 java -jar target/easychat-1.0.jar
 ```
 
-依赖 MySQL(`3306/easychat`) + Redis(`6379`) 已就绪。
+依赖 **JDK 17** + MySQL(`3306/easychat`) + Redis(`6379`) 已就绪。
+
+> ⚠️ JDK 必须为 17（与 `pom.xml` 的 `java.version`、CI 的 temurin 17、`Dockerfile` 的 temurin-17 三方一致）。
+> 用 JDK 8 会编译失败；用其他版本则「本地全绿不代表 CI 全绿」——这正是 2026-10-03 之前长期存在的漂移。
+> 后端运行需要给 JVM 加 `--add-opens java.base/java.lang,java.util,java.math=ALL-UNNAMED`（Redisson FST 在 JDK 17 强封装下需要），
+> 该参数已配在 `pom.xml` 的 `spring-boot-maven-plugin.jvmArguments`；容器镜像则配在 `Dockerfile` 的 `JAVA_OPTS`。
+> `mvn test` / `mvn package` 不经该插件，**本地跑测试时无需手动加**。
 
 ### 4.5 运行时配置（三段 profile + .env）
 
@@ -189,6 +195,7 @@ CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个
 
 ## 7. 已知环境依赖与坑
 
+- **JDK 必须 17**：`pom.xml` / CI / Dockerfile 已三方对齐（2026-10-03 由 1.8 升级）。用别的版本编译出的产物与 CI 不等价。
 - **ffmpeg 二进制不入库**（见 4.1），缺失是静默失败。
 - **后端不可多实例**：`CallService` 的通话房间注册表与 `ChannelContextUtils.USER_CONTEXT_MAP` 都是进程内 `ConcurrentHashMap`，`docker compose up --scale backend=2` 会让通话建立失败（消息广播走 RTopic 不受影响）。详见 `docs/system-facts.md` §1.1。
 - **TURN 配置**：`application.properties` 的 `easychat.turn.*` 目前是公共测试服务器（`guest/guess`），生产必须自建 coturn 并轮换凭据；留空则仅 STUN，对称 NAT 不通。
