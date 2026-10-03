@@ -181,6 +181,31 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Flyway 数据库迁移自动化（2026-10-04，L4）
+             动机：迁移执行链路缺最后一环——verify_schema_drift.mjs 能「发现」
+             「改了基线但没迁移」，但没有任何东西**执行**迁移，也没有账本记录
+             「某个库应用到第几号」，该状态只存在于人脑。已造成两次真实事故
+             （BCrypt 列宽截断 500、四张表存量库不存在）。
+
+             ⚠⚠ 为何必须显式钉 7.15.0（2026-10-04 实测结论，勿「顺手」改回）：
+               1. parent 2.6.1 管理的 flyway-core 是 **8.0.4**，而 **Flyway Community
+                  从 8.0 起不再支持 MySQL 5.7**（5.7 仅保留在付费 Teams 版）。
+                  实测报错 FlywayEditionUpgradeRequiredException:
+                  "MySQL 5.7 is no longer supported by Flyway Community Edition"。
+               2. 本项目**本机开发库就是 MySQL 5.7**（docker-compose 用 8.0，两边本就不一致），
+                  随 parent 走 8.0.4 会让**开发者本地根本起不来**。
+               3. 7.15.0 是最后一个在 Community 下同时支持 MySQL 5.7 与 8.0 的版本。
+
+               因此这里**刻意手写版本号**覆盖 parent —— 与本仓「依赖版本一律由 parent 管理」的
+               取向相反，是一次有实测依据的例外。升级 Flyway 前必须先确认目标版本
+               是否恢复了对 5.7 的支持。
+               证据：engineering/qa/2026-10-04-flyway-t0.3b-baseline-imported.txt -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>7.15.0</version>
+        </dependency>
+
         <!-- 测试依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -205,6 +230,25 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- 默认资源（src/main/resources） -->
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- 迁移脚本：源在**仓库根**（AGENTS §6.4-2 规定的命名与位置），
+                 这里复制进 jar 的 db/migration，使 dev 直跑与打包运行
+                 **同一套** classpath:db/migration 路径，不依赖运行期 CWD。
+                 文件名**零改动**（不改名、不删 003 那个纯注释占位）。
+                 见 openspec/changes/2026-10-04-flyway-migration-automation ADR-001/002。 -->
+            <resource>
+                <directory>${project.basedir}/..</directory>
+                <includes>
+                    <include>easychat-migration-*.sql</include>
+                </includes>
+                <targetPath>db/migration</targetPath>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

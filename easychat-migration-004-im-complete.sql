@@ -7,55 +7,74 @@
 --    可重复执行：通过 information_schema 判断列/表是否已存在
 --    适用于 MySQL 5.7+
 
--- ---------- 通用：安全加列存储过程 ----------
-DROP PROCEDURE IF EXISTS `ec_add_column`;
-DELIMITER $$
-CREATE PROCEDURE `ec_add_column`(
-    IN p_table  VARCHAR(64),
-    IN p_column VARCHAR(64),
-    IN p_define VARCHAR(512)
-)
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = p_table
-          AND COLUMN_NAME = p_column
-    ) THEN
-        SET @ddl = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN `', p_column, '` ', p_define);
-        PREPARE stmt FROM @ddl;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END$$
-DELIMITER ;
-
+-- =====================================================================
+-- ⚠️ 2026-10-04 重写：加列方式由「存储过程 + DELIMITER」改为
+--    「SET @ddl=(SELECT IF(列存在,'SELECT 1','ALTER ...')) + PREPARE/EXECUTE」。
+--    原因：DELIMITER 是 mysql 客户端指令而非 SQL，Flyway 的 MySQL 解析器不支持它
+--    （见 openspec/changes/2026-10-04-flyway-migration-automation）。
+--    改后行为等价（仍是「列不存在才加」），且两条执行路径都安全：
+--    Flyway 自动执行 与 人工重跑。
+--
+--    ⚠️ MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`（8.0.29+ 才有），
+--       故必须借 PREPARE/EXECUTE 做条件判断——也这是保留幂等性的唯一途径。
 -- ---------- 1. chat_session_user：置顶 / 免打扰 / 草稿 ----------
 -- top_type    0未置顶 1置顶（跨端同步，服务端真源）
 -- no_disturb  0正常 1免打扰（不闪烁、不响铃）
 -- draft       本地未发送的草稿（跨端同步）
-CALL ec_add_column('chat_session_user', 'top_type',
-    'tinyint(1) NULL DEFAULT 0 COMMENT ''0未置顶 1置顶''');
-CALL ec_add_column('chat_session_user', 'no_disturb',
-    'tinyint(1) NULL DEFAULT 0 COMMENT ''0正常 1免打扰''');
-CALL ec_add_column('chat_session_user', 'draft',
-    'varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''会话草稿''');
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_session_user` ADD COLUMN `top_type` tinyint(1) NULL DEFAULT 0 COMMENT ''0未置顶 1置顶''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_session_user' AND COLUMN_NAME = 'top_type');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_session_user` ADD COLUMN `no_disturb` tinyint(1) NULL DEFAULT 0 COMMENT ''0正常 1免打扰''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_session_user' AND COLUMN_NAME = 'no_disturb');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_session_user` ADD COLUMN `draft` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''会话草稿''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_session_user' AND COLUMN_NAME = 'draft');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 
 -- ---------- 2. user_contact：好友备注 / 分组 ----------
-CALL ec_add_column('user_contact', 'remark',
-    'varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''好友备注名''');
-CALL ec_add_column('user_contact', 'group_name',
-    'varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''好友分组名''');
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `user_contact` ADD COLUMN `remark` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''好友备注名''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_contact' AND COLUMN_NAME = 'remark');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `user_contact` ADD COLUMN `group_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''好友分组名''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_contact' AND COLUMN_NAME = 'group_name');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 
 -- ---------- 3. chat_message：扩展数据 / @ 提及 / 语音时长 ----------
 -- extra_data   JSON：{"quoteId":123,"quoteContent":"...","quoteUserId":"U...","forwardFrom":"U..."}
 -- at_user_ids  逗号分隔的被 @ 用户 ID
-CALL ec_add_column('chat_message', 'extra_data',
-    'varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''消息扩展数据JSON（引用/转发/@）''');
-CALL ec_add_column('chat_message', 'at_user_ids',
-    'varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''被@的用户ID，逗号分隔''');
-CALL ec_add_column('chat_message', 'duration',
-    'int(11) NULL DEFAULT NULL COMMENT ''语音/视频时长秒''');
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_message` ADD COLUMN `extra_data` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''消息扩展数据JSON（引用/转发/@）''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'extra_data');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_message` ADD COLUMN `at_user_ids` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT ''被@的用户ID，逗号分隔''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'at_user_ids');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = (SELECT IF(COUNT(*) > 0, 'SELECT 1', 'ALTER TABLE `chat_message` ADD COLUMN `duration` int(11) NULL DEFAULT NULL COMMENT ''语音/视频时长秒''')
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'duration');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 
 -- ---------- 4. 邮箱验证码（注册校验 / 忘记密码找回） ----------
 CREATE TABLE IF NOT EXISTS `email_verify_code` (
