@@ -107,7 +107,18 @@ public class EasyChatProperties {
         private String allowedImageTypes = "jpg,jpeg,png,gif,bmp,webp";
 
         /** 允许上传的文件类型 */
-        private String allowedFileTypes = "jpg,jpeg,png,gif,bmp,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,txt,mp4,mp3";
+        /**
+         * 允许上传的文件后缀（默认值，逗号分隔）。
+         *
+         * <p>2026-10-03：追加音频后缀（语音消息接通）。
+         * 原默认值**完全不含音频**，导致前端 {@code MediaRecorder} 产出的 {@code .webm}
+         * 上传必被 {@code CODE_2604} 拒绝。
+         *
+         * <p>与 {@link com.easychat.entity.constants.Constants#AUDIO_SUFFIX_LIST} 中的
+         * 必须**逐元素一致**——本默认值只是配置未覆盖时的兜底，
+         * 真正的归属判断在 {@code ChatMessageServiceImpl#checkFileAllowed}。
+         */
+        private String allowedFileTypes = "jpg,jpeg,png,gif,bmp,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,txt,mp4,mp3,webm,m4a,wav,ogg";
 
         public String getMaxFileSize() {
             return maxFileSize;

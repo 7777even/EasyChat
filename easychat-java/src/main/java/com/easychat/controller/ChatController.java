@@ -9,10 +9,10 @@ import com.easychat.entity.enums.MessageTypeEnum;
 import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.po.ChatMessage;
 import com.easychat.entity.po.ChatSessionUser;
+import com.easychat.exception.BusinessException;
 import com.easychat.entity.query.ChatMessageQuery;
 import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.entity.vo.Result;
-import com.easychat.exception.BusinessException;
 import com.easychat.mappers.ChatSessionUserMapper;
 import com.easychat.service.ChatMessageService;
 import com.easychat.service.ChatSessionUserService;
@@ -55,6 +55,50 @@ public class ChatController extends ABaseController {
     private AppConfig appConfig;
 
 
+    /**
+     * 标记语音消息已播放（未播放红点）。
+     *
+     * <p>「已播放」是 <b>每接收方独立</b> 的状态，落旁挂表 {@code chat_message_voice_read}（ADR-001）。
+     * 发送者本人不参与标记，非接收方拒绝，消息不存在 → CODE_2201。
+     *
+     * @since 2026-10-03 位置消息与语音消息接通
+     */
+    @PostMapping("/markVoiceRead")
+    @GlobalInterceptor
+    public Result<Void> markVoiceRead(HttpServletRequest request, @NotNull Long messageId) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        chatMessageService.markVoiceRead(tokenUserInfoDto.getUserId(), messageId);
+        return success();
+    }
+
+    /**
+     * 批量查询「已播放」的语音消息 id 列表（仅限本人）。
+     *
+     * <p>供前端渲染气泡红点：返回当前用户在传入消息列表中已播过的 id。
+     * 强制按 {@code userId} 过滤，不会泄露他人播放状态；入参超过 200 → CODE_1001。
+     *
+     * @since 2026-10-03 位置消息与语音消息接通
+     */
+    @PostMapping("/loadVoiceRead")
+    @GlobalInterceptor
+    public Result<java.util.List<Long>> loadVoiceRead(HttpServletRequest request,
+                                                       @NotEmpty String messageIdList) {
+        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        for (String s : messageIdList.split(",")) {
+            s = s.trim();
+            if (!s.isEmpty()) {
+                try {
+                    ids.add(Long.parseLong(s));
+                } catch (NumberFormatException e) {
+                    throw new BusinessException(ResponseCodeEnum.CODE_1001,
+                            "messageIdList 存在非数字元素: " + s);
+                }
+            }
+        }
+        return success(chatMessageService.loadVoiceRead(tokenUserInfoDto.getUserId(), ids));
+    }
+
     @PostMapping("/sendMessage")
     @GlobalInterceptor
     public Result<MessageSendDto> sendMessage(HttpServletRequest request,
@@ -69,8 +113,55 @@ public class ChatController extends ABaseController {
                                               String atUserIds,
                                               Integer duration) {
         MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(messageType);
-        if (null == messageTypeEnum || !ArrayUtils.contains(new Integer[]{MessageTypeEnum.CHAT.getType(), MessageTypeEnum.MEDIA_CHAT.getType()}, messageType)) {
+        if (null == messageTypeEnum || !ArrayUtils.contains(
+                new Integer[]{
+                        MessageTypeEnum.CHAT.getType(),
+                        MessageTypeEnum.MEDIA_CHAT.getType(),
+                        // 2026-10-03 接通位置 / 语音消息。
+                        // 之前此处白名单只有 {2,5}，点「发送位置」/「按住说话」直接 CODE_1001，
+                        // 连消息都建不出来 —— 这是位置/语音功能从未可用的第一层断链（probe 取证确认）。
+                        MessageTypeEnum.VOICE.getType(),
+                        MessageTypeEnum.LOCATION.getType()
+                }, messageType)) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        // 语音消息必填守卫：防伪造参数绕过前端 60s 上限（duration 由客户端传）
+        if (MessageTypeEnum.VOICE.getType().equals(messageType)) {
+            if (StringTools.isEmpty(fileName)) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "语音消息缺少文件名");
+            }
+            if (duration == null || duration < 1) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "语音消息缺少时长");
+            }
+            if (duration > Constants.VOICE_MAX_DURATION_SECONDS) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001,
+                        "语音时长不能超过 " + Constants.VOICE_MAX_DURATION_SECONDS + " 秒");
+            }
+            // 语音必须有 fileType=3 标记，否则接收方无法走音频渲染分支
+            if (fileType == null || fileType != 3) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "语音消息 fileType 必须为 3");
+            }
+        }
+        // 位置消息必填守卫：extraData 必须是合法 JSON 且含 location
+        if (MessageTypeEnum.LOCATION.getType().equals(messageType)) {
+            if (StringTools.isEmpty(extraData)) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "位置消息缺少位置信息");
+            }
+            // 复用 IdListTools 的严格校验思路？不——位置是 JSON 对象而非数组。
+            // 直接用 fastjson 解析，失败即拒；同时校验 location 字段存在。
+            try {
+                com.alibaba.fastjson.JSONObject obj = com.alibaba.fastjson.JSON.parseObject(extraData);
+                if (obj == null || StringTools.isEmpty(obj.getString("location"))) {
+                    throw new BusinessException(ResponseCodeEnum.CODE_1001, "位置信息缺少 location 字段");
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "位置信息格式错误");
+            }
+            if (extraData.length() > 2000) {
+                throw new BusinessException(ResponseCodeEnum.CODE_1001, "位置信息超长");
+            }
         }
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         ChatMessage chatMessage = new ChatMessage();

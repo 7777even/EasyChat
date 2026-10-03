@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.easychat.mappers.ChatMessageVoiceReadMapper">
+
+    <!--实体映射-->
+    <resultMap id="base_result_map" type="com.easychat.entity.po.ChatMessageVoiceRead">
+        <!--语音消息 id-->
+        <result column="message_id" property="messageId"/>
+        <!--接收方 user_id（播放者）-->
+        <result column="user_id" property="userId"/>
+        <!--播放状态 0 未播放 1 已播放-->
+        <result column="is_read" property="isRead"/>
+        <!--播放时间（毫秒）-->
+        <result column="read_time" property="readTime"/>
+        <!--状态行创建时间（毫秒）-->
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+
+    <!-- 通用查询结果列-->
+    <sql id="base_column_list">
+        message_id
+        ,user_id,is_read,read_time,create_time
+    </sql>
+
+    <sql id="base_condition_filed">
+        <if test="query.userId != null and query.userId != ''">
+            and user_id = #{query.userId}
+        </if>
+        <if test="query.messageId != null">
+            and message_id = #{query.messageId}
+        </if>
+        <if test="query.isRead != null">
+            and is_read = #{query.isRead}
+        </if>
+        <if test="query.messageIdList != null and query.messageIdList.length > 0">
+            and message_id in
+            <foreach collection="query.messageIdList" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+    </sql>
+
+    <!-- 通用查询条件-->
+    <sql id="query_condition">
+        <where>
+            <include refid="base_condition_filed"/>
+        </where>
+    </sql>
+
+    <!--按复合主键查单行（message_id + user_id）-->
+    <select id="selectByMessageIdAndUserId" resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM chat_message_voice_read
+        where message_id = #{messageId}
+        and user_id = #{userId}
+    </select>
+
+    <!--通用查询-->
+    <select id="selectList" parameterType="com.easychat.entity.query.ChatMessageVoiceReadQuery"
+            resultMap="base_result_map">
+        SELECT
+        <include refid="base_column_list"/>
+        FROM chat_message_voice_read
+        <include refid="query_condition"/>
+    </select>
+
+    <!--通用查询数量-->
+    <select id="selectCount" parameterType="com.easychat.entity.query.ChatMessageVoiceReadQuery"
+            resultType="java.lang.Integer">
+        SELECT count(1) FROM chat_message_voice_read
+        <include refid="query_condition"/>
+    </select>
+
+    <!--插入-->
+    <insert id="insert" parameterType="com.easychat.entity.po.ChatMessageVoiceRead">
+        INSERT INTO chat_message_voice_read
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">
+                message_id,
+            </if>
+            <if test="bean.userId != null">
+                user_id,
+            </if>
+            <if test="bean.isRead != null">
+                is_read,
+            </if>
+            <if test="bean.readTime != null">
+                read_time,
+            </if>
+            <if test="bean.createTime != null">
+                create_time,
+            </if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">
+                #{bean.messageId},
+            </if>
+            <if test="bean.userId != null">
+                #{bean.userId},
+            </if>
+            <if test="bean.isRead != null">
+                #{bean.isRead},
+            </if>
+            <if test="bean.readTime != null">
+                #{bean.readTime},
+            </if>
+            <if test="bean.createTime != null">
+                #{bean.createTime},
+            </if>
+        </trim>
+    </insert>
+
+    <!--
+      插入或者更新（只更新有值的字段）。
+
+      ★ 关于 on DUPLICATE key update 的字段选择：
+        只更新 **调用方显式赋了值** 的列，不无脑全量覆盖。
+        典型场景：markVoiceRead 只设 isRead + readTime（不设 createTime），
+        若这里把 create_time 也 update 成 VALUES(create_time)，而 VALUES 里
+        create_time 因为 <if> 未命中而取到列默认值 NULL，
+        就会把「行创建时间」抹成 NULL —— 语义丢失且极难定位。
+    -->
+    <insert id="insertOrUpdate" parameterType="com.easychat.entity.po.ChatMessageVoiceRead">
+        INSERT INTO chat_message_voice_read
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">
+                message_id,
+            </if>
+            <if test="bean.userId != null">
+                user_id,
+            </if>
+            <if test="bean.isRead != null">
+                is_read,
+            </if>
+            <if test="bean.readTime != null">
+                read_time,
+            </if>
+            <if test="bean.createTime != null">
+                create_time,
+            </if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">
+                #{bean.messageId},
+            </if>
+            <if test="bean.userId != null">
+                #{bean.userId},
+            </if>
+            <if test="bean.isRead != null">
+                #{bean.isRead},
+            </if>
+            <if test="bean.readTime != null">
+                #{bean.readTime},
+            </if>
+            <if test="bean.createTime != null">
+                #{bean.createTime},
+            </if>
+        </trim>
+        on DUPLICATE key update
+        <trim prefix="" suffix="" suffixOverrides=",">
+            <if test="bean.isRead != null">
+                is_read = VALUES(is_read),
+            </if>
+            <if test="bean.readTime != null">
+                read_time = VALUES(read_time),
+            </if>
+        </trim>
+    </insert>
+
+    <!-- 标记已播放：复合主键定位，只更新播放状态与播放时间 -->
+    <update id="markRead" parameterType="com.easychat.entity.po.ChatMessageVoiceRead">
+        UPDATE chat_message_voice_read
+        <set>
+            <if test="bean.isRead != null">
+                is_read = #{bean.isRead},
+            </if>
+            <if test="bean.readTime != null">
+                read_time = #{bean.readTime},
+            </if>
+        </set>
+        where message_id = #{bean.messageId}
+        and user_id = #{bean.userId}
+    </update>
+
+    <!-- 批量查「已播放」的 message_id（仅限指定用户，供前端渲染红点） -->
+    <select id="selectReadMessageIds" parameterType="com.easychat.entity.query.ChatMessageVoiceReadQuery"
+            resultType="java.lang.Long">
+        SELECT message_id
+        FROM chat_message_voice_read
+        WHERE user_id = #{query.userId}
+        and is_read = 1
+        <if test="query.messageIdList != null and query.messageIdList.length > 0">
+            and message_id in
+            <foreach collection="query.messageIdList" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+    </select>
+
+    <!--通用更新-->
+    <update id="updateByParam" parameterType="com.easychat.entity.po.ChatMessageVoiceRead">
+        UPDATE chat_message_voice_read
+        <set>
+            <if test="bean.isRead != null">
+                is_read = #{bean.isRead},
+            </if>
+            <if test="bean.readTime != null">
+                read_time = #{bean.readTime},
+            </if>
+        </set>
+        <include refid="query_condition"/>
+    </update>
+
+    <!--通用删除-->
+    <delete id="deleteByParam" parameterType="com.easychat.entity.query.ChatMessageVoiceReadQuery">
+        DELETE FROM chat_message_voice_read
+        <include refid="query_condition"/>
+    </delete>
+
+    <!--批量插入-->
+    <insert id="insertBatch" parameterType="java.util.List">
+        INSERT INTO chat_message_voice_read
+        (message_id, user_id, is_read, read_time, create_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.messageId}, #{item.userId}, #{item.isRead}, #{item.readTime}, #{item.createTime})
+        </foreach>
+    </insert>
+
+    <!--批量插入或者更新：只更新播放状态与播放时间（不覆盖 create_time）-->
+    <insert id="insertOrUpdateBatch" parameterType="java.util.List">
+        INSERT INTO chat_message_voice_read
+        (message_id, user_id, is_read, read_time, create_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.messageId}, #{item.userId}, #{item.isRead}, #{item.readTime}, #{item.createTime})
+        </foreach>
+        on DUPLICATE key update
+        is_read = VALUES(is_read),
+        read_time = VALUES(read_time)
+    </insert>
+
+</mapper>

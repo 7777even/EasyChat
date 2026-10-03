@@ -10,8 +10,10 @@ import com.easychat.entity.enums.*;
 import com.easychat.entity.po.ChatMessage;
 import com.easychat.entity.po.ChatSession;
 import com.easychat.entity.po.ChatSessionUser;
+import com.easychat.entity.po.ChatMessageVoiceRead;
 import com.easychat.entity.po.UserContact;
 import com.easychat.entity.query.ChatMessageQuery;
+import com.easychat.entity.query.ChatMessageVoiceReadQuery;
 import com.easychat.entity.query.ChatSessionQuery;
 import com.easychat.entity.query.ChatSessionUserQuery;
 import com.easychat.entity.query.SimplePage;
@@ -46,6 +48,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import java.io.File;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -92,6 +95,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Resource
     private ChatSessionUserMapper<ChatSessionUser, ChatSessionUserQuery> chatSessionUserMapper;
+
+    /** 语音未播放红点状态（migration-012 新表；2026-10-03） */
+    @Resource
+    private com.easychat.mappers.ChatMessageVoiceReadMapper chatMessageVoiceReadMapper;
 
     @Resource
     private com.easychat.service.OperationLogService operationLogService;
@@ -236,7 +243,12 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 MessageTypeEnum.CHAT.getType(),
                 MessageTypeEnum.GROUP_CREATE.getType(),
                 MessageTypeEnum.ADD_FRIEND.getType(),
-                MessageTypeEnum.MEDIA_CHAT.getType()
+                MessageTypeEnum.MEDIA_CHAT.getType(),
+                // 2026-10-03 接通位置 / 语音消息。
+                // 之前此白名单只有 {2,3,1,5}，位置/语音的消息行根本不会 INSERT 进 chat_message 表，
+                // 即使绕过 ChatController 的第 1 层，第 2 层也会断。
+                MessageTypeEnum.VOICE.getType(),
+                MessageTypeEnum.LOCATION.getType()
         }, messageTypeEnum.getType())) {
             if (UserContactTypeEnum.USER == contactTypeEnum) {
                 sessionId = StringTools.getChatSessionId4User(new String[]{sendUserId, contactId});
@@ -345,18 +357,29 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             }
         }
         if (!inWhiteList) {
+            // ★ 不为音频在此另加一道「无条件放行」：allowedFileTypes 才是类型白名单的真源。
+            // 若运维显式改窄配置使之不含音频后缀，上传理应被拒——这是运维的显式决策，
+            // 而非实现该自作主张地替他开口子。AUDIO_SUFFIX_LIST 仅用于下方的分类大小判定。
             throw new BusinessException(ResponseCodeEnum.CODE_2604);
         }
         // 3. 分类大小上限
         boolean isImage = Arrays.asList(Constants.IMAGE_SUFFIX_LIST).contains(fileSuffix.toLowerCase());
         boolean isVideo = Arrays.asList(Constants.VIDEO_SUFFIX_LIST).contains(fileSuffix.toLowerCase());
+        boolean isAudio = Arrays.asList(Constants.AUDIO_SUFFIX_LIST).contains(fileSuffix.toLowerCase());
         long maxSize;
         if (isImage && sysSettingDto.getMaxImageSize() != null) {
             maxSize = Constants.FILE_SIZE_MB * sysSettingDto.getMaxImageSize();
         } else if (isVideo && sysSettingDto.getMaxVideoSize() != null) {
             maxSize = Constants.FILE_SIZE_MB * sysSettingDto.getMaxVideoSize();
-        } else {
+        } else if (isAudio) {
+            // 音频统一走 maxFileSize（默认 15MB）。60s 单声道 16kbps .webm 约 120KB，
+            // 即便双声道/高比特率也远低于 15MB，余量充足；
+            // 刻意**不**为音频单独加 sysSetting 字段（避免 DDL 与管理端联动的表面积膨胀）
             maxSize = Constants.FILE_SIZE_MB * (sysSettingDto.getMaxFileSize() == null ? 15 : sysSettingDto.getMaxFileSize());
+        } else if (sysSettingDto.getMaxFileSize() != null) {
+            maxSize = Constants.FILE_SIZE_MB * sysSettingDto.getMaxFileSize();
+        } else {
+            maxSize = Constants.FILE_SIZE_MB * 15L;
         }
         if (file.getSize() > maxSize) {
             throw new BusinessException(ResponseCodeEnum.CODE_2603,
@@ -408,6 +431,110 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         messageSend.setMessageType(MessageTypeEnum.FILE_UPLOAD.getType());
         messageSend.setContactId(message.getContactId());
         messageHandler.sendMessage(messageSend);
+    }
+
+    // ==================== 语音未播放红点（2026-10-03）===================
+
+    /** loadVoiceRead 批量入参上限：防滥用批量拉取他人状态 */
+    private static final int VOICE_READ_BATCH_LIMIT = 200;
+
+    /**
+     * 标记语音消息已播放。
+     *
+     * <p><b>三条守卫，缺一不可</b>：
+     * <ol>
+     *   <li>消息存在且未删 → 否则 {@code CODE_2201}（复用既有 isDeleted 语义）</li>
+     *   <li>必须是 {@link MessageTypeEnum#VOICE} → 否则 {@code CODE_1001}
+     *       （防止拿红点表当通用标记表滥用）</li>
+     *   <li><b>调用者必须是该消息的会话对方</b>（单聊）或该群成员 → 否则 {@code CODE_1001}。
+     *       不能用 {@code message.getSendUserId() == userId} 判 —— 那是发送者本人，
+     *       自己发的语音不该由自己标已读（否则红点永远消失）</li>
+     * </ol>
+     *
+     * <p>写入的 {@code user_id} 是<b>调用者本人</b>（per-receiver 语义，ADR-001）。
+     */
+    @Override
+    public void markVoiceRead(String userId, Long messageId) {
+        if (StringTools.isEmpty(userId) || messageId == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        ChatMessage message = this.chatMessageMapper.selectByMessageId(messageId);
+        if (message == null || isDeleted(message)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_2201);
+        }
+        if (!MessageTypeEnum.VOICE.getType().equals(message.getMessageType())) {
+            logger.warn("非语音消息被标记已播放，messageId={}, type={}", messageId, message.getMessageType());
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        // 发送者本人不参与：红点是接收方的未播放提示
+        if (userId.equals(message.getSendUserId())) {
+            logger.warn("发送者尝试标记自己语音的已播放状态，userId={}, messageId={}", userId, messageId);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        if (!isVoiceReadReceiver(userId, message)) {
+            logger.warn("非该消息接收方尝试标记已播放，userId={}, messageId={}", userId, messageId);
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+
+        ChatMessageVoiceRead update = new ChatMessageVoiceRead();
+        update.setMessageId(messageId);
+        // ★ 必须记「播放者」而非发送者：per-receiver 语义（ADR-001）
+        update.setUserId(userId);
+        update.setIsRead(1);
+        long now = System.currentTimeMillis();
+        update.setReadTime(now);
+        // 首次插入时写入 create_time（状态行建立时间）；upsert 的 on-duplicate 分支不覆盖它。
+        // 这是「播放者第一次打开该语音」的时刻，与 read_time 在快速播放场景下重合是正常的。
+        update.setCreateTime(now);
+        // 用 upsert：接收方可能从未打开过会话（行不存在），此时纯 UPDATE 影响 0 行，
+        // 红点永远记不下来。insertOrUpdate 在「行不存在」时插入、「行存在」时只改播放状态，
+        // 既幂等又自愈（重复标记命中 on-duplicate，不改 create_time）。
+        this.chatMessageVoiceReadMapper.insertOrUpdate(update);
+    }
+
+    /**
+     * 校验 {@code userId} 是否为该消息的合法接收方。
+     *
+     * <p>单聊：必须与 {@code message.contactId} 一致（会话对方）。
+     * <p>群聊：必须是该群成员（status=FRIEND）。
+     */
+    private boolean isVoiceReadReceiver(String userId, ChatMessage message) {
+        UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(message.getContactId());
+        if (UserContactTypeEnum.GROUP == contactTypeEnum) {
+            UserContactQuery query = new UserContactQuery();
+            query.setUserId(userId);
+            query.setContactId(message.getContactId());
+            query.setContactType(UserContactTypeEnum.GROUP.getType());
+            query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+            Integer count = this.userContactMapper.selectCount(query);
+            return count != null && count > 0;
+        }
+        return userId.equals(message.getContactId());
+    }
+
+    /**
+     * 批量查询「已播放」的语音消息 id（仅限本人）。
+     *
+     * <p>★ 查询强制带 {@code userId} —— 漏掉会泄露他人播放状态。
+     */
+    @Override
+    public List<Long> loadVoiceRead(String userId, List<Long> messageIdList) {
+        if (StringTools.isEmpty(userId)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001);
+        }
+        if (messageIdList == null || messageIdList.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (messageIdList.size() > VOICE_READ_BATCH_LIMIT) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001,
+                    "一次最多查询 " + VOICE_READ_BATCH_LIMIT + " 条");
+        }
+        ChatMessageVoiceReadQuery query = new ChatMessageVoiceReadQuery();
+        query.setUserId(userId);
+        query.setMessageIdList(messageIdList);
+        query.setIsRead(1);
+        List<Long> readIds = this.chatMessageVoiceReadMapper.selectReadMessageIds(query);
+        return readIds == null ? Collections.emptyList() : readIds;
     }
 
     @Override
@@ -475,10 +602,12 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
 
-        // 检查消息类型，只有普通聊天消息和媒体消息可以撤回
+        // 检查消息类型，文本/媒体/语音/位置 都可以撤回（2026-10-03 追加 24/25）
         if (!ArraysUtil.contains(new Integer[]{
                 MessageTypeEnum.CHAT.getType(),
-                MessageTypeEnum.MEDIA_CHAT.getType()
+                MessageTypeEnum.MEDIA_CHAT.getType(),
+                MessageTypeEnum.VOICE.getType(),
+                MessageTypeEnum.LOCATION.getType()
         }, message.getMessageType())) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
@@ -648,16 +777,19 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             query.setSendTimeEnd(endTime);
         }
 
-        // 类型筛选与「只搜聊天/媒体消息」的默认范围互斥：
-        // 传了 messageType 就按该类型精确过滤，否则限定在普通聊天 + 媒体消息内。
+        // 类型筛选与「只搜聊天/媒体/语音/位置消息」的默认范围互斥：
+        // 传了 messageType 就按该类型精确过滤，否则限定在普通聊天 + 媒体 + 语音 + 位置内。
         // 历史实现两者叠加（message_type = X AND message_type IN (2,5)），
         // 导致筛选非 2/5 类型时结果必然为空。
+        // 2026-10-03：默认范围从 {2,5} 扩到 {2,5,24,25}，否则用户搜「位置/语音」会找不到。
         if (messageType != null && messageType > 0) {
             query.setMessageType(messageType);
         } else {
             query.setMessageTypeList(new Integer[]{
                     MessageTypeEnum.CHAT.getType(),
-                    MessageTypeEnum.MEDIA_CHAT.getType()
+                    MessageTypeEnum.MEDIA_CHAT.getType(),
+                    MessageTypeEnum.VOICE.getType(),
+                    MessageTypeEnum.LOCATION.getType()
             });
         }
 
@@ -718,7 +850,13 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 query.setSessionIdList(sessionIds);
                 query.setMessageTypeList(new Integer[]{
                         MessageTypeEnum.CHAT.getType(),
-                        MessageTypeEnum.MEDIA_CHAT.getType()
+                        MessageTypeEnum.MEDIA_CHAT.getType(),
+                        // 2026-10-03：位置 / 语音消息的 message_content 分别是地址文本和「[语音]」，
+                        // 地址文本应可被全局搜索命中（与微信一致）。
+                        // 语音的 message_content 是占位符「[语音]」，搜到了也无意义，
+                        // 但为保持搜索结果与历史消息列表的口径一致，一并纳入。
+                        MessageTypeEnum.VOICE.getType(),
+                        MessageTypeEnum.LOCATION.getType()
                 });
                 query.setPageNo(1);
                 query.setPageSize(20);

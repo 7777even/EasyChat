@@ -14,9 +14,11 @@ import com.easychat.entity.vo.GlobalSearchResultVO;
 import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.exception.BusinessException;
 import com.easychat.mappers.ChatMessageMapper;
+import com.easychat.mappers.ChatMessageVoiceReadMapper;
 import com.easychat.mappers.ChatSessionMapper;
 import com.easychat.mappers.ChatSessionUserMapper;
 import com.easychat.mappers.UserContactMapper;
+import com.easychat.entity.po.ChatMessageVoiceRead;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.GroupInfoService;
 import com.easychat.service.OperationLogService;
@@ -25,6 +27,7 @@ import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -82,6 +85,9 @@ public class ChatMessageServiceImplTest {
 
     @Mock
     private OperationLogService operationLogService;
+
+    @Mock
+    private ChatMessageVoiceReadMapper chatMessageVoiceReadMapper;
 
     // ======================== 保存消息 ========================
 
@@ -531,5 +537,160 @@ public class ChatMessageServiceImplTest {
         Integer count = chatMessageService.findCountByParam(query);
 
         assertEquals(Integer.valueOf(10), count);
+    }
+
+    // ==================== 语音未播放红点（2026-10-03）===================
+    // 覆盖 openspec/changes/2026-10-03-location-and-voice-message：
+    // markVoiceRead / loadVoiceRead。
+    //
+    // 核心不变式：**播放状态是 per-receiver 的**（ADR-001），
+    // 因此任何操作都必须带 userId 定位，且只影响本人那一行。
+
+    private static final String VOICE_SENDER = "U_sender";
+    private static final String VOICE_RECEIVER = "U_receiver";
+    private static final Long VOICE_MSG_ID = 9001L;
+
+    private ChatMessage voiceMessage(String senderId) {
+        ChatMessage m = new ChatMessage();
+        m.setMessageId(VOICE_MSG_ID);
+        m.setMessageType(MessageTypeEnum.VOICE.getType());
+        m.setSendUserId(senderId);
+        m.setSessionId("session-voice");
+        m.setContactId(VOICE_RECEIVER);
+        m.setContactType(UserContactTypeEnum.USER.getType());
+        m.setFileName("voice_1.webm");
+        m.setDuration(3);
+        m.setDeleteFlag(0L);
+        return m;
+    }
+
+    @Test
+    public void markVoiceRead_receiverMarks_success() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(voiceMessage(VOICE_SENDER));
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+
+        verify(chatMessageVoiceReadMapper).insertOrUpdate(any(ChatMessageVoiceRead.class));
+        }
+
+    /**
+     * ★ 不变式：写入的 userId 必须是**调用者本人**，不能被入参之外的东西覆盖。
+     * 若实现里误用 message.getSendUserId()，红点会记到发送者名下 —— 对端永远看不到红点。
+     */
+    @Test
+    public void markVoiceRead_writesCurrentUserNotSender() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(voiceMessage(VOICE_SENDER));
+        ArgumentCaptor<ChatMessageVoiceRead> captor =
+                ArgumentCaptor.forClass(ChatMessageVoiceRead.class);
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+
+        verify(chatMessageVoiceReadMapper).insertOrUpdate(captor.capture());
+        assertEquals("红点必须记在播放者（当前用户）名下", VOICE_RECEIVER, captor.getValue().getUserId());
+        assertEquals(VOICE_MSG_ID, captor.getValue().getMessageId());
+        assertEquals(Integer.valueOf(1), captor.getValue().getIsRead());
+        assertNotNull("播放时间必须写入", captor.getValue().getReadTime());
+    }
+
+    /** 发送方本人不能给自己的语音标已读（否则自己就看不到红点） */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_senderCannotMark() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(voiceMessage(VOICE_SENDER));
+
+        chatMessageService.markVoiceRead(VOICE_SENDER, VOICE_MSG_ID);
+    }
+
+    /** 无关第三方不能替他人标记 */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_strangerRejected() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(voiceMessage(VOICE_SENDER));
+
+        chatMessageService.markVoiceRead("U_stranger", VOICE_MSG_ID);
+    }
+
+    /** 消息不存在 → CODE_2201 */
+    @Test
+    public void markVoiceRead_messageNotFound() {
+        when(chatMessageMapper.selectByMessageId(404L)).thenReturn(null);
+        try {
+            chatMessageService.markVoiceRead(VOICE_RECEIVER, 404L);
+            fail("消息不存在应抛异常");
+        } catch (BusinessException e) {
+            assertEquals(Integer.valueOf(2201), e.getCode());
+        }
+    }
+
+    /** 非语音消息不允许标已读（防止拿红点表当通用标记表滥用） */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_notVoiceMessageRejected() {
+        ChatMessage text = voiceMessage(VOICE_SENDER);
+        text.setMessageType(MessageTypeEnum.CHAT.getType());
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(text);
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+    }
+
+    /** 已删除的消息不允许标已读 */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_deletedMessageRejected() {
+        ChatMessage deleted = voiceMessage(VOICE_SENDER);
+        deleted.setDeleteFlag(System.currentTimeMillis());
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(deleted);
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+    }
+
+    @Test
+    public void loadVoiceRead_success() {
+        when(chatMessageVoiceReadMapper.selectReadMessageIds(any(ChatMessageVoiceReadQuery.class)))
+                .thenReturn(Arrays.asList(9001L, 9002L));
+
+        List<Long> result = chatMessageService.loadVoiceRead(VOICE_RECEIVER,
+                Arrays.asList(9001L, 9002L, 9003L));
+
+        assertEquals(2, result.size());
+        assertTrue(result.contains(9001L));
+    }
+
+    /**
+     * ★ 不变式：查询必须**带 userId**。
+     * 若漏了 userId，会返回所有人在这些消息上的已读状态 —— 泄露他人隐私。
+     */
+    @Test
+    public void loadVoiceRead_scopedToCurrentUser() {
+        ArgumentCaptor<ChatMessageVoiceReadQuery> captor =
+                ArgumentCaptor.forClass(ChatMessageVoiceReadQuery.class);
+        when(chatMessageVoiceReadMapper.selectReadMessageIds(any(ChatMessageVoiceReadQuery.class)))
+                .thenReturn(Collections.emptyList());
+
+        chatMessageService.loadVoiceRead(VOICE_RECEIVER, Arrays.asList(9001L));
+
+        verify(chatMessageVoiceReadMapper).selectReadMessageIds(captor.capture());
+        assertEquals("查询必须限定当前用户", VOICE_RECEIVER, captor.getValue().getUserId());
+        assertEquals(1, captor.getValue().getMessageIdList().length);
+        assertEquals(Long.valueOf(9001L), captor.getValue().getMessageIdList()[0]);
+    }
+
+    /** 空列表直接返回，不查库 */
+    @Test
+    public void loadVoiceRead_emptyListReturnsEmpty() {
+        assertTrue(chatMessageService.loadVoiceRead(VOICE_RECEIVER, Collections.emptyList()).isEmpty());
+        verify(chatMessageVoiceReadMapper, never()).selectReadMessageIds(any());
+    }
+
+    /** 超过 200 个 id → CODE_1001（防滥用批量拉取） */
+    @Test
+    public void loadVoiceRead_tooManyIdsRejected() {
+        List<Long> tooMany = new ArrayList<>();
+        for (int i = 0; i < 201; i++) {
+            tooMany.add(9000L + i);
+        }
+        try {
+            chatMessageService.loadVoiceRead(VOICE_RECEIVER, tooMany);
+            fail("超过 200 个 id 应抛 CODE_1001");
+        } catch (BusinessException e) {
+            assertEquals(Integer.valueOf(1001), e.getCode());
+        }
+        verify(chatMessageVoiceReadMapper, never()).selectReadMessageIds(any());
     }
 }

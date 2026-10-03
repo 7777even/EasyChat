@@ -75,6 +75,32 @@ public interface ChatMessageService {
 
     MessageSendDto saveMessage(ChatMessage chatMessage, TokenUserInfoDto tokenUserInfoDto);
 
+    /**
+     * 标记语音消息已播放（仅接收方可为本人标记）
+     *
+     * <p>「未播放红点」状态是 <b>每接收方独立</b> 的，落在旁挂表
+     * {@code chat_message_voice_read}（ADR-001：不能加列到共享的 chat_message）。
+     *
+     * @param userId    当前登录用户（只能是接收方本人）
+     * @param messageId 语音消息 id
+     * @throws com.easychat.exception.BusinessException
+     *         消息不存在 / 已删 → CODE_2201；非接收方 → CODE_1001；
+     *         该消息不是语音（VOICE=24）→ CODE_1001
+     * @since 2026-10-03 位置消息与语音消息接通
+     */
+    void markVoiceRead(String userId, Long messageId);
+
+    /**
+     * 批量查询「已播放」的语音消息 id（仅限本人）
+     *
+     * @param userId       当前登录用户
+     * @param messageIdList 消息 id 列表（调用方须先校验这些消息属于该用户所在会话）
+     * @return 已播放的 message_id 列表（不可变视图）
+     * @throws com.easychat.exception.BusinessException 入参超过 200 个 → CODE_1001
+     * @since 2026-10-03 位置消息与语音消息接通
+     */
+    List<Long> loadVoiceRead(String userId, List<Long> messageIdList);
+
     void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile cover);
 
     File downloadFile(TokenUserInfoDto userInfoDto, Long messageId, Boolean cover);

@@ -42,7 +42,29 @@ public class Constants {
 
     public static final String[] VIDEO_SUFFIX_LIST = new String[]{".mp4", ".avi", ".rmvb", ".mkv", ".mov"};
 
+    /**
+     * 音频后缀白名单（2026-10-03 语音消息接通）。
+     *
+     * <p>覆盖前端 {@code MediaRecorder} 默认输出（{@code .webm} / {@code .ogg}）
+     * 与常见音频容器。全部为**媒体容器**，不含脚本/可执行内容，
+     * 与 {@code DANGEROUS_SUFFIX_LIST} 的可执行文件硬拦截并存不冲突。
+     *
+     * <p>刻意<b>不含 {@code .amr}</b>（微信同款）：兼容它需引入转码依赖与失败路径，
+     * 而播放体验对用户不可感知（见 openspec design ADR-003）。
+     */
+    public static final String[] AUDIO_SUFFIX_LIST = new String[]{".webm", ".m4a", ".mp3", ".wav", ".ogg"};
+
     public static final Long FILE_SIZE_MB = 1024 * 1024L;
+
+    /**
+     * 语音消息时长上限（秒，2026-10-03）。
+     *
+     * <p>对标微信的 60 秒。前端 {@code MessageSend.vue#MAX_RECORDING_TIME} 同为 60000ms，
+     * 此处是<b>服务端</b>的同值守卫 —— {@code duration} 由客户端传参，可伪造。
+     *
+     * <p>若将来放宽前端上限，<b>必须同步改这里</b>（否则合法语音会被拒）。
+     */
+    public static final Integer VOICE_MAX_DURATION_SECONDS = 60;
 
     /**
      * redis key 相关

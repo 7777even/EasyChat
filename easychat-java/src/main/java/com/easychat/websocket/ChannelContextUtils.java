@@ -341,7 +341,11 @@ public class ChannelContextUtils {
             MessageTypeEnum.REMOVE_GROUP.getType(),         // 12 被移出群聊
             MessageTypeEnum.RECALL_MESSAGE.getType(),       // 14 撤回消息
             MessageTypeEnum.ADMIN_DELETE.getType(),         // 20 管理端删除消息（ADR-003）
-            MessageTypeEnum.NUDGE.getType()                 // 26 拍一拍
+            MessageTypeEnum.NUDGE.getType(),                // 26 拍一拍
+            // 2026-10-03 接通位置(25)/语音(24)：与 CHAT/MEDIA_CHAT 同语义（contactId=会话对方），
+            // 经 applyContactConvert 转换后按既有 contactId 解析分发，无需特殊处理
+            MessageTypeEnum.VOICE.getType(),                // 24 语音消息
+            MessageTypeEnum.LOCATION.getType()              // 25 位置消息
     );
 
     /**

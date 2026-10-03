@@ -95,6 +95,20 @@ CREATE TABLE `chat_session_user`  (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4  COMMENT = '会话用户';
 
 -- ----------------------------
+-- Table structure for chat_message_voice_read
+-- ----------------------------
+DROP TABLE IF EXISTS `chat_message_voice_read`;
+CREATE TABLE `chat_message_voice_read`  (
+  `message_id` bigint(20) NOT NULL COMMENT '语音消息 id（chat_message.message_id）',
+  `user_id` varchar(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '接收方 user_id（播放者）',
+  `is_read` tinyint(1) NOT NULL DEFAULT 0 COMMENT '播放状态 0未播放 1已播放',
+  `read_time` bigint(20) NULL DEFAULT NULL COMMENT '播放时间（毫秒），未播放为 NULL',
+  `create_time` bigint(20) NULL DEFAULT NULL COMMENT '状态行创建时间（毫秒）',
+  PRIMARY KEY (`message_id`, `user_id`) USING BTREE,
+  INDEX `idx_user_read`(`user_id`, `is_read`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '语音消息未播放状态（每接收方独立）';
+
+-- ----------------------------
 -- Table structure for group_info
 -- ----------------------------
 DROP TABLE IF EXISTS `group_info`;
