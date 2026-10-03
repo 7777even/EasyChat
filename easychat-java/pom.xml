@@ -21,10 +21,18 @@
 
     <properties>
 	 <codeversion>9425581304</codeversion>
-        <java.version>1.8</java.version>
+        <!-- 2026-10-03：1.8 → 17（对齐 CI 与 Dockerfile，消除本地 JDK17 / CI JDK8 的漂移）。
+             连带修掉两个真实问题：
+               ① maven.compiler.source/target 显式写死 1.8，覆盖了 parent 的 java.version，
+                  造成「改了 java.version 却毫无作用」的假象；
+               ② 旧目标下 pom 给 spring-boot 插件配了仅 JDK9+ 支持的模块开放参数，
+                  使 `mvn spring-boot:run` 在 JDK 8 上直接启动失败，而 CI 只跑 test/package 照不到。
+             JDK 11+ 移除了 java.xml.ws.annotation，但 jakarta.annotation-api 1.3.5
+             仍以 javax.annotation 包提供 Resource/PostConstruct，编译不受影响（已实测）。 -->
+        <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <skipTests>false</skipTests>
         <codeversion>7164461598</codeversion>
         <springboot.version>2.6.1</springboot.version>
@@ -201,10 +209,15 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>2.2.6.RELEASE</version>
+                <!-- 2026-10-03：删除显式 <version>2.2.6.RELEASE</version>。
+                     原先它与 parent 2.6.1 倒挂，产物是「loader 2.2.6 去跑 2.6.1 的类」——
+                     既不保证能跑，也不保证 boot loader 与 Boot 版本匹配。
+                     不写版本号即由 parent 统一管理，与 spring-boot-starter-mail 等依赖同一口径。 -->
                 <configuration>
                     <mainClass>com.easychat.EasyChatApplication</mainClass>
-                    <!-- Redisson FST 编码在 Java 17+ 下需要开放模块访问权限 -->
+                    <!-- Redisson FST 编码在 JDK 17 强封装下需要开放模块访问权限。
+                         java.version 已升到 17，故此参数是必需项而非兼容性残留。
+                         注：本注释刻意不写模块开放参数的原文字面量，XML 注释内不允许连续两个连字符。 -->
                     <jvmArguments>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.math=ALL-UNNAMED</jvmArguments>
                 </configuration>
             </plugin>

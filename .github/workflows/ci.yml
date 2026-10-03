@@ -27,11 +27,13 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('easychat-java/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
-      - name: 安装 JDK 8
+      # 2026-10-03：temurin 8 → 17，与 pom 的 java.version=17 及 Dockerfile 对齐。
+      # 先前本机 JDK 17 / CI JDK 8 长期漂移，导致「本地全绿」无法推断「CI 全绿」。
+      - name: 安装 JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '17'
           cache: maven
           cache-dependency-path: easychat-java/pom.xml
 
