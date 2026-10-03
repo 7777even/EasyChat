@@ -33,15 +33,17 @@
 
 ## 阶段一：门禁先红后绿
 
-- [ ] **T1.1** 新增 `scripts/verify/verify_migration_flyway.mjs`：断言
-      ① `pom.xml` 引入 `flyway-core` 且**未硬写版本号**
+- [x] **T1.1** 新增 `scripts/verify/verify_migration_flyway.mjs`（**最终 54 项断言**）：断言
+      ① `pom.xml` 引入 `flyway-core` 且**显式钉版本**（原计划写「未硬写版本号」，
+         被实测 1 推翻——必须钉 7.15.0，理由见下），并校验该版本 major < 8
       ② `<resources>` 把 `easychat-migration-*.sql` 复制到 `db/migration`
-      ③ `application.properties` 的 `locations` / `prefix` / `separator` 正确
+      ③ `application.properties` 的 `locations` / `prefix` / `separator` / `validate-on-migrate` 正确
       ④ **`baseline-version` 等于仓库内最大迁移编号**（ADR-004 的核心断言）
-      ⑤ 迁移文件**零 `DELIMITER`**、零 `CREATE PROCEDURE`
-      ⑥ `compose` 含 `migrate` service 且 backend 依赖其 `service_completed_successfully`
-      ⑦ 前置脚本存在且 fail-closed（不一致时退出非 0）
-      在**未改造**代码上实跑须 exit=1 — ≤1h
+      ⑤ 迁移文件**零 `DELIMITER`**、零 `CREATE PROCEDURE|FUNCTION|TRIGGER|EVENT`
+      ⑥ `compose` 含 `migrate` service 且 backend 的 `depends_on` **结构化**解析出 migrate 条目
+      ⑦ 前置脚本存在、含拒绝分支、以非 0 退出，且**优先读 env** 声明的版本号
+      ⑧ 迁移编号连续且从 001 起；⑨ backend 与 migrate **共用同一** baseline-version 变量
+      在**未改造**代码上实跑 exit=1（4 项红），改造后 **54/54 通过** — ≤1h
 - [x] **T1.2** 补 `scripts/verify/mutation_migration_flyway.cjs`（沙箱副本 + 变异） — **14/14 捕获** — ≤40min
 - [x] **T1.3** 接入 `ci.yml` 与 `pre-push` — ≤20min
 
