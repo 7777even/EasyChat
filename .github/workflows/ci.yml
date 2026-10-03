@@ -130,6 +130,15 @@ jobs:
       - name: 审计IP补齐与@所有人服务端鉴权契约
         run: node scripts/verify/verify_audit_and_at_all.mjs
 
+      # 2026-10-04 新增。引入 Flyway 后有三处「配错了不报错、只是静默跳过迁移」：
+      # ① flyway-core 版本被「顺手」改回随 parent 的 8.0.4 → Community 版不再支持
+      #    MySQL 5.7，本机开发库正是 5.7，开发者本地直接起不来
+      # ② baseline-version 忘记随新增迁移同步 → 新迁移在存量库被当作已应用而静默跳过
+      # ③ 迁移文件里混入 DELIMITER / CREATE PROCEDURE → Flyway 的 MySQL 解析器过不了
+      # 三者都不抛异常，属静默失效，故固化为机控断言。
+      - name: Flyway 迁移自动化契约
+        run: node scripts/verify/verify_migration_flyway.mjs
+
       - name: 虚拟列表核心算法
         run: node scripts/verify/verify_virtual_core.mjs
 

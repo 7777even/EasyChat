@@ -51,6 +51,48 @@ services:
       timeout: 5s
       retries: 10
 
+  # 迁移前置闸门（2026-10-04，openspec/changes/2026-10-04-flyway-migration-automation）
+  #
+  # 为什么需要它：Flyway 的 baseline-on-migrate **不比对 schema 内容**，只看
+  # 「库非空 且 没有历史表」就把 <= baseline-version 的迁移一律视为已应用。
+  # 于是一个实际只跑到 011 的库会被 baseline 到 12 并**静默跳过 012**。
+  # 「假定即事故」——本项目已因「只改基线忘迁移」吃过两次 500。
+  #
+  # 它做什么：仅在「声称自己是最新版（baseline-version == 最大迁移号）」
+  # 时比对活库与 easychat.sql，不一致就 exit 1。
+  # 存量库若用 SPRING_FLYWAY_BASELINE_VERSION=N 声明了真实版本号则直接放行。
+  #
+  # 注意：这里只做**校验**，不做迁移。真正的迁移由 backend 启动时 Flyway 执行
+  # （迁移脚本已打进 jar 的 db/migration），故 migrate 容器用完即退，
+  # backend 用 depends_on 的 service_completed_successfully 确保它先过闸。
+  migrate:
+    image: node:20-alpine
+    container_name: easychat-migrate
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      SCHEMA_DB_HOST: mysql
+      SCHEMA_DB_PORT: "3306"
+      SCHEMA_DB_USER: root
+      SCHEMA_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      SCHEMA_DB_NAME: ${MYSQL_DATABASE:-easychat}
+      # 存量库首次纳管时在这里声明该库**真实**版本号（如 9），
+      # Flyway 会据此执行其后的迁移；保持 12 表示「我已是最新，别重跑历史迁移」。
+      # 新建库保持默认即可（compose 只在 MySQL 首启导入基线，见 mysql volumes）。
+      SPRING_FLYWAY_BASELINE_VERSION: ${SPRING_FLYWAY_BASELINE_VERSION:-12}
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./easychat.sql:/work/easychat.sql:ro
+    # node:20-alpine 不含 mysql 客户端，而本脚本刻意零 npm 依赖地调 CLI
+    # （与 scripts/verify/verify_schema_drift.mjs、scripts/smoke/*.py 同一手法）。
+    # apk add 需联网，仅本地开发环境可接受；生产部署请预先构建含客户端的镜像。
+    entrypoint: >
+      sh -c "apk add --no-cache mysql-client >/dev/null &&
+             node /work/scripts/migrate/preflight-baseline-check.mjs"
+
   backend:
     build:
       context: .
@@ -62,6 +104,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # 迁移前置闸门必须先通过；不通过则后端**不启动**（fail-closed）
+      migrate:
+        condition: service_completed_successfully
     environment:
       TZ: Asia/Shanghai
       # 默认即 prod：忘加 `--env-file .env` 时也不至于静默跑在 dev profile 上。
@@ -72,6 +117,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
+      # ⚠ 必须与 migrate 闸门用**同一个** baseline-version，否则闸门校验的是一个值、
+      #   Flyway 实际执行的是另一个值 —— 那正是本变更要防的静默漂移。
+      SPRING_FLYWAY_BASELINE_VERSION: ${SPRING_FLYWAY_BASELINE_VERSION:-12}
       # 文件落盘根目录（对应 project.folder），挂卷以免容器重建丢文件
       PROJECT_FOLDER: /data/
     ports:
