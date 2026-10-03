@@ -112,6 +112,14 @@ jobs:
       - name: 本地文件服务器 fileType 与 content-type 一致性
         run: node scripts/verify/verify_file_type_content_type.mjs
 
+      # 2026-10-03 新增。首次运行即抓出三处认证面缺陷：
+      # ① 改密 / 找回密码成功后既不清 Token 也不推 FORCE_OFF_LINE（改密无法踢出攻击者）
+      # ② 邮箱验证码明文写日志（日志读权限 = 任意账号改密权限）
+      # ③ checkRateLimit 在 token 为 null 时直接 return → 四个未登录端点限流形同虚设
+      # 这三条都不抛异常、不打警告，属静默失效，故固化为机控断言。
+      - name: 密码会话失效与验证码投递契约
+        run: node scripts/verify/verify_password_session.mjs
+
       - name: 虚拟列表核心算法
         run: node scripts/verify/verify_virtual_core.mjs
 
