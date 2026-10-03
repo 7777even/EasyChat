@@ -154,6 +154,34 @@ if (!existsSync(PROD)) {
   } else {
     fail('prod profile 管理员邮箱不含真实地址', `实际为 ${pMail}`)
   }
+
+  // 3.5 邮件服务（2026-10-03 新增）：五项全部必须是占位符且不得带默认可用值。
+  // 纪律与 DB 密码完全一致：生产禁止默认可用凭据，留空即 fail-closed 拒绝发信。
+  const MAIL_KEYS = [
+    'spring.mail.host',
+    'spring.mail.port',
+    'spring.mail.username',
+    'spring.mail.password',
+    'spring.mail.from'
+  ]
+  let mailBad = 0
+  for (const k of MAIL_KEYS) {
+    const v = prod.get(k)
+    if (!isPlaceholder(v)) {
+      fail(`prod profile 邮件键为占位符：${k}`, `实际为 ${v === undefined ? '(缺失)' : v}`)
+      mailBad++
+    } else {
+      // 占位符里带非空默认值同样是泄露（如 ${SPRING_MAIL_PASSWORD:changeme}）
+      const m = /^\$\{[A-Z_][A-Z0-9_]*:(.*)\}$/.exec(v)
+      if (m && m[1] !== '') {
+        fail(`prod profile 邮件键无默认可用值：${k}`, `默认值 = ${m[1]}`)
+        mailBad++
+      } else {
+        pass(`prod profile 邮件键为占位符且无默认可用值：${k}`)
+      }
+    }
+  }
+  if (mailBad === 0) pass('prod profile 邮件服务五项均为占位符且无默认可用值')
 }
 
 // ── 4. .env 载体 ──────────────────────────────────────────────
