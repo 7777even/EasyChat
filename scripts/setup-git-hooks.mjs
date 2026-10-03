@@ -8,7 +8,8 @@
  * 会安装：
  *   commit-msg  → 调用 scripts/commit-msg-lint.mjs
  *   pre-commit  → 调用 scripts/pre-commit-guard.mjs
- *   pre-push    → 依次调用契约 / IPC / 规格卫生 / 配置凭据 / WS帧对账 / 文件类型MIME / 密码会话 7 条静态门禁
+ *   pre-push    → 依次调用契约 / IPC / 规格卫生 / 配置凭据 / WS帧对账 / 文件类型MIME / 密码会话 7 条静态门禁，
+*                 外加 1 条**需要活库**的门禁（基线⇄活库表结构对账）
  *                 （纯静态、无需启动服务；构建与单测由 CI 的 backend/frontend job 负责）
  *
  * 仅在 Windows 上需要同时生成 .bat 入口（Git for Windows 调用 hook 时需要）。
@@ -51,6 +52,7 @@ node "$ROOT/scripts/verify/verify_no_hardcoded_secret.mjs"
 node "$ROOT/scripts/verify/verify_ws_frame_parity.mjs"
 node "$ROOT/scripts/verify/verify_file_type_content_type.mjs"
 node "$ROOT/scripts/verify/verify_password_session.mjs"
+node "$ROOT/scripts/verify/verify_schema_drift.mjs"
 `,
     // Windows .bat 入口：pre-push 串多条门禁，逐条失败即中断
     batScript: 'pre-push-gates',
@@ -76,6 +78,9 @@ for (const [name, def] of Object.entries(hooks)) {
         'node "%ROOT%\\scripts\\verify\\verify_ws_frame_parity.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_file_type_content_type.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_password_session.mjs" || exit /b 1',
+        // 需要活库；本仓后端强依赖 MySQL，推送前必须能连上。
+        // 连不上时门禁按 fail-closed 报错（错误信息里说明如何指定连接参数）。
+        'node "%ROOT%\\scripts\\verify\\verify_schema_drift.mjs" || exit /b 1',
       ].join('\r\n')
     : `@echo off\r\nnode "%~dp0..\\..\\scripts\\${def.batScript}.mjs" %*\r\n`;
   writeFileSync(target + '.bat', batBody, { encoding: 'utf-8' });
