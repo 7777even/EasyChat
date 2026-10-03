@@ -22,6 +22,7 @@ import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.ChatSessionUserService;
+import com.easychat.service.MailService;
 import com.easychat.service.UserContactService;
 import com.easychat.service.UserInfoService;
 import com.easychat.utils.CopyTools;
@@ -63,6 +64,10 @@ public class UserInfoServiceImpl implements UserInfoService {
 
     @Resource
     private RedisComponet redisComponet;
+
+    /** 2026-10-03 新增：邮箱验证码的真实投递通道，取代原先「写日志」的降级实现 */
+    @Resource
+    private MailService mailService;
 
 
     @Resource
@@ -418,6 +423,12 @@ public class UserInfoServiceImpl implements UserInfoService {
         userInfoMapper.updateByUserId(updateInfo, userId);
         // 记录修改密码日志
         operationLogService.recordLog(userId, "UPDATE_PASSWORD", "修改密码", null);
+        // 2026-10-03：改密视为「凭据可能已泄露」，清空该用户全部端 Token 并强制下线。
+        // 必须放在密码写入成功之后——上面的旧密码校验 / 新旧相同校验失败都已在写库前抛异常，
+        // 走不到这里，因此不存在「密码没改但 Token 被清」的窗口（design ADR-001）。
+        // 副作用（刻意，与微信一致）：发起改密的当前会话也一并失效，用户需重新登录。
+        redisComponet.cleanUserTokenByUserId(userId);
+        forceOffLine(userId);
     }
 
     @Override
@@ -455,8 +466,14 @@ public class UserInfoServiceImpl implements UserInfoService {
         bean.setCreateTime(now);
         bean.setExpireTime(now + 10 * 60 * 1000L);
         emailVerifyCodeMapper.insert(bean);
-        // 未配置邮件服务时把验证码写日志，便于本地联调；生产应替换为真实邮件发送
-        logger.info("邮箱验证码已生成 email={}, type={}, code={}（10分钟内有效）", email, type, code);
+        // 2026-10-03：改为通过 SMTP 真实投递。
+        // 原实现在此处 logger.info("...code={}", code) 把验证码明文写进应用日志——
+        // 日志读权限（容器 stdout / 日志聚合 / CI 归档）远宽于普通用户，
+        // 等价于「谁能看到日志谁就能重置任意账号（含 admin）的密码」。
+        // 未配置邮件服务时 MailService 会 fail-closed 抛 CODE_1002，不再退回打日志
+        // （openspec/design.md ADR-002）。
+        // 注意：先落库再发信，发信失败不回滚验证码记录——用户可重新点一次获取。
+        mailService.sendVerifyCode(email, code, type == null ? 0 : type);
     }
 
     @Override
@@ -491,6 +508,13 @@ public class UserInfoServiceImpl implements UserInfoService {
         EmailVerifyCodeQuery updateQuery = new EmailVerifyCodeQuery();
         updateQuery.setId(verifyCode.getId());
         emailVerifyCodeMapper.updateByParam(used, updateQuery);
+
+        // 2026-10-03：重置密码同样视为凭据可能泄露，清空全部端 Token 并强制下线。
+        // 必须放在**全部**校验（验证码存在 / 未过期 / 邮箱已注册）与写库之后：
+        // 上面三条早退路径若在此之前就吊销，任何人输错验证码即可把受害者踢下线，
+        // 反而成了拒绝服务（对应单测 resetPasswordByEmail_codeNotFound_doesNotInvalidateSessions）。
+        redisComponet.cleanUserTokenByUserId(userInfo.getUserId());
+        forceOffLine(userInfo.getUserId());
     }
 
     @Override

@@ -163,6 +163,16 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- 邮件发送（邮箱验证码真实投递）
+             2026-10-03 新增，属 AGENTS §8「生产依赖新增」L4，已过人工确认关卡。
+             刻意不写 <version>：版本由 parent spring-boot-starter-parent 2.6.1 统一管理，
+             手写版本号会与 parent 漂移（与 spring-boot-maven-plugin 锁 2.2.6 的教训同类）。
+             动机：改造前 sendEmailCode 把验证码明文写日志，日志读权限 = 任意账号改密权限。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- 测试依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

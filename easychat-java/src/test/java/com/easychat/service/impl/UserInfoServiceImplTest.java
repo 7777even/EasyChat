@@ -3,6 +3,7 @@ package com.easychat.service.impl;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.BeautyAccountStatusEnum;
+import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.enums.UserContactStatusEnum;
 import com.easychat.entity.enums.UserStatusEnum;
 import com.easychat.entity.po.EmailVerifyCode;
@@ -19,6 +20,7 @@ import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
 import com.easychat.service.ChatSessionUserService;
+import com.easychat.service.MailService;
 import com.easychat.service.OperationLogService;
 import com.easychat.service.UserContactService;
 import com.easychat.websocket.MessageHandler;
@@ -57,6 +59,10 @@ public class UserInfoServiceImplTest {
 
     @Mock
     private RedisComponet redisComponet;
+
+    /** 2026-10-03 新增：验证码投递通道（取代原先的「写日志」降级实现） */
+    @Mock
+    private MailService mailService;
 
     @Mock
     private ChatSessionUserService chatSessionUserService;
@@ -378,6 +384,46 @@ public class UserInfoServiceImplTest {
         verify(emailVerifyCodeMapper).insert(any(EmailVerifyCode.class));
     }
 
+    @Test
+    public void sendEmailCode_deliversViaMailService() {
+        // 2026-10-03：验证码必须经 MailService 真实投递，
+        // 不再由 sendEmailCode 自己 logger.info 打出来（那是凭据泄露通道）。
+        String email = "new@example.com";
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(null);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class))).thenReturn(new ArrayList<>());
+        when(emailVerifyCodeMapper.insert(any(EmailVerifyCode.class))).thenReturn(1);
+
+        userInfoService.sendEmailCode(email, 0);
+
+        // 落库的码与发出去的码必须是同一个，否则用户收到邮件却输不进验证码
+        ArgumentCaptor<EmailVerifyCode> codeCaptor = ArgumentCaptor.forClass(EmailVerifyCode.class);
+        verify(emailVerifyCodeMapper).insert(codeCaptor.capture());
+        ArgumentCaptor<String> mailCodeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendVerifyCode(eq(email), mailCodeCaptor.capture(), eq(0));
+        assertEquals(codeCaptor.getValue().getCode(), mailCodeCaptor.getValue());
+    }
+
+    @Test
+    public void sendEmailCode_mailServiceFailure_propagates() {
+        // 邮件投递失败（未配 SMTP 等）必须向上抛，由全局异常处理器转 CODE_1002，
+        // 而不是吞掉后假装成功——否则用户点了「发送验证码」却永远收不到。
+        String email = "new@example.com";
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(null);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class))).thenReturn(new ArrayList<>());
+        when(emailVerifyCodeMapper.insert(any(EmailVerifyCode.class))).thenReturn(1);
+        org.mockito.Mockito.doThrow(new BusinessException(ResponseCodeEnum.CODE_1002, "邮件服务未配置，无法发送验证码"))
+                .when(mailService).sendVerifyCode(anyString(), anyString(), anyInt());
+
+        try {
+            userInfoService.sendEmailCode(email, 0);
+            fail("期望邮件投递失败向上抛出");
+        } catch (BusinessException e) {
+            assertEquals(Integer.valueOf(1002), e.getCode());
+        }
+    }
+
     @Test(expected = BusinessException.class)
     public void sendEmailCode_register_emailExists() {
         String email = "existing@example.com";
@@ -478,6 +524,95 @@ public class UserInfoServiceImplTest {
                 .thenReturn(Collections.singletonList(verifyCode));
 
         userInfoService.resetPasswordByEmail(email, code, "newpassword");
+    }
+
+    // ======================== 密码变更后会话失效（2026-10-03） ========================
+    //
+    // 背景：改密 / 找回密码此前只写库，既不清 Redis Token 也不推 FORCE_OFF_LINE，
+    // 而 RedisComponet#cleanUserTokenByUserId 已实现却全仓零调用
+    // → 账号被盗后受害者改密码，攻击者凭旧 Token（TTL 2 天）照常在线。
+    // openspec/changes/2026-10-03-password-session-and-mail
+
+    @Test
+    public void updatePassword_success_invalidatesAllSessions() {
+        String userId = "U12345678901";
+        String oldPassword = "oldpassword";
+        String newPassword = "newpassword";
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId(userId);
+        userInfo.setPassword(com.easychat.utils.StringTools.encodeByMD5(oldPassword));
+
+        when(userInfoMapper.selectByUserId(userId)).thenReturn(userInfo);
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), eq(userId))).thenReturn(1);
+
+        userInfoService.updatePassword(userId, oldPassword, newPassword);
+
+        // 全部端 Token 必须被清空（多端登录场景：只清当前端等于没清）
+        verify(redisComponet, times(1)).cleanUserTokenByUserId(userId);
+    }
+
+    @Test
+    public void updatePassword_success_pushForceOffLine() {
+        String userId = "U12345678901";
+        String oldPassword = "oldpassword";
+        String newPassword = "newpassword";
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId(userId);
+        userInfo.setPassword(com.easychat.utils.StringTools.encodeByMD5(oldPassword));
+
+        when(userInfoMapper.selectByUserId(userId)).thenReturn(userInfo);
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), eq(userId))).thenReturn(1);
+
+        userInfoService.updatePassword(userId, oldPassword, newPassword);
+
+        // 已连上的 WS 不会因为 Token 被删而自动断开，必须推帧强制下线
+        verify(messageHandler, times(1)).sendMessage(argThat(dto ->
+                dto != null && dto.getContactId() != null && dto.getContactId().equals(userId)));
+    }
+
+    @Test
+    public void resetPasswordByEmail_success_invalidatesAllSessions() {
+        String email = "test@example.com";
+        String code = "123456";
+
+        EmailVerifyCode verifyCode = new EmailVerifyCode();
+        verifyCode.setEmail(email);
+        verifyCode.setCode(code);
+        verifyCode.setType(1);
+        verifyCode.setStatus(0);
+        verifyCode.setExpireTime(System.currentTimeMillis() + 10 * 60 * 1000L);
+
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("U12345678901");
+        userInfo.setEmail(email);
+
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(verifyCode));
+        when(userInfoMapper.selectByEmail(email)).thenReturn(userInfo);
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), anyString())).thenReturn(1);
+
+        userInfoService.resetPasswordByEmail(email, code, "newpassword");
+
+        verify(redisComponet, times(1)).cleanUserTokenByUserId("U12345678901");
+    }
+
+    @Test
+    public void resetPasswordByEmail_codeNotFound_doesNotInvalidateSessions() {
+        // 守卫：验证码错误属校验失败，此时**绝不能**吊销会话，
+        // 否则任何人输错验证码就能把受害者踢下线（反而成了 DoS）。
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(new ArrayList<>());
+
+        try {
+            userInfoService.resetPasswordByEmail("test@example.com", "wrongcode", "newpassword");
+            fail("期望抛 BusinessException");
+        } catch (BusinessException expected) {
+            // 断言不变量
+        }
+
+        verify(redisComponet, never()).cleanUserTokenByUserId(anyString());
     }
 
     // ======================== 更新用户状态 ========================
