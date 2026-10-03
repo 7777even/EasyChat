@@ -31,6 +31,7 @@ import com.easychat.service.GroupInfoService;
 import com.easychat.service.SensitiveWordService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.DateUtil;
+import com.easychat.utils.ExtraDataTools;
 import com.easychat.utils.JsonUtils;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
@@ -223,6 +224,18 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             // 群聊禁言校验：被群主/管理员禁言的成员不允许发言
             if (UserContactTypeEnum.GROUP == UserContactTypeEnum.getByPrefix(chatMessage.getContactId())) {
                 groupInfoService.checkMuted(tokenUserInfoDto.getUserId(), chatMessage.getContactId());
+                // 2026-10-03：@所有人 权限下沉服务端。
+                // 此前该权限**仅在客户端生效**（Java 侧 atAll 零命中），普通成员手工构造
+                // extraData={"atAll":true} 即可冒用群主/管理员身份，
+                // openspec/specs/at-all/spec.md 曾把这条自述为「已知边界」。
+                //
+                // 位置说明：刻意放在 ROBOT_UID 判断之内、与 checkMuted 同处——
+                // ① 机器人自回复不带 atAll，且不该因角色校验而失败；
+                // ② 只在群聊分支触发，单聊的 atAll=true 不受影响（@所有人 只对群聊有意义）。
+                if (ExtraDataTools.isAtAll(chatMessage.getExtraData())) {
+                    groupInfoService.checkGroupRole(tokenUserInfoDto.getUserId(),
+                            chatMessage.getContactId(), GroupMemberRoleEnum.ADMIN);
+                }
             }
         }
         String sessionId = null;

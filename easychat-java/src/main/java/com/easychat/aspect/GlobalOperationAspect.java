@@ -6,6 +6,7 @@ import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.exception.BusinessException;
 import com.easychat.redis.RedisUtils;
+import com.easychat.utils.IpTools;
 import com.easychat.utils.StringTools;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
@@ -102,6 +103,10 @@ public class GlobalOperationAspect {
      * token 缺失时**降级为按客户端 IP 计数**，而不是静默放行。
      * 刻意不用「全体匿名用户共用一个空前缀键」——那等于把限流变成 DoS 放大器。
      *
+     * <p>2026-10-03 第二次调整：IP 取值规则已抽到 {@link IpTools}（供审计日志共用，
+     * 见 openspec/changes/2026-10-03-operation-log-ip-and-at-all-auth）。
+     * 本类不再自带实现，避免出现「限流按一套规则、审计按另一套规则」而事后对不上账。
+     *
      * @see openspec/changes/2026-10-03-password-session-and-mail/design.md ADR-003
      */
     private void checkRateLimit() {
@@ -111,7 +116,7 @@ public class GlobalOperationAspect {
         if (!StringTools.isEmpty(token)) {
             key = key + token;
         } else {
-            key = key + "ip:" + resolveClientIp(request);
+            key = key + "ip:" + IpTools.getClientIp();
         }
         Long count = redisUtils.incr(key);
         if (count != null && count == 1) {
@@ -122,28 +127,6 @@ public class GlobalOperationAspect {
             throw new BusinessException(ResponseCodeEnum.CODE_1001, "请求过于频繁，请稍后再试");
         }
     }
-
-    /**
-     * 解析客户端 IP，优先取反向代理透传的 {@code X-Forwarded-For} 首段
-     * （即最初发起请求的客户端），缺失时回退 {@link HttpServletRequest#getRemoteAddr()}。
-     *
-     * <p>⚠️ {@code X-Forwarded-For} 由客户端可伪造，仅当服务部署在可信反向代理
-     * 之后该值才可信。直连部署时攻击者可伪造此头换取多个独立限流配额——
-     * 这是「用 IP 限流」的固有代价，取舍见 design ADR-003（本次不叠加更重的方案）。
-     *
-     * @return 客户端 IP；取不到时返回 {@code "unknown"}（仍参与计数，避免退化为放行）
-     */
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (!StringTools.isEmpty(forwarded)) {
-            int comma = forwarded.indexOf(',');
-            String first = comma > 0 ? forwarded.substring(0, comma) : forwarded;
-            first = first.trim();
-            if (!first.isEmpty()) {
-                return first;
-            }
-        }
-        String remote = request.getRemoteAddr();
-        return StringTools.isEmpty(remote) ? "unknown" : remote;
-    }
+    // 注：原私有方法 resolveClientIp(HttpServletRequest) 已于 2026-10-03 迁至
+    //     utils/IpTools#getClientIp()，与审计日志共用同一实现（design.md C2 / ADR-002）。
 }

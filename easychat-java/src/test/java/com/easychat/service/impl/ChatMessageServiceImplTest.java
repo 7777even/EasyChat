@@ -170,6 +170,94 @@ public class ChatMessageServiceImplTest {
         }
     }
 
+    // ======================== @所有人 服务端鉴权（2026-10-03） ========================
+    //
+    // 背景：@所有人 权限此前**仅在客户端生效**（Java 侧 atAll 零命中），
+    // 普通成员手工构造 extraData={"atAll":true} 即可冒用群主/管理员身份，
+    // openspec/specs/at-all/spec.md 自己把这条记为「已知边界」。
+    // openspec/changes/2026-10-03-operation-log-ip-and-at-all-auth
+
+    private ChatMessage groupMessageWithAtAll(boolean atAll) {
+        ChatMessage m = new ChatMessage();
+        m.setContactId("G99999999999");
+        m.setMessageType(MessageTypeEnum.CHAT.getType());
+        m.setMessageContent("大家好");
+        m.setExtraData(atAll ? "{\"atAll\":true}" : null);
+        return m;
+    }
+
+    @Test
+    public void saveMessage_atAll_byPlainMember_throws2305() {
+        // 核心回归：普通成员发 @所有人 必须被服务端拒绝
+        TokenUserInfoDto tokenUserInfo = new TokenUserInfoDto();
+        tokenUserInfo.setUserId("U12345678901");
+        tokenUserInfo.setNickName("成员");
+
+        when(redisComponet.getUserContactList("U12345678901")).thenReturn(Arrays.asList("G99999999999"));
+        doThrow(new BusinessException(ResponseCodeEnum.CODE_2305))
+                .when(groupInfoService).checkGroupRole(eq("U12345678901"), eq("G99999999999"), any());
+
+        try {
+            chatMessageService.saveMessage(groupMessageWithAtAll(true), tokenUserInfo);
+            fail("普通成员发 @所有人 应被拒绝");
+        } catch (BusinessException e) {
+            assertEquals(ResponseCodeEnum.CODE_2305.getCode(), e.getCode());
+        }
+    }
+
+    @Test
+    public void saveMessage_atAll_byAdmin_passes() {
+        // 群主/管理员放行
+        TokenUserInfoDto tokenUserInfo = new TokenUserInfoDto();
+        tokenUserInfo.setUserId("U12345678901");
+        tokenUserInfo.setNickName("管理员");
+
+        when(redisComponet.getUserContactList("U12345678901")).thenReturn(Arrays.asList("G99999999999"));
+        UserContact admin = new UserContact();
+        admin.setRole(1); // ADMIN
+        when(groupInfoService.checkGroupRole(eq("U12345678901"), eq("G99999999999"), any())).thenReturn(admin);
+
+        chatMessageService.saveMessage(groupMessageWithAtAll(true), tokenUserInfo);
+
+        verify(groupInfoService, atLeastOnce()).checkGroupRole(eq("U12345678901"), eq("G99999999999"), any());
+    }
+
+    @Test
+    public void saveMessage_withoutAtAll_doesNotCheckRole() {
+        // 普通群消息**不得**触发角色校验：否则每条群消息都多一次查库，
+        // 且新人刚入群、user_contact 尚未落库时会被误判成 2304 而发不出消息。
+        TokenUserInfoDto tokenUserInfo = new TokenUserInfoDto();
+        tokenUserInfo.setUserId("U12345678901");
+        tokenUserInfo.setNickName("成员");
+
+        when(redisComponet.getUserContactList("U12345678901")).thenReturn(Arrays.asList("G99999999999"));
+
+        chatMessageService.saveMessage(groupMessageWithAtAll(false), tokenUserInfo);
+
+        verify(groupInfoService, never()).checkGroupRole(anyString(), anyString(), any());
+    }
+
+    @Test
+    public void saveMessage_singleChat_withAtAll_doesNotCheckRole() {
+        // 单聊带 atAll=true 不应触发群角色校验：@所有人 只对群聊有意义。
+        // 若按群去查角色会直接抛 2304，把**所有正常单聊**全部打挂。
+        TokenUserInfoDto tokenUserInfo = new TokenUserInfoDto();
+        tokenUserInfo.setUserId("U12345678901");
+        tokenUserInfo.setNickName("我");
+
+        ChatMessage single = new ChatMessage();
+        single.setContactId("U88888888888");
+        single.setMessageType(MessageTypeEnum.CHAT.getType());
+        single.setMessageContent("hi");
+        single.setExtraData("{\"atAll\":true}");
+
+        when(redisComponet.getUserContactList("U12345678901")).thenReturn(Arrays.asList("U88888888888"));
+
+        chatMessageService.saveMessage(single, tokenUserInfo);
+
+        verify(groupInfoService, never()).checkGroupRole(anyString(), anyString(), any());
+    }
+
     // ======================== 撤回消息 ========================
 
     @Test
