@@ -152,12 +152,15 @@ const mutations = [
     ]
   },
   {
+    // 2026-10-03 更新锚点：checkRateLimit 的 IP 取值已从私有 resolveClientIp(request)
+    //   改为委托 IpTools.getClientIp()（与审计日志共用同一实现）。
+    //   变异形态随之改为「整段 IP 降级分支换回 token 缺失即 return」。
     name: '变异5 未登录端点限流退回「token 为空直接 return」',
     rel: ASPECT,
     edits: [
       {
-        find: '        if (!StringTools.isEmpty(token)) {\r\n            key = key + token;\r\n        } else {\r\n            key = key + "ip:" + resolveClientIp(request);\r\n        }',
-        repl: '        if (StringTools.isEmpty(token)) {\r\n            return;\r\n        }\r\n        key = key + token;'
+        find: '        String key = "rate_limit:";\r\n        if (!StringTools.isEmpty(token)) {\r\n            key = key + token;\r\n        } else {\r\n            key = key + "ip:" + IpTools.getClientIp();\r\n        }',
+        repl: '        if (token == null) {\r\n            return;\r\n        }\r\n        String key = "rate_limit:" + token;'
       }
     ]
   },

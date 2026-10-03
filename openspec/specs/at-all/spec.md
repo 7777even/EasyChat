@@ -17,6 +17,12 @@
 - **WHEN** 普通群成员在群聊中点击@按钮
 - **THEN** 不显示「@所有人」选项
 
+#### Scenario: 普通群成员手工构造请求
+
+- **WHEN** 普通群成员（role=2）绕过前端，直接调用发送接口并携带 `extraData={"atAll":true}`
+- **THEN** 服务端返回 `CODE_2305`（无权执行此操作）
+- **AND** 消息不落库、不推送给任何群成员
+
 ---
 
 ### Requirement: @所有人消息样式
@@ -42,12 +48,18 @@
   - `.at-all-message` 气泡描边 + `.at-all-tag` 标记红色加粗；撤回/管理员删除态不套用
 - 主题变量：`easychat-front/src/renderer/src/assets/base.scss` 新增 `--ec-at-all`（浅色 + `html.dark` 成对定义）
 - 契约：无新增接口。标记走既有 `POST /chat/sendMessage` 的 `extraData` JSON（`atAll` 字段），随既有 WS 帧透传
-- 服务端权限校验：**本期未实现**，见下方「已知边界」
+- **服务端权限校验（2026-10-03 起已实现）**：`ChatMessageServiceImpl#saveMessage` 在群聊分支内，
+  当 `ExtraDataTools.isAtAll(extraData)` 为真时调用
+  `groupInfoService.checkGroupRole(userId, groupId, GroupMemberRoleEnum.ADMIN)`；
+  权限不足抛 `CODE_2305`，非成员抛 `CODE_2304`。校验置于 `ROBOT_UID` 判断之内（机器人自回复不触发）
+  且仅在群聊分支触发（单聊的 `atAll` 不受影响）。
 
 ## 已知边界
 
-- 权限仅在客户端生效：普通成员手工构造请求并塞入 `extraData.atAll` 仍可使消息显示 @所有人 样式。
-  服务端侧鉴权（`saveMessage` 校验发送者 role）需单独 Change（L4，涉权限语义）。
+- ~~权限仅在客户端生效~~ → **2026-10-03 已下沉服务端**（见上）。普通成员手工构造
+  `extraData.atAll=true` 会得到 `CODE_2305`，消息不落库、不推送。
+- `ExtraDataTools.isAtAll` **只认顶层布尔** `{"atAll":true}`：`"1"` / `1` / 嵌套字段一律视为非 @所有人，
+  避免 fastjson 宽松转换导致普通成员被误拦。
 - 本地 SQLite `chat_message` 无 `extra_data` 列，`extraData` 不落本地库；
   重启后读取历史消息时靠正文含「@所有人」兜底判定，样式仍正确。
 - 未实现服务端 @所有人 触发的红点提醒（现有 `atUserIds` 机制面向单个成员）。

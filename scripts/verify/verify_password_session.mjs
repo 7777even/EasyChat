@@ -194,32 +194,29 @@ check(
 // ── 3. 未登录端点按 IP 限流 ──
 console.log('\n=== 3. 未登录端点限流 ===')
 const rateLimitBody = methodBody(aspectSrc, /private\s+void\s+checkRateLimit\s*\(/)
-const resolveClientIpBody = methodBody(aspectSrc, /private\s+String\s+resolveClientIp\s*\(/)
 check('定位到 checkRateLimit 方法体', rateLimitBody !== null)
-check('定位到 resolveClientIp 方法体', resolveClientIpBody !== null)
 check(
   'checkRateLimit 不存在「token == null 直接 return」早退',
   !!rateLimitBody && !/if\s*\(\s*token\s*==\s*null\s*\)\s*\{\s*return\s*;/.test(rateLimitBody),
   rateLimitBody ? '' : '方法体未定位'
 )
 check(
-  'checkRateLimit 在 token 缺失时降级为按客户端 IP 计数（调用 resolveClientIp）',
-  !!rateLimitBody && /resolveClientIp\s*\(/.test(rateLimitBody),
+  'checkRateLimit 在 token 缺失时降级为按客户端 IP 计数（调用 IpTools.getClientIp）',
+  !!rateLimitBody && /IpTools\.getClientIp\s*\(\s*\)/.test(rateLimitBody),
   rateLimitBody ? '' : '方法体未定位'
 )
 check(
   'checkRateLimit 存在 IP 维度的键字面量（"ip:"）',
   !!rateLimitBody && /"ip:"/.test(rateLimitBody)
 )
+// 2026-10-03 更新：IP 取值规则已抽到 utils/IpTools（与审计日志共用同一实现，
+// 见 openspec/changes/2026-10-03-operation-log-ip-and-at-all-auth）。
+// 原先这里断言「切面自带私有 resolveClientIp」，架构调整后该断言已过期并会恒红——
+// 门禁断言必须随架构演进更新，否则会被当成「故障」而误导排查方向。
 check(
-  'resolveClientIp 取 X-Forwarded-For 首段并回退 getRemoteAddr()',
-  !!resolveClientIpBody && /X-Forwarded-For/.test(resolveClientIpBody) &&
-    /getRemoteAddr\s*\(\s*\)/.test(resolveClientIpBody),
-  resolveClientIpBody ? '' : 'resolveClientIp 方法体未定位'
-)
-check(
-  'resolveClientIp 截取逗号前首段（XFF 可含多跳）',
-  !!resolveClientIpBody && /indexOf\s*\(\s*'\,'\s*\)|indexOf\s*\(\s*","\s*\)/.test(resolveClientIpBody)
+  'GlobalOperationAspect 不再自带私有 IP 解析（避免与审计各写一份规则）',
+  !/private\s+String\s+resolveClientIp\s*\(/.test(aspectSrc),
+  '仍存在私有 resolveClientIp —— IP 取值规则有两份实现'
 )
 // 限流键前缀不得改名：改了会让既有 Redis 键失效，等于静默把所有用户计数清零
 check(
