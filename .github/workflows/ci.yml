@@ -122,6 +122,14 @@ jobs:
       - name: 密码会话失效与验证码投递契约
         run: node scripts/verify/verify_password_session.mjs
 
+      # 2026-10-03 新增。首次运行即报出两类「字段/列早就备好、行为却从未落地」的缺口：
+      # ① operation_log.ip_address 恒为 null（6 处 recordLog 调用点全传 null，
+      #    最需溯源的 LOGIN_FAILED / FORCE_OFFLINE / UPDATE_PASSWORD 全无 IP）
+      # ② @所有人 权限仅在客户端生效（Java 侧 atAll 零命中，普通成员可冒用管理员身份）
+      # 两者都不抛异常、不打警告，属静默失效。
+      - name: 审计IP补齐与@所有人服务端鉴权契约
+        run: node scripts/verify/verify_audit_and_at_all.mjs
+
       - name: 虚拟列表核心算法
         run: node scripts/verify/verify_virtual_core.mjs
 
