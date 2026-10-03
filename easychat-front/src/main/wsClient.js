@@ -264,6 +264,12 @@ const createWs = () => {
             }
             case 2://聊条消息
             case 5://图片，视频消息
+            // 2026-10-03 接通位置(25)/语音(24)：与文本/媒体同属「真实消息」路径，
+            // 走同一套「落本地 SQLite + reciveMessage 推渲染层」逻辑。
+            // 此前缺 case → 对端实时收不到（静默失效），已被
+            // scripts/verify/verify_ws_frame_parity.mjs 抓出。
+            case 24://语音消息
+            case 25://位置消息
             case 8://解散群聊
             case 11://退出群聊
             case 12://提出群聊

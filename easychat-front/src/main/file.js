@@ -187,7 +187,10 @@ const isValidImageCache = (filePath) => {
 const FILE_TYPE_CONTENT_TYPE = {
     "0": "image/",
     "1": "video/",
-    "2": "application/octet-stream"
+    "2": "application/octet-stream",
+    // 2026-10-03：语音消息（messageType=24）的 fileType=3。
+    // 此前此处无 3 → contentType 拼成 "undefinedwebm"，浏览器无法按音频解码，<audio> 播不出声音。
+    "3": "audio/"
 }
 
 

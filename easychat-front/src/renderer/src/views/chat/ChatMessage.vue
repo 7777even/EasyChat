@@ -25,6 +25,7 @@
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
           <ChatMessageLocation :data="data" v-if="data.messageType == 25" />
+          <ChatMessageVoice :data="data" v-else-if="data.messageType == 24" />
           <div class="content" v-html="renderContent" v-else-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
@@ -82,6 +83,7 @@
             <span class="quote-content">{{ quoteInfo.quoteContent }}</span>
           </div>
           <ChatMessageLocation :data="data" v-if="data.messageType == 25" />
+          <ChatMessageVoice :data="data" v-else-if="data.messageType == 24" />
           <div class="content" v-html="renderContent" v-else-if="data.messageType != 5"></div>
           <div class="content" v-else>
             <template v-if="data.fileType == 0">
@@ -105,6 +107,10 @@ import ChatMessageVideo from './ChatMessageVideo.vue'
 import ChatMessageImage from './ChatMessageImage.vue'
 import ChatMessageFile from './ChatMessageFile.vue'
 import ChatMessageLocation from './ChatMessageLocation.vue'
+// 2026-10-03：ChatMessageVoice.vue 此前是死组件（从未被 import），语音消息路由到
+// messageType=24 时也因 v-else-if="data.messageType != 5" 走到纯文本渲染分支，
+// 实际渲染出 messageContent="[语音]" 的纯文本气泡，而非可播放的语音条。
+import ChatMessageVoice from './ChatMessageVoice.vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 import { ref, reactive, getCurrentInstance, nextTick, computed } from 'vue'
@@ -220,8 +226,9 @@ const getRecallText = () => {
 const onContextMenu = (e) => {
   const isMyMessage = props.data.sendUserId == userInfoStore.getInfo().userId
   const isRecalled = props.data.messageType == 14
-  // 可操作消息：文本(2) / 媒体(5) / 位置(25)
-  const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5 || props.data.messageType == 25
+  // 可操作消息：文本(2) / 媒体(5) / 位置(25) / 语音(24)
+  // 2026-10-03：语音消息 24 此前未在此列表，导致收到的语音气泡右键**没有**复制/引用回复/转发
+  const isNormalMessage = props.data.messageType == 2 || props.data.messageType == 5 || props.data.messageType == 25 || props.data.messageType == 24
 
   if (isRecalled || !isNormalMessage) {
     return

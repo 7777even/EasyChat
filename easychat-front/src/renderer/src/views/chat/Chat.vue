@@ -133,7 +133,7 @@
               <ChatMessageSys :data="data"></ChatMessageSys>
             </template>
             <template
-              v-if="data.messageType == 1 || data.messageType == 2 || data.messageType == 5 || data.messageType == 14 || data.messageType == 20"
+              v-if="data.messageType == 1 || data.messageType == 2 || data.messageType == 5 || data.messageType == 14 || data.messageType == 20 || data.messageType == 24 || data.messageType == 25"
             >
               <ChatMessage
                 :data="data"

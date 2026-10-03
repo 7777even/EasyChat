@@ -747,8 +747,10 @@ const cancelRecording = () => {
 const sendVoiceMessage = async (audioBlob, duration) => {
   // 将 Blob 转换为 File
   const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
-  // 发送语音消息
-  sendMessageDo({
+  // 发送语音消息（先拿到 messageId，再传文件）。
+  // 2026-10-03：原只发消息不上传文件 = 发了个空壳，接收方根本拿不到音频。
+  // 现在对齐 uploadFileDo 的「先发消息 → 后上传」范式。
+  const result = await sendMessageDo({
     messageContent: '[语音]',
     messageType: 24, // VOICE
     fileSize: file.size,
@@ -757,6 +759,30 @@ const sendVoiceMessage = async (audioBlob, duration) => {
     fileType: 3, // 语音类型
     duration: duration
   }, true)
+  if (!result || !result.messageId) {
+    return
+  }
+  // 上传音频文件到服务端 file/{YYYYMM}/{messageId}.webm
+  const messageId = result.messageId
+  const formData = new FormData()
+  formData.append('messageId', messageId)
+  formData.append('file', file)
+  try {
+    const uploadRes = await proxy.Request({
+      url: proxy.Api.uploadFile,
+      params: formData,
+      showLoading: false
+    })
+    if (uploadRes && uploadRes.code === 0) {
+      console.log('语音上传成功:', file.name)
+    } else {
+      console.warn('语音上传返回非零:', uploadRes)
+      proxy.Message.warning((uploadRes && uploadRes.message) || '语音上传失败')
+    }
+  } catch (e) {
+    console.error('语音上传失败:', e)
+    proxy.Message.error('语音上传失败')
+  }
 }
 
 const showEmojiPickerHandler = () => {

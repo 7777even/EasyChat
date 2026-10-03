@@ -64,6 +64,10 @@ const MUST_HANDLE = {
   20: 'ADMIN_DELETE 管理员删除消息',
   21: 'TYPING_STATUS 正在输入',
   22: 'ONLINE_STATUS 在线状态变更',
+  // 语音(24)/位置(25)：2026-10-03 已接通（落库白名单 + wsClient case + Chat.vue 分发 + 组件启用）。
+  // 此处留位并追加，门禁据此校验「落库帧 → 客户端 case」链路完整。
+  24: 'VOICE 语音消息',
+  25: 'LOCATION 位置消息',
   26: 'NUDGE 拍一拍',
   27: 'ONLINE_STATUS_HIDDEN 在线状态已隐藏',
   // 通话信令帧：负数号段，不在 MessageTypeEnum 中（服务端按 int 常量硬编码）
@@ -159,8 +163,9 @@ function parsePersistTypes () {
  *   修复需改服务端落库白名单（业务能力变更，L3），故此处仅登记不修。
  */
 const KNOWN_GAP = {
-  25: 'LOCATION 位置消息：落库白名单未含 + wsClient 无 case + Chat.vue:136 分发条件未含 → 端到端未接通（2026-10-02 parity 门禁发现）',
-  24: 'VOICE 语音消息：落库白名单未含 + wsClient 无 case + ChatMessageVoice.vue 为死组件（从未 import）→ 端到端未接通（同上）'
+  // 2026-10-03：24 / 25 已接通并移入 MUST_HANDLE，KNOWN_GAP 清空。
+  // 此处保留空对象（而非整块删除）是为了让门禁的 "KNOWN_GAP 已过期" 检查有真源可比较，
+  // 同时避免遗忘 `Object.entries(KNOWN_GAP)` 在某个运行时环境下为 undefined。
 }
 
 /**

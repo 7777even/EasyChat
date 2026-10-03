@@ -40,6 +40,8 @@ const api = {
     updateJoinType: "/userInfo/updateJoinType",//更新加我方式 0直接加入 1加我时需验证
     updateMomentPrivacy: "/userInfo/updateMomentPrivacy",//更新朋友圈可见范围与自定义名单
     updateOnlineStatusVisible: "/userInfo/updateOnlineStatusVisible",//更新是否对好友展示在线状态
+    markVoiceRead: "/chat/markVoiceRead",//标记语音消息已播放（未播放红点）
+    loadVoiceRead: "/chat/loadVoiceRead",//批量查询已播放的语音消息 id 列表
     saveUserInfo: "/userInfo/saveUserInfo",//保存用户信息
     getUserInfo: "/userInfo/getUserInfo",//获取用户信息
     updatePassword: "/userInfo/updatePassword",
