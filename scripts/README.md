@@ -16,6 +16,7 @@
 | `verify/verify_ws_frame_parity.mjs` | git hook `pre-push` / CI | WS 帧号两端对账：漂移 / 重复 / 空洞 / 落库帧无 case / 新增帧未声明意图 / `KNOWN_GAP` 过期 |
 | `verify/mutation_ws_frame_parity.cjs` | 手动（改帧协议后必跑） | 变异检验：故意破坏 9 处帧协议，验证上面的门禁**真的会失败** |
 | `verify/mutation_channel_online_status.cjs` | 手动（改 WS 在线状态逻辑后必跑） | 变异检验：故意破坏 8 处 `ChannelContextUtils` 隐私逻辑，验证单测**真的会转红** |
+| `verify/verify_file_type_content_type.mjs` | git hook `pre-push` / CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 必须覆盖前端在用的 `fileType`（缺失 → `undefined<ext>`、浏览器不解码、静默失败）；MIME 前缀须以 `/` 结尾；语音 `fileType=3` 须为 `audio/*` |
 | `setup-git-hooks.mjs` | 一键安装脚本 | 把上述脚本注册到 `.git/hooks/` |
 
 ## 安装
@@ -73,7 +74,12 @@ node scripts/verify/mutation_ws_frame_parity.cjs          # 9 条变异，改 3 
 node scripts/verify/mutation_channel_online_status.cjs   # 8 条变异，每次跑一次 mvn test（约 2–3 分钟）
 ```
 
-两条纪律：
+三条纪律：
+
+0. **锚点会随源码漂移**。变异脚本用**手写源码片段**作锚点，被测源码一改就失配。
+   `[FAIL] 锚点未命中` 说明失配（脚本已判失败）；
+   但**更危险的是「锚点命中却只覆盖了部分片段」**——变异看起来生效了，实际没改变要测的行为，
+   门禁会 exit 0 → 报 `[MISSED]`。此时不要怀疑门禁，**先怀疑自己的锚点**。
 
 1. **两个脚本都会临时改写源文件再还原**，因此带前置守卫：目标文件有未提交改动时
    直接 `exit 2` 拒绝执行（还原会覆盖你的工作）。

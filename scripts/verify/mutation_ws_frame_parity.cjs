@@ -94,22 +94,34 @@ const mutations = [
     repl: 'BRAND_NEW_FRAME(28, "", "新帧");\n\n    ONLINE_STATUS_HIDDEN(27,'
   },
   {
+    // ⚠ 锚点必须与 ChatMessageServiceImpl 实际文本逐字节一致（含缩进与换行）。
+    // 2026-10-03 两次踩坑：① 落库白名单加 24/25 导致锚点失配；
+    // ② 锚点只覆盖 MEDIA_CHAT/VOICE/LOCATION，残留 CHAT/GROUP_CREATE/ADD_FRIEND
+    //    使解析仍成功 → 门禁 exit=0 漏判。两处均已修正。
     name: '变异6 落库白名单被清空（结构改写 → 本项检查失效）',
     file: CHAT,
-    find: 'ArraysUtil.contains(new Integer[]{\r\n                MessageTypeEnum.CHAT.getType(),\r\n                MessageTypeEnum.GROUP_CREATE.getType(),\r\n                MessageTypeEnum.ADD_FRIEND.getType(),\r\n                MessageTypeEnum.MEDIA_CHAT.getType()\r\n        }, messageTypeEnum.getType()))',
-    repl: 'ArraysUtil.contains(new Integer[]{\r\n        }, messageTypeEnum.getType()))'
+    find: '                MessageTypeEnum.MEDIA_CHAT.getType(),\r\n                // 2026-10-03 接通位置 / 语音消息。\r\n                // 之前此白名单只有 {2,3,1,5}，位置/语音的消息行根本不会 INSERT 进 chat_message 表，\r\n                // 即使绕过 ChatController 的第 1 层，第 2 层也会断。\r\n                MessageTypeEnum.VOICE.getType(),\r\n                MessageTypeEnum.LOCATION.getType()\r\n        }, messageTypeEnum.getType())) {',
+    // 注意 find 必须从 CHAT 开始覆盖整段枚举项，否则前几项残留 → 解析仍成功 → 门禁 exit=0（漏判）。
+    // 首版只覆盖 MEDIA_CHAT/VOICE/LOCATION，残留 CHAT/GROUP_CREATE/ADD_FRIEND 即触发此漏判。
+    find: 'MessageTypeEnum.CHAT.getType(),\r\n                MessageTypeEnum.GROUP_CREATE.getType(),\r\n                MessageTypeEnum.ADD_FRIEND.getType(),\r\n                MessageTypeEnum.MEDIA_CHAT.getType(),\r\n                // 2026-10-03 接通位置 / 语音消息。\r\n                // 之前此白名单只有 {2,3,1,5}，位置/语音的消息行根本不会 INSERT 进 chat_message 表，\r\n                // 即使绕过 ChatController 的第 1 层，第 2 层也会断。\r\n                MessageTypeEnum.VOICE.getType(),\r\n                MessageTypeEnum.LOCATION.getType()\r\n        }, messageTypeEnum.getType())) {',
+    repl: '}, messageTypeEnum.getType())) {'
   },
   {
     name: '变异8 落库白名单引用了枚举里不存在的项（源码与枚举不同步）',
     file: CHAT,
-    find: 'MessageTypeEnum.MEDIA_CHAT.getType()\r\n        }, messageTypeEnum.getType())) {',
-    repl: 'MessageTypeEnum.NOT_EXIST_ENUM_NAME.getType()\r\n        }, messageTypeEnum.getType())) {'
+    find: '                MessageTypeEnum.LOCATION.getType()\r\n        }, messageTypeEnum.getType())) {',
+    repl: '                MessageTypeEnum.NOT_EXIST_ENUM_NAME.getType()\r\n        }, messageTypeEnum.getType())) {'
   },
   {
-    name: '变异9 KNOWN_GAP 过期（25 已落库但没删登记）',
-    file: CHAT,
-    find: 'MessageTypeEnum.MEDIA_CHAT.getType()\r\n        }, messageTypeEnum.getType())) {',
-    repl: 'MessageTypeEnum.MEDIA_CHAT.getType(),\r\n                MessageTypeEnum.LOCATION.getType()\r\n        }, messageTypeEnum.getType())) {'
+    // 原变异9「把 25 加进落库白名单以触发 KNOWN_GAP 过期」已失效——
+    // 24/25 于 2026-10-03 正式接通并从 KNOWN_GAP 移入 MUST_HANDLE。
+    // 改为**本次改动最该被门禁锁住的那个回归**：删掉 wsClient 的 case 25，
+    // 断言门禁报「需实时处理的帧在客户端无 case」。
+    // （若只改服务端落库白名单而客户端 case 仍在，门禁无法察觉——那不是它的职责范围。）
+    name: '变异9 删掉 wsClient 的 case 25（本次改动被回退，门禁须抓）',
+    file: CLIENT,
+    find: '            case 25://位置消息\r\n',
+    repl: ''
   }
 ]
 

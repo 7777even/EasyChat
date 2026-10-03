@@ -233,6 +233,12 @@ WS 帧号是**服务端 `MessageTypeEnum` ↔ 客户端 `wsClient.js` case** 的
 5. **改动帧协议或 WS 逻辑后，必须跑变异检验**证明门禁/测试有判别力：
    `node scripts/verify/mutation_ws_frame_parity.mjs`、`node scripts/verify/mutation_channel_online_status.cjs`
    （详见 §2.1 第 1 条「门禁须实跑有判别力」）
+6. **新增任何「文件类消息」（语音/位置/视频等）时，必须同步检查本地文件服务器的 MIME 映射**：
+   `easychat-front/src/main/file.js` 的 `FILE_TYPE_CONTENT_TYPE` 存的是 **MIME 前缀**，
+   `contentType = 映射[fileType] + fileSuffix`，故每项必须以 `/` 结尾，
+   且必须覆盖该消息用到的 `fileType`。缺失时拼成 `undefined<ext>` →
+   浏览器无法解码、**不抛任何错**（2026-10-03 语音接入时踩中：`fileType=3` 未映射，`audio` 静默无声）。
+   守卫：`node scripts/verify/verify_file_type_content_type.mjs`
 
 守卫：`node scripts/verify/verify_ws_frame_parity.mjs`（缺失/多余/漂移/重复/空洞/意图未声明 → exit 1）
 
@@ -335,6 +341,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/check-ipc-registration.mjs` | 推送前（`pre-push` hook）/ CI | `ipc.js` 导出与 `index.js` 调用不匹配（漏注册即静默失效） |
 | `scripts/verify/verify_no_hardcoded_secret.mjs` | 推送前（`pre-push` hook）/ CI | 公共配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 密码有默认可用值、`.env` 入库 |
 | `scripts/verify/verify_ws_frame_parity.mjs` | 推送前（`pre-push` hook）/ CI | WS 帧号两端漂移（客户端 case 服务端不存在）、服务端帧号重复/空洞、落库帧或 MUST_HANDLE 帧客户端无 case、新增帧未声明意图、KNOWN_GAP 登记过期 |
+| `scripts/verify/verify_file_type_content_type.mjs` | 推送前（`pre-push` hook）/ CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 缺前端在用的 fileType（→ content-type 拼成 `undefined<ext>`、浏览器无法解码、静默失败）、MIME 前缀不合法、语音 `fileType=3` 非 `audio/*` |
 
 **安装 hook**：`node scripts/setup-git-hooks.mjs`
 

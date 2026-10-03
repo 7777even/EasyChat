@@ -106,6 +106,12 @@ jobs:
       - name: WebSocket 帧协议两端对账
         run: node scripts/verify/verify_ws_frame_parity.mjs
 
+      # 2026-10-03 新增。接语音消息时发现 file.js 的 MIME 映射表缺 fileType=3
+      # → content-type 拼成 "undefinedwebm"，浏览器无法解码、<audio> 静默无声。
+      # 这类缺陷不在 HTTP 请求流里，ws_frame_parity 照不到，属独立一层。
+      - name: 本地文件服务器 fileType 与 content-type 一致性
+        run: node scripts/verify/verify_file_type_content_type.mjs
+
       - name: 虚拟列表核心算法
         run: node scripts/verify/verify_virtual_core.mjs
 

@@ -184,12 +184,19 @@ const isValidImageCache = (filePath) => {
 
 
 //express 本地服务器
+// 注意：这里存的是 **MIME 前缀**，file.js 会拼上文件后缀
+// （contentType = FILE_TYPE_CONTENT_TYPE[fileType] + fileSuffix），
+// 所以每项必须以 "/" 结尾。2026-10-03 修正了原来 "2": "application/octet-stream"
+// 这个不带 "/" 的值——它拼出的是 "application/octet-streamzip"，
+// 不是合法 MIME，浏览器会拒绝按正确类型处理（对普通文件影响有限，
+// 但一旦需要精确 content-type 就会失效）。
 const FILE_TYPE_CONTENT_TYPE = {
     "0": "image/",
     "1": "video/",
-    "2": "application/octet-stream",
-    // 2026-10-03：语音消息（messageType=24）的 fileType=3。
-    // 此前此处无 3 → contentType 拼成 "undefinedwebm"，浏览器无法按音频解码，<audio> 播不出声音。
+    "2": "application/octet-stream/",
+    // 语音消息（messageType=24）的 fileType=3。
+    // 2026-10-03 新增：此前此处无 3 → contentType 拼成 "undefinedwebm"，
+    // 浏览器无法按音频解码 → <audio> 播不出声音，且不抛任何错。
     "3": "audio/"
 }
 

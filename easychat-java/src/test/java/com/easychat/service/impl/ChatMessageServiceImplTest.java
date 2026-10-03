@@ -564,6 +564,9 @@ public class ChatMessageServiceImplTest {
         return m;
     }
 
+    /** 群聊语音的 groupId（测试与冒烟共用） */
+    private static final String VOICE_GROUP_ID = "G_voice_group";
+
     @Test
     public void markVoiceRead_receiverMarks_success() {
         when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(voiceMessage(VOICE_SENDER));
@@ -672,6 +675,61 @@ public class ChatMessageServiceImplTest {
     }
 
     /** 空列表直接返回，不查库 */
+    // ---------- 群聊分支：isVoiceReadReceiver 的 GROUP 路径 ----------
+    // 上一轮 retro 记录「群聊分支漏测」，本轮补齐（见 engineering/retro/2026-10-03 §四）
+
+    private ChatMessage groupVoiceMessage() {
+        ChatMessage m = new ChatMessage();
+        m.setMessageId(VOICE_MSG_ID);
+        m.setMessageType(MessageTypeEnum.VOICE.getType());
+        m.setSendUserId(VOICE_SENDER);
+        m.setSessionId("session-group-voice");
+        m.setContactId(VOICE_GROUP_ID);
+        m.setContactType(UserContactTypeEnum.GROUP.getType());
+        m.setFileName("voice_g.webm");
+        m.setDuration(5);
+        m.setDeleteFlag(0L);
+        return m;
+    }
+
+    /** 群成员可标记该群语音已读 */
+    @Test
+    public void markVoiceRead_groupMemberAllowed() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(groupVoiceMessage());
+        when(userContactMapper.selectCount(any(UserContactQuery.class))).thenReturn(1);
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+
+        ArgumentCaptor<ChatMessageVoiceRead> captor =
+                ArgumentCaptor.forClass(ChatMessageVoiceRead.class);
+        verify(chatMessageVoiceReadMapper).insertOrUpdate(captor.capture());
+        assertEquals(VOICE_RECEIVER, captor.getValue().getUserId());
+        // 必须是按「我 + 该群」查群成员，而不是按 contactId 等值
+        ArgumentCaptor<UserContactQuery> q = ArgumentCaptor.forClass(UserContactQuery.class);
+        verify(userContactMapper).selectCount(q.capture());
+        assertEquals(VOICE_RECEIVER, q.getValue().getUserId());
+        assertEquals(VOICE_GROUP_ID, q.getValue().getContactId());
+        assertEquals(UserContactTypeEnum.GROUP.getType(), q.getValue().getContactType());
+    }
+
+    /** 非群成员（含单聊对方）不能标记群语音已读 */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_notGroupMemberRejected() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(groupVoiceMessage());
+        when(userContactMapper.selectCount(any(UserContactQuery.class))).thenReturn(0);
+
+        chatMessageService.markVoiceRead("U_stranger", VOICE_MSG_ID);
+    }
+
+    /** 群成员数为 null（异常/竞态）时按「非成员」处理，不得放行 */
+    @Test(expected = BusinessException.class)
+    public void markVoiceRead_nullGroupMemberCountRejected() {
+        when(chatMessageMapper.selectByMessageId(VOICE_MSG_ID)).thenReturn(groupVoiceMessage());
+        when(userContactMapper.selectCount(any(UserContactQuery.class))).thenReturn(null);
+
+        chatMessageService.markVoiceRead(VOICE_RECEIVER, VOICE_MSG_ID);
+    }
+
     @Test
     public void loadVoiceRead_emptyListReturnsEmpty() {
         assertTrue(chatMessageService.loadVoiceRead(VOICE_RECEIVER, Collections.emptyList()).isEmpty());

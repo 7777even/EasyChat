@@ -49,6 +49,7 @@ node "$ROOT/scripts/check-ipc-registration.mjs" --strict
 node "$ROOT/scripts/check-openspec-hygiene.mjs"
 node "$ROOT/scripts/verify/verify_no_hardcoded_secret.mjs"
 node "$ROOT/scripts/verify/verify_ws_frame_parity.mjs"
+node "$ROOT/scripts/verify/verify_file_type_content_type.mjs"
 `,
     // Windows .bat 入口：pre-push 串多条门禁，逐条失败即中断
     batScript: 'pre-push-gates',
@@ -72,6 +73,7 @@ for (const [name, def] of Object.entries(hooks)) {
         'node "%ROOT%\\scripts\\check-openspec-hygiene.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_no_hardcoded_secret.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_ws_frame_parity.mjs" || exit /b 1',
+        'node "%ROOT%\\scripts\\verify\\verify_file_type_content_type.mjs" || exit /b 1',
       ].join('\r\n')
     : `@echo off\r\nnode "%~dp0..\\..\\scripts\\${def.batScript}.mjs" %*\r\n`;
   writeFileSync(target + '.bat', batBody, { encoding: 'utf-8' });
