@@ -125,3 +125,44 @@ jobs:
 
       - name: 通话核心逻辑
         run: node scripts/verify/verify_call_core.mjs
+
+  # 2026-10-03 新增。AGENTS §6.4 早已点名「verify_schema_drift.mjs 尚未实现」。
+  # 该门禁需要活库，故独立成 job（不能塞进 gates —— 那里没有 DB）。
+  #
+  # 这个 job 的真实价值有两条，都不是「基线 vs 空库」这种无意义的自证：
+  #   ① easychat.sql 能否在 **MySQL 8**（CI 版本，与本机 5.7 不同）上干净导入
+  #      —— 基线若含 5.7 专有语法，这里就会红；
+  #   ② 解析器自检：DROP/CREATE 配对是否全部识别 —— 防止解析器失配后给出「假的全清结论」。
+  # 针对「存量库迁移未执行」的漂移检测由 pre-push 与发版前在**真实库**上跑，本 job 不覆盖。
+  schema-drift:
+    name: 基线与活库表结构对账
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: easychat
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 导入最新基线（模拟一次全新部署）
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -proot easychat < easychat.sql
+
+      - name: 基线 ⇄ 活库 结构漂移检测
+        env:
+          SCHEMA_DB_HOST: 127.0.0.1
+          SCHEMA_DB_PORT: '3306'
+          SCHEMA_DB_USER: root
+          SCHEMA_DB_PASSWORD: root
+          SCHEMA_DB_NAME: easychat
+        run: node scripts/verify/verify_schema_drift.mjs
