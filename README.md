@@ -47,7 +47,7 @@ EasyChat/
 ├─ scripts/                # 门禁 + 冒烟 + 校验脚本
 ├─ templates/              # 文档模板
 ├─ easychat.sql            # 数据库最新基线
-└─ easychat-migration-*.sql # 存量库迁移脚本（幂等，按编号顺序）
+└─ easychat-migration-*.sql # 增量迁移脚本（由 Flyway 自动执行，见 §4.2）
 ```
 
 ## 4. 快速开始
@@ -70,14 +70,36 @@ easychat-front/assets/ffprobe.exe
 mysql -uroot -p -e "CREATE DATABASE easychat DEFAULT CHARSET utf8mb4;"
 mysql -uroot -p easychat < easychat.sql
 
-# 2) 存量库升级：按编号顺序执行未跑过的迁移脚本
-mysql -uroot -p easychat < easychat-migration-001-group-management.sql
-# ...直到 010
+# 2) 存量库升级：声明该库的真实版本号，其余交给 Flyway
+SPRING_FLYWAY_BASELINE_VERSION=9 mvn spring-boot:run
+#   声明 9 → Flyway 会自动执行 010~012，并从此往后自行记账
 ```
 
-> **迁移脚本是幂等的**（建表用 `IF NOT EXISTS`、列宽放宽向后兼容），重复执行安全。
-> 改了 `easychat.sql` 基线**必须**同批产出 `easychat-migration-<NNN>-*.sql` 并在目标库执行——只改基线是最隐蔽的故障源。
+> **迁移由 Flyway 自动执行（2026-10-04 起）**：应用启动时检测并执行未应用的迁移，
+> 用 `flyway_schema_history` 表记账。**不再需要人工逐个执行 SQL 文件。**
+>
+> **两条互斥的路，切勿混用**：`easychat.sql` 是**最新快照**，`easychat-migration-*.sql` 是**增量**。
+> 在已导入快照的库上再跑 `001` 会直接报 `Error 1060 Duplicate column name`（实测）。
+> 所以：全新环境只导快照；存量环境只走迁移，**不要再导快照**。
+>
+> **存量库首次纳管需要一次性人工声明**：`SPRING_FLYWAY_BASELINE_VERSION=N`
+> （N = 该库真实跑到的编号）。Flyway 能往后记账，**不能回溯历史** ——
+> 「这个库跑到第几号」仍需人知道一次。若你不知道 N，先跑
+> `node scripts/verify/verify_schema_drift.mjs` 看结构与基线的差异。
+>
+> 结构若已与基线一致（全新库 / 刚导完快照），**什么都不用声明**，默认 12 即可。
+>
+> 改了 `easychat.sql` 基线**必须**同批产出 `easychat-migration-<NNN>-*.sql`
+> ——只改基线是最隐蔽的故障源。门禁：`node scripts/verify/verify_schema_drift.mjs`。
+>
 > migration-003 是**有意留空**的占位说明文件（原 message-read-status 随已读回执下线被删除），不要复用该编号。
+>
+> ⚠️ **幂等性现状**：001 / 002 / 006 / 007 / 009 / 011 六份**不是幂等的**
+> （MySQL 5.7 无 `ADD COLUMN IF NOT EXISTS`，且它们未加存在性守卫），
+> 补齐前不要手工重跑这六份。详见 AGENTS §6.4-3。
+>
+> ⚠️ 迁移脚本不得含 `DELIMITER` / `CREATE PROCEDURE` —— 那是 mysql 客户端专有语法，
+> Flyway 的解析器过不了。门禁：`node scripts/verify/verify_migration_flyway.mjs`。
 
 ### 4.3 后端
 

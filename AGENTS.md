@@ -82,12 +82,14 @@ EasyChat/
 | 对外接口增删改 | 接口联冒烟 |
 | L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
-### 2.1 验证的两条硬纪律
+### 2.1 验证的六条硬纪律
 
 1. **任何写入 CI / Git hook / 门禁的脚本，交付前必须实跑一次并贴出退出码。** 「脚本存在」不等于「门禁有判别力」——本仓 `npm run lint` 长期 `exit 2`（`eslint .` 报 `No files matching`），却被接进 CI 导致流水线恒红（2026-10-02 事故，见 `engineering/retro/2026-10-02-group-join-approval.md` §三.1）。**门禁必须先在当前 main 上跑通，才允许接入。**
-2. **Windows 上一律用 `edit` / `write` 工具改源码，不得用 PowerShell 重定向或 `Set-Content` 改文件。** 实测三类事故：BOM 导致 `javac` 报 `非法字符 '\ufeff'`；`-replace` 正则批量替换产生重复行；换行丢失导致行粘连（2026-10-02 连续踩中三次）。
-3. **新增方法必须走完 TDD 红阶段**：先只加方法签名 + `throw new UnsupportedOperationException()` 桩让测试**编译通过并跑红**，再填实现。Java 中「测试引用不存在的方法 → 编译失败」容易让人顺手把实现一起写掉，从而跳过红阶段（2026-10-02 在 `join-type-and-blacklist` 实际发生）。若已跳过，须用**变异检验**（故意破坏守卫/逻辑，确认对应用例转红）补偿并在 QA 中说明。
-4. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
+2. **门禁报错信息里的每条处置建议，都要亲自照着走一遍。** 写「处置：把 X 设为 Y」的人必须验证过「照 X 那样做之后，脚本真的会读到这个值」。2026-10-04 靠此发现 `preflight-baseline-check.mjs` 只读 properties 默认值、不读 env，**把它自己报错信息里建议的处置路径堵死**（运维声明版本号 9 → 闸门仍按 12 判「声称最新」→ 拒绝启动）。
+3. **静态断言有固有上限，超出部分须主动登记而非假装覆盖。** 静态断言只能验证「代码里有什么字面量」，**无法验证「条件分支的方向」**——把 `if (!missing) {放行}` 反写成 `if (missing) {放行}` 后，所有基于字面量的断言照样通过。遇到此类项：① 从变异清单**撤除**该用例（不做假覆盖）② 登记为「已知不可静态检测项」③ 改由**真机验证**兜底。参见 `docs/system-facts.md` §14 遗留 #11。
+4. **Windows 上一律用 `edit` / `write` 工具改源码，不得用 PowerShell 重定向或 `Set-Content` 改文件。** 实测三类事故：BOM 导致 `javac` 报 `非法字符 '\ufeff'`；`-replace` 正则批量替换产生重复行；换行丢失导致行粘连（2026-10-02 连续踩中三次）。
+5. **新增方法必须走完 TDD 红阶段**：先只加方法签名 + `throw new UnsupportedOperationException()` 桩让测试**编译通过并跑红**，再填实现。Java 中「测试引用不存在的方法 → 编译失败」容易让人顺手把实现一起写掉，从而跳过红阶段（2026-10-02 在 `join-type-and-blacklist` 实际发生）。若已跳过，须用**变异检验**（故意破坏守卫/逻辑，确认对应用例转红）补偿并在 QA 中说明。
+6. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
 
 ## 3. 接口契约规则
 
@@ -187,14 +189,34 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 1. 表结构变更必须同步更新 `easychat.sql`
 2. **改了基线必须同批产出迁移脚本**（`easychat-migration-<NNN>-*.sql`）并在目标库执行——只改基线是最隐蔽的故障源：`easychat.sql` 是最新基线，不代表存量库已对齐。真实事故：`user_info.password` 列宽只改基线未迁移，BCrypt 哈希写入被截断，登录直接 500；`emoji`/`favorite`/`user_status`/`operation_log` 四张表在存量库根本不存在。**门禁**：`node scripts/verify/verify_schema_drift.mjs`（2026-10-03 已实现，接 pre-push + CI 独立 job；比对基线与活库 `information_schema`，另钉死 `user_info.password` 需 `varchar(≥60)` 硬不变量）
 3. 迁移脚本必须**幂等**（建表用 `IF NOT EXISTS`、列宽放宽向后兼容），并写明执行方式与重复执行的影响
-4. 字段变更需评估存量数据影响
-5. 新建表必须包含 `create_time` 字段
-6. 逻辑删除优先使用 `status` 字段标记而非物理删除
-7. **Mapper XML 占位符须与方法签名匹配**：带 `@Param` 的方法必须写限定名（`#{bean.x}` / `#{query.x}`）；无 `@Param` 且单参数才可用裸属性。写错会在运行期抛 `BindingException` 且编译期无感。守卫：`node scripts/verify/verify_mapper_params.mjs`
-8. **「DB 加列」必须改满三处，缺一即全量写操作 500**：① `easychat.sql` 基线 ② 迁移脚本 ③ **Mapper XML**。第 ③ 处指 `<resultMap>` 加 `<result>`、`<sql id="base_column_list">` 加列名、以及目标 `<update>`/`<insert>` 内加 `<if test="bean.xxx != null">`。
+   > ⚠️ **本条与现状存在偏差（2026-10-04 实测，勿按本条想当然）**：
+   > 001 / 002 / 006 / 007 / 009 / 011 六份含 `ADD COLUMN` 却**无存在性守卫**，
+   > 其中 001 注释自述「MySQL 5.7 不支持 ADD COLUMN IF NOT EXISTS，此处按首次迁移处理」，
+   > 即它们**明确不是幂等的**，按「只跑一次」设计。补齐守卫须统一用
+   > `SET @ddl=(SELECT IF(...)) + PREPARE/EXECUTE`（MySQL 5.7 无原生 `ADD COLUMN IF NOT EXISTS`）。
+   > 在补齐前**不要手工重跑**这六份。
+4. 迁移脚本**不得含 mysql 客户端专有指令**：`DELIMITER` 与 `CREATE PROCEDURE|FUNCTION|TRIGGER|EVENT`
+   都不行——`DELIMITER` 是客户端指令而非 SQL，Flyway 的 MySQL 解析器过不了，会让自动执行路径整体失败。
+   幂等加列统一用 PREPARE/EXECUTE 写法。守卫：`node scripts/verify/verify_migration_flyway.mjs`
+5. **迁移由 Flyway 自动执行与记账**（2026-10-04 起，ADR 见 `openspec/archive/2026-10-04-flyway-migration-automation/`）：
+   - 迁移脚本留在**仓库根**，由 `pom.xml` 的 `<resources>` 复制进 jar 的 `db/migration`；
+     配 `spring.flyway.sql-migration-prefix=easychat-migration-` + `separator=-` 使既有命名**零改名**可识别
+   - **快照与增量是互斥两条路，不可先后执行**：`easychat.sql` 是最新快照，在已导快照的库上再跑 `001`
+     会直接 `Error 1060 Duplicate column name`（实测）。故全新环境导快照 + `baseline-version=12`；
+     存量环境由运维**一次性**声明真实版本号（如 `SPRING_FLYWAY_BASELINE_VERSION=9`），Flyway 随即执行其后迁移。
+     「这个库跑到第几号」仍需人知道**一次** —— Flyway 能往后记账，不能回溯历史
+   - **新增迁移必须同步 bump `baseline-version`**，否则新迁移在存量库被当作已应用而**静默跳过**（守卫断言二者相等）
+   - `flyway-core` **刻意钉在 7.15.0**、不随 parent：Flyway Community 自 8.0 起不再支持 MySQL 5.7
+     （实测 `FlywayEditionUpgradeRequiredException`），而本机开发库正是 5.7。**勿「顺手」改回**
+   - 启动前须过 `scripts/migrate/preflight-baseline-check.mjs`：仅当「声称自己是最新版」却结构不符时拒绝启动
+6. 字段变更需评估存量数据影响
+7. 新建表必须包含 `create_time` 字段
+8. 逻辑删除优先使用 `status` 字段标记而非物理删除
+9. **Mapper XML 占位符须与方法签名匹配**：带 `@Param` 的方法必须写限定名（`#{bean.x}` / `#{query.x}`）；无 `@Param` 且单参数才可用裸属性。写错会在运行期抛 `BindingException` 且编译期无感。守卫：`node scripts/verify/verify_mapper_params.mjs`
+10. **「DB 加列」必须改满三处，缺一即全量写操作 500**：① `easychat.sql` 基线 ② 迁移脚本 ③ **Mapper XML**。第 ③ 处指 `<resultMap>` 加 `<result>`、`<sql id="base_column_list">` 加列名、以及目标 `<update>`/`<insert>` 内加 `<if test="bean.xxx != null">`。
    **漏改第 ③ 处的典型症状**：`<if>` 全部不命中 → SET 子句为空 → 拼出 `UPDATE t  where id=?` 语法错 → 接口返回 `CODE_1002`。
    **Service 层单测抓不到**（Mapper 被 mock 掉），只有活体冒烟能发现（2026-10-02 隐私设置改造实际踩中）。DoD 必须含「XML 三处已改」勾选项。
-9. **Entity/PO 新增字段一律不设 Java 字段初始值**，默认值只由 DDL 的 `NOT NULL DEFAULT` 承担。`<if test="bean.xxx != null">` 会把 `new PO()` 携带的初始值一并写进 SQL，导致「改 A 列时顺手把 B 列重置为默认值」的串列 bug（2026-10-02 被 TDD 抓出）。
+11. **Entity/PO 新增字段一律不设 Java 字段初始值**，默认值只由 DDL 的 `NOT NULL DEFAULT` 承担。`<if test="bean.xxx != null">` 会把 `new PO()` 携带的初始值一并写进 SQL，导致「改 A 列时顺手把 B 列重置为默认值」的串列 bug（2026-10-02 被 TDD 抓出）。
 
 ## 7. 前端规范
 
