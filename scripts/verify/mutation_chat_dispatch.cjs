@@ -67,6 +67,48 @@ function mutate (find, repl) {
   fs.writeFileSync(TARGET, src.replace(find, repl), 'utf8')
 }
 
+/**
+ * 按 fileType 定位并改写 ChatMessage.vue 模板里的媒体分派分支。
+ *
+ * ⚠ 为什么不写死缩进：初版把块文本连缩进一起硬编码（外层 12 / 内层 14），
+ *   其中一处写错 → 三个用例全部「锚点未命中」被标 [无效]，
+ *   而汇总行一度显示 6/9，若不逐条读会被误认为「部分变异漏网」。
+ *   改为正则匹配 + 缩进自适应，从根上消除这类脆弱性。
+ *
+ * @param {{which:'first'|'last', fileType:number, action:'delete'|'retype',
+ *          newType?:number, newComp?:string}} opt
+ */
+function editFileTypeBlock ({ which, fileType, action, newType, newComp }) {
+  savePristine()
+  const p = path.join(FRONT, FILES[0])
+  const src = fs.readFileSync(p, 'utf8')
+  // ⚠⚠ 换行必须用 \r?\n —— 该文件是 **CRLF**。
+  //   写成 \n 时命中数为 0，三个媒体用例全被标 [无效]，
+  //   而汇总行一度显示 6/9。这是本会话**第四次**踩「锚点换行不敏感」，
+  //   前三次分别在 mutation_local_db_core / verify_migration_flyway / verify_chat_message_dispatch，
+  //   每次都靠「无效用例计数」或基线自检才发现。已立 AGENTS §2.1 纪律，此处补齐实现。
+  const re = new RegExp(
+    '( *)<template v-if="data\\.fileType == ' + fileType + '">\\r?\\n' +
+    '( *)<Chat\\w+([^\\r\\n]*)\\r?\\n' +
+    '( *)</template>\\r?\\n', 'g')
+  const hits = []
+  let m
+  while ((m = re.exec(src)) !== null) hits.push({ index: m.index, text: m[0] })
+  if (hits.length !== 2) {
+    throw new Error(`预期找到 2 处 fileType==${fileType} 分支，实际 ${hits.length} 处`)
+  }
+  const hit = which === 'first' ? hits[0] : hits[1]
+  let replacement = ''
+  if (action === 'retype') {
+    const old = hit.text
+    const block = old
+      .replace(`fileType == ${fileType}`, `fileType == ${newType}`)
+      .replace(/<Chat\w+/, `<${newComp}`)
+    replacement = block
+  } // action==='delete' → replacement 保持空串
+  fs.writeFileSync(p, src.slice(0, hit.index) + replacement + src.slice(hit.index + hit.text.length), 'utf8')
+}
+
 const CASES = [
   {
     // ★ 2026-10-03 真实事故：ChatMessageVoice.vue 是死组件，语音掉进纯文本分支
@@ -100,6 +142,36 @@ const CASES = [
     apply () {
       mutate("<span class=\"recall-text\">{{ data.messageType == 20 ? '该消息已被管理员删除' : getRecallText() }}</span>",
         '<span class="recall-text">已撤回</span>')
+    }
+  },
+  // ★ 媒体分派：模板里 fileType 分派有**两份**（自己发约 31-39 / 对方发约 89-97），
+  //   新增 fileType 时只改一侧 → 两侧渲染不同，页面不报错。
+  {
+    name: '★ 媒体分派只改一侧（对方侧 fileType=2 分支被删）→ 两侧渲染不一致',
+    apply () {
+      // ⚠ 锚点**不能写死缩进**：两处缩进相同但初版写错（12 vs 14）导致三个用例
+      //   全部「变异未生效」，差点被当成「门禁没抓到」。改为按正则定位分支块，
+      //   缩进自适应。
+      editFileTypeBlock({ which: 'last', fileType: 2, action: 'delete' })
+    }
+  },
+  {
+    name: '媒体分派：自己侧 fileType=0（图片）分支被删',
+    apply () {
+      editFileTypeBlock({ which: 'first', fileType: 0, action: 'delete' })
+    }
+  },
+  {
+    name: '媒体分派：两侧 fileType 号互换（自己侧 0→2）',
+    apply () {
+      editFileTypeBlock({ which: 'first', fileType: 0, action: 'retype', newType: 2, newComp: 'ChatMessageFile' })
+    }
+  },
+  {
+    name: '发送中骨架屏条件被删（status=0 也渲染真实内容）',
+    apply () {
+      mutate('<div class="sending" v-if="data.status == 0">',
+        '<div class="sending" v-if="false">')
     }
   }
 ]
