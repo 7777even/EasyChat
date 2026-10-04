@@ -64,14 +64,25 @@ jobs:
         working-directory: easychat-front
         run: npm ci
 
-      # 注：此处刻意**不**跑 `npm run lint`。
-      # 该脚本在改动前即已失效（`eslint .` 报 "No files matching the pattern"，
-      # 显式 glob 则有 311 errors / 20537 warnings 存量），把它设为 CI 闸门会让流水线恒红。
-      # 前端 lint 门禁缺失已登记为技术债，见 engineering/retro/2026-10-02-group-join-approval.md
-      # 与批次 5 清单。恢复条件见该 retro「改进方案」。
+      # 2026-10-04 恢复前端 lint 闸门。
+      # 此前刻意移除，理由是「脚本在改动前即已失效」——但真因不是 lint 恒红，
+      # 而是**原 `lint` 脚本自带 `--fix`**：任何人（包括 AI）为「看一眼有没有问题」
+      # 而执行它，都会重排全部源文件。实测两次分别改动 50 个文件（+4458 / −3524 行）
+      # 与 45 个文件，含 Emoji.js / Request.js / cloudBackup.js 等与检查目的无关的文件。
       #
-      # 注：`npm run test` 独立于 lint，不挂同一条命令——
-      # 否则 lint 恒红会把测试结果一起淹没（两者失败原因完全不同）。
+      # 第二次事故性质更糟：**当时正在改 `lint` 脚本本身**，改写工具因扩展名不匹配而
+      # 失败、脚本仍是 --fix 版本，于是「执行以验证改动生效」这一步直接格式化 45 个文件。
+      # 即：在修改有副作用的工具时执行它，等于触发它的副作用。
+      #
+      # 现已拆分为 `lint`（只查，exit 0）与 `lint:fix`（才改），且错误数已清零。
+      # 6 千余个 prettier 排版 warning 已降级为 warn 不阻断（全仓格式化会重排
+      # 48 个文件，噪声压过价值；需格式化时应作独立提交）。
+      # 断言脚本：node scripts/verify/verify_frontend_lint.mjs
+      # 回归条件：若 lint 又出现 error，说明引入了新问题，门禁会拦下。
+
+      - name: 前端 lint
+        working-directory: easychat-front
+        run: npm run lint
 
       - name: 组件测试
         working-directory: easychat-front
