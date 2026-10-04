@@ -5,6 +5,19 @@ const os = require('os');
 const NODE_ENV = process.env.NODE_ENV
 // 获取当前用户的家目录  
 import { add_tables, add_indexes, alter_tables } from "./Tables"
+// 纯 SQL 构造逻辑已抽离到 dbSqlCore（node 中可测），本模块只负责执行。
+// 抽离过程修正了两个既有缺陷，见 dbSqlCore.mjs 顶部说明。
+//
+// ⚠ 只导入本文件**原本没有**的三个符号。本文件原本已本地定义
+//   toCamelCase / convertDbObj2BizObj；若再从 dbSqlCore 导入同名符号，
+//   vite 会报 `build-import-analysis] Parse error @:1:0`（exit=1）。
+//   实测对照：导入本地不存在的符号 → 绿；导入同名符号 → 红。
+//   dbSqlCore 中的同名导出供 node 门禁独立复用，两份各自自洽。
+import {
+    buildColumnsMap,
+    buildInsertSql,
+    buildUpdateSql
+} from "./dbSqlCore.mjs";
 const userDir = os.homedir();
 const dbFolder = userDir + (NODE_ENV === "development" ? "/.easychatdev/" : "/.easychat/");
 if (!fs.existsSync(dbFolder)) {
@@ -21,12 +34,23 @@ const createTable = async () => {
             await run(item, []);
         }
 
+        // 改表：先判定哪些列真的缺失，再统一执行。
+        // 旧实现在循环里「查完 pragma 立刻执行 ALTER」，而 sqlite 的 add column
+        // **不幂等**——一旦 pragma 返回空（例如表尚未建好），就会对每张表都执行
+        // ALTER，第二次启动即报 duplicate column name。改为收集后再统一执行。
+        const pending = [];
         for (const item of alter_tables) {
             const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);
-            const field = fieldList.some(row => row.name === item.field);
-            if (!field) {
-                await run(item.sql, []);
+            const exists = Array.isArray(fieldList) && fieldList.some(row => row && row.name === item.field);
+            if (!exists) {
+                pending.push(item);
             }
+        }
+        for (const item of pending) {
+            await run(item.sql, []);
+        }
+        if (pending.length > 0) {
+            console.log(`[ADB] 本次启动补列 ${pending.length} 项：${pending.map(i => i.tableName + '.' + i.field).join(', ')}`);
         }
         resolve();
     });
@@ -124,17 +148,18 @@ const queryAll = (sql, params) => {
 
 
 const insert = (sqlPrefix, tableName, data) => {
-    const columnsMap = globalColumnsMap[tableName];
-    const dbColumns = [];
-    const params = [];
-    for (let item in data) {
-        if (data[item] != undefined && columnsMap[item] != undefined) {
-            dbColumns.push(columnsMap[item]);
-            params.push(data[item]);
-        }
+    // 纯核心顺带返回 dropped：字段不在列映射里时**报出来**而非静默丢弃。
+    // 旧实现直接跳过，调用方无从得知「这次写入根本没生效」（草稿/免打扰列缺失
+    // 时的历史事故即此类）。零依赖：node_modules 太大，不引入测试框架。
+    const { sql, params, dropped } = buildInsertSql(
+        sqlPrefix, tableName, data, globalColumnsMap[tableName]);
+    if (dropped.length > 0) {
+        console.warn(`[ADB] ${tableName} 写入时以下字段不在列映射中，已被丢弃（写入未生效）：${dropped.join(', ')}`);
     }
-    const preper = '?'.repeat(dbColumns.length).split("").join(",");
-    const sql = `${sqlPrefix} ${tableName}(${dbColumns.join(",")})values(${preper})`;
+    if (params.length === 0) {
+        console.warn(`[ADB] ${tableName} 无有效字段，跳过写入`);
+        return Promise.resolve(0);
+    }
     return run(sql, params);
 }
 
@@ -148,30 +173,20 @@ const insertOrIgnore = (tableName, data) => {
 
 
 const update = (tableName, data, paramData) => {
-    const columnsMap = globalColumnsMap[tableName];
-    const dbColumns = [];
-    const params = [];
-    const whereColumns = [];
-    for (let item in data) {
-        if (data[item] != undefined && columnsMap[item] != undefined) {
-            dbColumns.push(`${columnsMap[item]} = ?`);
-            params.push(data[item]);
-        }
+    // 纯核心修掉了缺陷①：旧实现在 where 条件上用 `if (paramData[item])` 真值过滤，
+    // 空串 / 0 会被**静默丢弃** → 拼出的 WHERE 少一个条件 → 本该只命中一行的更新
+    // 变成改写该用户的所有会话。改判 undefined / null。
+    const { sql, params, skipped, reason, dropped } = buildUpdateSql(
+        tableName, data, paramData, globalColumnsMap[tableName]);
+    if (dropped.length > 0) {
+        console.warn(`[ADB] ${tableName} 更新时以下字段不在列映射中，已被丢弃（更新未生效）：${dropped.join(', ')}`);
     }
-
-    for (let item in paramData) {
-        if (paramData[item]) {
-            params.push(paramData[item]);
-            whereColumns.push(`${columnsMap[item]} = ?`);
-        }
-    }
-    //空 set / 空 where 都拼不出合法且安全的 SQL：前者报 SQLITE_ERROR(near "where") 并弹原生框阻塞主进程，
-    //后者会退化成全表更新。此处直接短路不写库，返回 0 与 run() 的受影响行数口径一致。
-    if (dbColumns.length === 0 || whereColumns.length === 0) {
-        console.warn(`update ${tableName} 跳过执行：无可更新列=${dbColumns.length}，where 条件列=${whereColumns.length}`);
+    //空 set / 空 where 都拼不出合法且安全的 SQL：前者报 SQLITE_ERROR(near "where")
+    //并弹原生框阻塞主进程，后者会退化成全表更新。短路不写库，返回 0 与 run() 口径一致。
+    if (skipped) {
+        console.warn(`update ${tableName} 跳过执行：${reason}`);
         return Promise.resolve(0);
     }
-    const sql = `update ${tableName} set ${dbColumns.join(",")} ${whereColumns.length > 0 ? ' where ' : ' '} ${whereColumns.join(" and ")}`;
     return run(sql, params);
 }
 
@@ -182,11 +197,7 @@ const initTableColumnsMap = async () => {
     for (let i = 0; i < tables.length; i++) {
         sql = `PRAGMA table_info(${tables[i].name})`;
         let columns = await queryAll(sql, []);
-        const columnsMapItem = {};
-        for (let j = 0; j < columns.length; j++) {
-            columnsMapItem[toCamelCase(columns[j].name)] = columns[j].name;
-        }
-        globalColumnsMap[tables[i].name] = columnsMapItem;
+        globalColumnsMap[tables[i].name] = buildColumnsMap(columns);
     }
 }
 
