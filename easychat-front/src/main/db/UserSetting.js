@@ -3,18 +3,17 @@ import { queryOne, run, insertOrIgnore, update, queryAll } from "./ADB";
 import { startLocalServer } from "../file"
 import store from "../store"
 const userDir = os.homedir();
-const updateContactNoReadCount = ({ userId, noReadCount }) => {
-    return new Promise(async (resolve, reject) => {
-        let sql = null;
-        if (noReadCount) {
-            sql = "update user_setting set contact_no_read = contact_no_read+? where user_id = ?";
-        } else {
-            noReadCount = 0;
-            sql = "update user_setting set contact_no_read = ? where user_id = ?";
-        }
-        await run(sql, [noReadCount, userId]);
-        resolve();
-    })
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`。
+// executor 内 await 抛出的异常不会被 Promise 捕获，改为 async 直写。
+const updateContactNoReadCount = async ({ userId, noReadCount }) => {
+    let sql = null;
+    if (noReadCount) {
+        sql = "update user_setting set contact_no_read = contact_no_read+? where user_id = ?";
+    } else {
+        noReadCount = 0;
+        sql = "update user_setting set contact_no_read = ? where user_id = ?";
+    }
+    await run(sql, [noReadCount, userId]);
 }
 
 const addUserSetting = async (userId, email) => {

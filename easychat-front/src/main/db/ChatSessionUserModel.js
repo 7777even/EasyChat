@@ -23,24 +23,28 @@ const updateChatSession = (sessionInfo) => {
 }
 
 //批量保存会话
-const saveOrUpdateChatSessionBatch4Init = (chatSessionList) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            for (let i = 0; i < chatSessionList.length; i++) {
-                const sessionInfo = chatSessionList[i]
-                sessionInfo.status = 1;
-                let sessionData = await selectUserSessionByContactId(sessionInfo.contactId);
-                if (sessionData) {
-                    await updateChatSession(sessionInfo);
-                } else {
-                    await addChatSession(sessionInfo);
-                }
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`。
+// executor 内 await 抛出的异常不会被 Promise 捕获（会逃逸成 unhandled rejection），
+// 故改为 async 函数直写。
+//
+// 注：原实现的 catch 分支**吞掉异常后仍 resolve()**，即「初始化失败」与「成功」
+// 对调用方表现完全相同。本次**保留该语义**（改掉会让会话初始化失败从静默
+// 变成阻断主流程，属行为变更），仅补一条 warn 使其不再完全无声。
+const saveOrUpdateChatSessionBatch4Init = async (chatSessionList) => {
+    try {
+        for (let i = 0; i < chatSessionList.length; i++) {
+            const sessionInfo = chatSessionList[i]
+            sessionInfo.status = 1;
+            let sessionData = await selectUserSessionByContactId(sessionInfo.contactId);
+            if (sessionData) {
+                await updateChatSession(sessionInfo);
+            } else {
+                await addChatSession(sessionInfo);
             }
-            resolve();
-        } catch (error) {
-            resolve();
         }
-    })
+    } catch (error) {
+        console.warn('[db] saveOrUpdateChatSessionBatch4Init 失败（已忽略，维持既有语义）', error);
+    }
 }
 
 //更新未读数
@@ -94,17 +98,16 @@ const updateSessionBySessionId = (updateInfo, sessionId) => {
 
 
 //收到消息新增或者更新会话
-const saveOrUpdate4Message = (currentSessionId, sessionInfo) => {
-    return new Promise(async (resolve, reject) => {
-        let sessionData = await selectUserSessionByContactId(sessionInfo.contactId);
-        if (sessionData) {
-            await updateSessionInfo4Message(currentSessionId, sessionInfo);
-        } else {
-            sessionInfo.noReadCount = 1;
-            await addChatSession(sessionInfo);
-        }
-        resolve();
-    });
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`，
+// executor 内 await 抛出的异常不会进 .catch()，改为 async 直写。
+const saveOrUpdate4Message = async (currentSessionId, sessionInfo) => {
+    let sessionData = await selectUserSessionByContactId(sessionInfo.contactId);
+    if (sessionData) {
+        await updateSessionInfo4Message(currentSessionId, sessionInfo);
+    } else {
+        sessionInfo.noReadCount = 1;
+        await addChatSession(sessionInfo);
+    }
 }
 //收到消息更新会话
 const updateSessionInfo4Message = async (currentSessionId, { sessionId, contactName, lastMessage, lastReceiveTime, contactId, memberCount }) => {

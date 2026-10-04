@@ -24,36 +24,38 @@ if (!fs.existsSync(dbFolder)) {
     fs.mkdirSync(dbFolder);
 }
 const db = new sqlite3.Database(dbFolder + "local.db");
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`。
+// 该写法是**真缺陷**：executor 内 await 之后抛出的异常不会被 Promise 捕获，
+// 会逃逸成 unhandled rejection，而不是调用方的 .catch() 能接到的 reject ——
+// 即建表失败时调用方根本收不到错误，静默失败。改为 async 函数直写：
+// 异常自动变 rejection，.catch() 照常工作。
 const createTable = async () => {
-    return new Promise(async (resolve, reject) => {
-        for (const item of add_tables) {
-            await run(item, []);
-        }
+    for (const item of add_tables) {
+        await run(item, []);
+    }
 
-        for (const item of add_indexes) {
-            await run(item, []);
-        }
+    for (const item of add_indexes) {
+        await run(item, []);
+    }
 
-        // 改表：先判定哪些列真的缺失，再统一执行。
-        // 旧实现在循环里「查完 pragma 立刻执行 ALTER」，而 sqlite 的 add column
-        // **不幂等**——一旦 pragma 返回空（例如表尚未建好），就会对每张表都执行
-        // ALTER，第二次启动即报 duplicate column name。改为收集后再统一执行。
-        const pending = [];
-        for (const item of alter_tables) {
-            const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);
-            const exists = Array.isArray(fieldList) && fieldList.some(row => row && row.name === item.field);
-            if (!exists) {
-                pending.push(item);
-            }
+    // 改表：先判定哪些列真的缺失，再统一执行。
+    // 旧实现在循环里「查完 pragma 立刻执行 ALTER」，而 sqlite 的 add column
+    // **不幂等**——一旦 pragma 返回空（例如表尚未建好），就会对每张表都执行
+    // ALTER，第二次启动即报 duplicate column name。改为收集后再统一执行。
+    const pending = [];
+    for (const item of alter_tables) {
+        const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);
+        const exists = Array.isArray(fieldList) && fieldList.some(row => row && row.name === item.field);
+        if (!exists) {
+            pending.push(item);
         }
-        for (const item of pending) {
-            await run(item.sql, []);
-        }
-        if (pending.length > 0) {
-            console.log(`[ADB] 本次启动补列 ${pending.length} 项：${pending.map(i => i.tableName + '.' + i.field).join(', ')}`);
-        }
-        resolve();
-    });
+    }
+    for (const item of pending) {
+        await run(item.sql, []);
+    }
+    if (pending.length > 0) {
+        console.log(`[ADB] 本次启动补列 ${pending.length} 项：${pending.map(i => i.tableName + '.' + i.field).join(', ')}`);
+    }
 }
 
 const toCamelCase = (str) => {
