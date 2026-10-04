@@ -36,15 +36,14 @@ module.exports = {
     // 故对**函数形参**一律不报；普通变量仍按默认检查。
     'no-unused-vars': ['error', { args: 'none' }],
 
-    // 2026-10-04：`new Promise(async (resolve, reject) => {...})` 共 11 处
-    // （主进程 db 层 + file.js）。该写法**是真缺陷**——executor 内 await 之后
-    // 抛出的异常不会被 Promise 捕获，会逃逸成 unhandled rejection，
-    // 调用方的 .catch() 收不到 → 静默失败。
-    // 但改写它属**业务行为变更**（11 处 Promise 语义 + 需配套测试），
-    // 与「修 lint 配置」是两件事，故此处**显式登记而非默默放过**：
-    // 关掉规则只是让 lint 变绿，缺陷仍在。
-    // 修完（见 system-facts §14 遗留）后应删除本行让该规则重新生效。
-    'no-async-promise-executor': 'off',
+    // ⚠ `no-async-promise-executor` 已于 2026-10-04 修复 11 处并**重新启用**。
+    //   该规则守的是真缺陷：`new Promise(async (resolve, reject) => {...})` 中，
+    //   executor 内 await 之后抛出的异常**不会被 Promise 捕获**，会逃逸成
+    //   unhandled rejection，调用方的 .catch() 收不到 → 静默失败。
+    //   修复前曾临时豁免以便先让 lint 转绿，**现已撤除豁免**（下方无 'off'）。
+    //   同批修掉的还有两处「提前返回」：forEach(async …) 未被等待、
+    //   uploadFile() 未 await 就 resolve —— 这类问题 eslint 规则抓不到，
+    //   故一并靠代码审查与注释固定语义。
 
     // `wsClient.js` 的 case 2~26 是**单一 case 组**，整组共用同一段处理逻辑
     // （故意的 fallthrough），组内有 3 处 const 声明。
