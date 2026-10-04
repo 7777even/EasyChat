@@ -383,6 +383,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/mutation_call_store_core.cjs` / `mutation_local_db_core.cjs` | **反向验证**（不进 CI，见下） | 变异未被门禁捕获即 exit=1。**两者都含「变异前基线必须跑通」的自检**——门禁自身崩溃（Windows ESM 路径未转 `file://` URL 等）会被误记成「全部捕获」，该自检把「门禁能跑」从前提变成硬校验 |
 | `scripts/verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件未覆盖后端**落库白名单**中的消息类型（→ 历史漫游能拉到、界面什么都不显示、不抛异常不报错）；`ChatMessage.vue` 未 import 语音/位置子组件（**死组件**，2026-10-03 实际事故）；纯文本兜底分支排在 24/25 分支之前（会抢走它们） |
 | `scripts/verify/verify_frontend_test_base.mjs` | CI | 测试依赖未钉死版本（`^` 会某天自动升到 vitest 2/3/5，连带要求 vite 5+ 从而拖坏 `electron-vite@1`）；`vite` 被顺带升级出 4.x；生产依赖混入测试框架；`vitest.config.mjs` 缺 jsdom / 缺 `@vitejs/plugin-vue`（`.vue` 解析不了）；`@` 别名与 `electron.vite.config.js` 两处不一致；全局桩缺 `ResizeObserver`（组件挂载即崩）；CI 未跑 `npm run test` |
+| `scripts/verify/verify_frontend_lint.mjs` | 推送前（`pre-push` hook）/ CI | **`lint` 脚本被塞回 `--fix`**（检查与修复必须分两条命令：实测一次「看一眼有没有问题」就重排 50 个文件 +4458/−3524 行，第二次在改脚本本身时执行它、又重排 45 个）；`lint:fix` 缺失或不带 `--fix`；eslint 缺 `ecmaVersion` / `sourceType: module` / `env.es2020`（顶层 `await` 与 `globalThis` 会被误报）；**当前 error 数超过基线 20**（防止新增问题被无视） |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
 > 它按 **fail-closed** 设计：连不上库即 `exit 1`（错误信息说明如何用 `SCHEMA_DB_*` 指定连接参数），
