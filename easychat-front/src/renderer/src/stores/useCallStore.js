@@ -5,11 +5,26 @@
 import { defineStore } from 'pinia'
 import * as WebRTC from '@/utils/WebRTC'
 import { reduceCallFrame } from '@/utils/callFrameCore'
+// 纯逻辑已抽离到 callStoreCore.mjs（node 中可测），本 store 只保留副作用编排。
+// 抽离过程修正了两个既有缺陷：① 1800ms 陈旧定时器会清掉新通话的结束态
+// ② reason 为空时 endReason 会残留上一通通话的旧原因。见 callStoreCore.mjs 顶部说明。
+import {
+  INITIAL_CALL_EPOCH,
+  buildAcceptFrame,
+  buildBusyFrame,
+  buildHangupFrame,
+  buildInviteFrame,
+  buildRejectFrame,
+  buildSignalFrame,
+  endCallResetPatch,
+  shouldAutoResetToIdle
+} from '@/utils/callStoreCore'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
 
 export const useCallStore = defineStore('call', {
   state: () => ({
     status: 'idle', // idle | calling | ringing | connected | ended
+    callEpoch: INITIAL_CALL_EPOCH, // 通话身份代号，每次开始新通话自增；用于 1800ms 复位守卫区分「同一通」
     callId: null,
     callType: 1, // 1 单聊 2 群呼
     mediaType: 2, // 1 音频 2 音视频
@@ -45,57 +60,66 @@ export const useCallStore = defineStore('call', {
       this.remoteStreams[peerId] = stream
     },
     sendSignal(peerId, signalType, payload) {
-      const msg = { messageType: -13, callId: this.callId, toUserId: peerId, signalType }
-      if (payload && payload.sdp) msg.sdp = payload.sdp
-      if (payload && payload.candidate) msg.candidate = payload.candidate
-      this.sendFrame(msg)
+      this.sendFrame(buildSignalFrame({
+        callId: this.callId,
+        peerId,
+        signalType,
+        sdp: payload && payload.sdp,
+        candidate: payload && payload.candidate
+      }))
     },
     // 发起通话（单聊 contactType=0 / 群聊 contactType=1）
     async startCall({ contactId, contactType, mediaType = 2 }) {
       if (this.status !== 'idle') return
+      this.callEpoch += 1 // 新通话身份：使上一通遗留的 1800ms 定时器失效
       this.callType = contactType === 1 ? 2 : 1
       this.groupId = contactType === 1 ? contactId : null
       const toUserId = contactType === 0 ? contactId : null
       this.callId = crypto.randomUUID()
       this.mediaType = mediaType
+      this.errorMsg = ''
       this.status = 'calling'
       const ok = await this.ensureLocalStream()
       if (!ok) { this.endCallLocal(''); return }
-      this.sendFrame({
-        messageType: -10,
+      this.sendFrame(buildInviteFrame({
         callId: this.callId,
         callType: this.callType,
         mediaType: this.mediaType,
         toUserId,
         groupId: this.groupId
-      })
+      }))
     },
     // 接听来电
     async acceptCall() {
       if (!this.incoming) return
       const inv = this.incoming
+      this.callEpoch += 1 // 接听也算进入一通新通话：作废上一通遗留的复位定时器
       this.callId = inv.callId
       this.callType = inv.callType
       this.mediaType = inv.mediaType
       this.groupId = inv.groupId
       this.iceServers = inv.iceServers || []
+      this.errorMsg = ''
       const ok = await this.ensureLocalStream()
       if (!ok) { this.rejectCall(); return }
       this.members = [this.selfId(), inv.fromUserId]
       this.status = 'connected'
       this.incoming = null
-      this.sendFrame({ messageType: -11, callId: this.callId })
+      this.sendFrame(buildAcceptFrame(this.callId))
     },
     rejectCall() {
-      if (this.callId) this.sendFrame({ messageType: -12, callId: this.callId })
+      const f = buildRejectFrame(this.callId)
+      if (f) this.sendFrame(f)
       this.endCallLocal('已拒绝')
     },
     busy() {
-      if (this.callId) this.sendFrame({ messageType: -16, callId: this.callId })
+      const f = buildBusyFrame(this.callId)
+      if (f) this.sendFrame(f)
       this.endCallLocal('对方忙线')
     },
     hangup() {
-      if (this.callId) this.sendFrame({ messageType: -14, callId: this.callId })
+      const f = buildHangupFrame(this.callId)
+      if (f) this.sendFrame(f)
       this.endCallLocal('已挂断')
     },
     async ensureLocalThenOffer(peerId) {
@@ -144,19 +168,22 @@ export const useCallStore = defineStore('call', {
     },
     endCallLocal(reason) {
       WebRTC.stopAll()
-      this.remoteStreams = {}
-      this.localStream = null
-      this.incoming = null
-      this.members = []
-      this.isMuted = false
-      this.isCameraOff = false
-      if (reason) this.endReason = reason
-      this.status = 'ended'
+      Object.assign(this, endCallResetPatch(reason))
+      // 捕获当前通话身份：若 1800ms 内开始了新通话（callEpoch 自增），
+      // 本定时器不得把新通话的状态打回 idle。
+      // 旧实现只判 `status === 'ended'`，在「A 结束后 1800ms 内 B 也结束」时
+      // A 的定时器会误抹掉 B 的结束态。见 callStoreCore.mjs#shouldAutoResetToIdle。
+      const epochAtSchedule = this.callEpoch
       setTimeout(() => {
-        if (this.status === 'ended') {
-          this.status = 'idle'
-          this.endReason = ''
-        }
+        if (!shouldAutoResetToIdle({
+          status: this.status,
+          epochAtSchedule,
+          currentEpoch: this.callEpoch
+        })) return
+        this.status = 'idle'
+        this.endReason = ''
+        this.callId = null
+        this.groupId = null
       }, 1800)
     }
   }
