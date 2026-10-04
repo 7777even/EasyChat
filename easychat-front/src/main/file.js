@@ -54,33 +54,36 @@ const getFFmegPath = () => {
     return path.join(getResourcesPath(), ffmpegPath);
 }
 
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`。
+// 该写法下 executor 内 await 抛出的异常不会被 Promise 捕获，会逃逸成
+// unhandled rejection，调用方 .catch() 收不到 —— 转码失败时静默。
 const saveFile2Local = async (messageId, filePath, fileType) => {
-    return new Promise(async (resolve, reject) => {
-        let ffmpegPath = getFFmegPath();
-        let savePath = await getLocalFilePath("chat", false, messageId);
-        let coverPath = null;
-        fs.copyFileSync(filePath, savePath);
-        //生成缩略图l
-        if (fileType != 2) {
-            //判断视频格式
-            let command = `${getFFprobePath()} -v error -select_streams v:0 -show_entries stream=codec_name "${filePath}"`
-            let result = await execCommand(command);
-            result = result.replaceAll("\r\n", "");
-            result = result.substring(result.indexOf("=") + 1);
-            let codec = result.substring(0, result.indexOf("["));
-            if ("hevc" === codec) {
-                command = `${ffmpegPath}  -y -i "${filePath}" -c:v libx264 -crf 20 "${savePath}"`;
-                await execCommand(command);
-            }
-            //生成缩略图
-            coverPath = savePath + cover_image_suffix;
-            command = `${ffmpegPath} -i "${savePath}" -y -vframes 1 -vf "scale=min(170\\,iw*min(170/iw\\,170/ih)):min(170\\,ih*min(170/iw\\,170/ih))" "${coverPath}"`
+    let ffmpegPath = getFFmegPath();
+    let savePath = await getLocalFilePath("chat", false, messageId);
+    let coverPath = null;
+    fs.copyFileSync(filePath, savePath);
+    //生成缩略图l
+    if (fileType != 2) {
+        //判断视频格式
+        let command = `${getFFprobePath()} -v error -select_streams v:0 -show_entries stream=codec_name "${filePath}"`
+        let result = await execCommand(command);
+        result = result.replaceAll("\r\n", "");
+        result = result.substring(result.indexOf("=") + 1);
+        let codec = result.substring(0, result.indexOf("["));
+        if ("hevc" === codec) {
+            command = `${ffmpegPath}  -y -i "${filePath}" -c:v libx264 -crf 20 "${savePath}"`;
             await execCommand(command);
         }
-        //上传文件
-        uploadFile(messageId, savePath, coverPath);
-        resolve();
-    });
+        //生成缩略图
+        coverPath = savePath + cover_image_suffix;
+        command = `${ffmpegPath} -i "${savePath}" -y -vframes 1 -vf "scale=min(170\\,iw*min(170/iw\\,170/ih)):min(170\\,ih*min(170/iw\\,170/ih))" "${coverPath}"`
+        await execCommand(command);
+    }
+    //上传文件
+    // 2026-10-04：补 await。原实现未 await 就紧接着 resolve()，即函数在
+    // 上传完成前就返回，上传失败也不会传到调用方 —— 与 ChatMessageModel
+    // #saveMessageBatch 同类的提前返回问题。
+    await uploadFile(messageId, savePath, coverPath);
 }
 
 const uploadFile = (messageId, savePath, coverPath) => {
@@ -106,23 +109,24 @@ const uploadFile = (messageId, savePath, coverPath) => {
         });
 }
 
-const createCover = (filePath) => {
-    return new Promise(async (resolve, reject) => {
-        let ffmpegPath = getFFmegPath();
-        let avatarPath = await getLocalFilePath("avatar", false, store.getUserId() + "_temp");
-        let command = `${ffmpegPath} -i "${filePath}" "${avatarPath}" -y`
-        await execCommand(command);
+// 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve(v) })`。
+// executor 内 await 之后若抛错（此处最可能是 fs.readFileSync 的 ENOENT ——
+// ffmpeg 未生成预期文件），异常不会被 Promise 捕获，会逃逸成 unhandled
+// rejection，调用方 await 不到错误。改为 async 直写。
+const createCover = async (filePath) => {
+    let ffmpegPath = getFFmegPath();
+    let avatarPath = await getLocalFilePath("avatar", false, store.getUserId() + "_temp");
+    let command = `${ffmpegPath} -i "${filePath}" "${avatarPath}" -y`
+    await execCommand(command);
 
-        let coverPath = await getLocalFilePath("avatar", false, store.getUserId() + "_temp_cover");
-        command = `${ffmpegPath} -i "${filePath}" -y -vframes 1 -vf "scale=min(60\\,iw*min(60/iw\\,60/ih)):min(60\\,ih*min(60/iw\\,60/ih))" "${coverPath}"`
-        await execCommand(command);
+    let coverPath = await getLocalFilePath("avatar", false, store.getUserId() + "_temp_cover");
+    command = `${ffmpegPath} -i "${filePath}" -y -vframes 1 -vf "scale=min(60\\,iw*min(60/iw\\,60/ih)):min(60\\,ih*min(60/iw\\,60/ih))" "${coverPath}"`
+    await execCommand(command);
 
-        resolve({
-            avatarStream: fs.readFileSync(avatarPath),
-            coverStream: fs.readFileSync(coverPath),
-        });
-    });
-
+    return {
+        avatarStream: fs.readFileSync(avatarPath),
+        coverStream: fs.readFileSync(coverPath),
+    };
 }
 
 const execCommand = (command) => {
@@ -241,57 +245,58 @@ const closeLocalServer = () => {
 }
 
 const getLocalFilePath = async (partType, showCover, fileId) => {
-    return new Promise(async (resolve, reject) => {
-        let localFolder = store.getUserData("localFileFolder");
-        let localPath = null;
-        if (partType == "avatar") { //头像
-            localFolder = localFolder + "/avatar/"
-            if (!fs.existsSync(localFolder)) {
-                mkdirs(localFolder);
-            }
-            localPath = localFolder + fileId + image_suffix;
-        } else if (partType == "chat") {
-            let messageInfo = await selectByMessageId(fileId);
-            const month = moment(Number.parseInt(messageInfo.sendTime)).format('YYYYMM');
-            localFolder = localFolder + "/" + month;
-            if (!fs.existsSync(localFolder)) {
-                mkdirs(localFolder);
-            }
-            let fileSuffix = messageInfo.fileName;
-            fileSuffix = fileSuffix.substring(fileSuffix.lastIndexOf("."));
-            localPath = localFolder + "/" + fileId + fileSuffix;
-        } else if (partType == "moment") { //朋友圈
-            localFolder = localFolder + "/moment/"
-            if (!fs.existsSync(localFolder)) {
-                mkdirs(localFolder);
-            }
-            // 检查 fileId 是否已经包含扩展名
-            if (fileId.includes('.')) {
-                localPath = localFolder + fileId;
-            } else {
-                localPath = localFolder + fileId + image_suffix;
-            }
-        } else if (partType == "tmp") {
-            localFolder = localFolder + "/tmp/"
-            if (!fs.existsSync(localFolder)) {
-                mkdirs(localFolder);
-            }
-            localPath = localFolder + "/" + fileId
-        } else if (partType == "group") { //群文件
-            localFolder = localFolder + "/group/"
-            if (!fs.existsSync(localFolder)) {
-                mkdirs(localFolder);
-            }
-            localPath = localFolder + fileId
+    // 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve(p) })`。
+    // executor 内 await 抛出的异常不会被 Promise 捕获（此处可能是
+    // selectByMessageId 拿到 undefined 后的属性访问），会逃逸成 unhandled
+    // rejection 而调用方 await 不到。去掉包裹直接 async 直写。
+    let localFolder = store.getUserData("localFileFolder");
+    let localPath = null;
+    if (partType == "avatar") { //头像
+        localFolder = localFolder + "/avatar/"
+        if (!fs.existsSync(localFolder)) {
+            mkdirs(localFolder);
+        }
+        localPath = localFolder + fileId + image_suffix;
+    } else if (partType == "chat") {
+        let messageInfo = await selectByMessageId(fileId);
+        const month = moment(Number.parseInt(messageInfo.sendTime)).format('YYYYMM');
+        localFolder = localFolder + "/" + month;
+        if (!fs.existsSync(localFolder)) {
+            mkdirs(localFolder);
+        }
+        let fileSuffix = messageInfo.fileName;
+        fileSuffix = fileSuffix.substring(fileSuffix.lastIndexOf("."));
+        localPath = localFolder + "/" + fileId + fileSuffix;
+    } else if (partType == "moment") { //朋友圈
+        localFolder = localFolder + "/moment/"
+        if (!fs.existsSync(localFolder)) {
+            mkdirs(localFolder);
+        }
+        // 检查 fileId 是否已经包含扩展名
+        if (fileId.includes('.')) {
+            localPath = localFolder + fileId;
         } else {
-            localPath = localFolder + "/" + fileId
+            localPath = localFolder + fileId + image_suffix;
         }
-        if (showCover) {
-            localPath = localPath + cover_image_suffix;
+    } else if (partType == "tmp") {
+        localFolder = localFolder + "/tmp/"
+        if (!fs.existsSync(localFolder)) {
+            mkdirs(localFolder);
         }
-        resolve(localPath);
-    });
-
+        localPath = localFolder + "/" + fileId
+    } else if (partType == "group") { //群文件
+        localFolder = localFolder + "/group/"
+        if (!fs.existsSync(localFolder)) {
+            mkdirs(localFolder);
+        }
+        localPath = localFolder + fileId
+    } else {
+        localPath = localFolder + "/" + fileId
+    }
+    if (showCover) {
+        localPath = localPath + cover_image_suffix;
+    }
+    return localPath;
 }
 
 expressServer.get('/file', async (req, res) => {
