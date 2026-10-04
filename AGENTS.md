@@ -366,6 +366,10 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_file_type_content_type.mjs` | 推送前（`pre-push` hook）/ CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 缺前端在用的 fileType（→ content-type 拼成 `undefined<ext>`、浏览器无法解码、静默失败）、MIME 前缀不合法、语音 `fileType=3` 非 `audio/*` |
 | `scripts/verify/verify_password_session.mjs` | 推送前（`pre-push` hook）/ CI | 改密 / 找回密码成功后未吊销该用户全部端 Token、未推 `FORCE_OFF_LINE`；验证码被交给 logger；未登录端点限流存在「token 缺失直接 return」早退；邮件未配置时未 fail-closed；邮件主题拼接用户邮箱 |
 | `scripts/verify/verify_schema_drift.mjs` | 推送前（`pre-push` hook）/ CI（独立 job + MySQL service） | 基线有的表 / 列活库没有（**迁移未执行**）、列类型漂移、`user_info.password` 列宽不足 60（BCrypt 截断）、解析器静默漏表、迁移脚本编号缺口 |
+| `scripts/verify/verify_migration_flyway.mjs` | 推送前（`pre-push` hook）/ CI | `flyway-core` 版本被改回随 parent（Community 8.0+ 不支持 MySQL 5.7，本机开发库正是 5.7）；迁移文件未打包进产物；`baseline-version` 与仓库最大迁移号不等（新增迁移会在存量库**静默跳过**）；迁移编号断裂；任一迁移含 `DELIMITER` / `CREATE PROCEDURE`（Flyway 解析器过不了）；编排中应用不依赖前置闸门（fail-closed 失效） |
+| `scripts/verify/verify_audit_and_at_all.mjs` | 推送前（`pre-push` hook）/ CI | `recordLog` 未自动补齐客户端 IP（6 处调用点全传 null → 最需溯源的 `LOGIN_FAILED` / `FORCE_OFFLINE` / `UPDATE_PASSWORD` 无 IP）；`@所有人` 权限仅在客户端生效（普通成员可冒用管理员身份） |
+| `scripts/verify/verify_mapper_params.mjs` | CI | Mapper 方法带 `@Param` 但 XML 用裸属性占位符（运行期抛 `BindingException`，编译期无感） |
+| `scripts/verify/verify_call_store_core.mjs` | CI | 通话 store 编排逻辑（`callStoreCore.mjs`）：结束态重置补丁有遗漏或越界；**1800ms 复位守卫缺通话身份校验**（陈旧定时器会抹掉新通话的结束态）；空 `reason` 时 `endReason` 未清空（显示上一通通话的原因）；出站帧号与 `callFrameCore` 漂移；`callId` 为空时仍发帧；`useCallStore.js` 内联裸守卫或裸写 `messageType`（绕开纯核心 → 缺陷复活） |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
 > 它按 **fail-closed** 设计：连不上库即 `exit 1`（错误信息说明如何用 `SCHEMA_DB_*` 指定连接参数），
