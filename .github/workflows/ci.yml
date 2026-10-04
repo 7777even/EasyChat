@@ -69,10 +69,13 @@ jobs:
       # 显式 glob 则有 311 errors / 20537 warnings 存量），把它设为 CI 闸门会让流水线恒红。
       # 前端 lint 门禁缺失已登记为技术债，见 engineering/retro/2026-10-02-group-join-approval.md
       # 与批次 5 清单。恢复条件见该 retro「改进方案」。
+      #
+      # 注：`npm run test` 独立于 lint，不挂同一条命令——
+      # 否则 lint 恒红会把测试结果一起淹没（两者失败原因完全不同）。
 
-      - name: build
+      - name: 组件测试
         working-directory: easychat-front
-        run: npm run build
+        run: npm run test
 
   gates:
     name: 契约与规范门禁
@@ -164,6 +167,22 @@ jobs:
       #   ② 字段不在列映射时被静默丢弃 → 调用方无从得知「写入根本没生效」
       - name: 本地 SQLite SQL 构造核心
         run: node scripts/verify/verify_local_db_core.mjs
+
+      # 2026-10-04 新增。前端消息分发条件与后端类型枚举对账：
+      # 2026-10-03 曾发生「Chat.vue 分发条件不含 24/25，而 ChatMessageVoice.vue
+      # 是从未被 import 的死组件」——服务端正常、历史漫游也拉到，
+      # 语音却渲染成普通文本气泡，不抛异常不报错。
+      - name: 前端消息分发与后端枚举对账
+        run: node scripts/verify/verify_chat_message_dispatch.mjs
+
+      # 2026-10-04 新增。固化前端测试基线：
+      # ① vitest 必须钉 1.x（2+/3+/5+ 的 peer 要求 vite 5+，会把 vite 从 4 升上去
+      #    从而拖坏 electron-vite@1 —— 实测 vite 必须保持 4.5.14）
+      # ② 生产依赖不得混入测试框架 ③ vitest 配置须挂 @vitejs/plugin-vue
+      #    （漏掉报 "Install @vitejs/plugin-vue"，vitest 不会自动启用）
+      # ④ 全局桩须含 ResizeObserver（缺它组件挂载即崩）
+      - name: 前端测试基线契约
+        run: node scripts/verify/verify_frontend_test_base.mjs
 
       # 2026-10-03 新增。csvCell 的「= + - @ 前置单引号」是**安全控制**
       # （聊天内容来自对方，公式注入载荷会在受害者 Excel 中执行）。
