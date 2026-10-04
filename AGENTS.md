@@ -187,7 +187,14 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 ### 6.2 安全红线
 
 1. **会话管理**：Token 与会话信息存储在 Redis，键前缀 `constants.Constants.REDIS_KEY_WS_TOKEN`。
-2. **密码安全**：**BCrypt** 加密存储（`user_info.password` 列宽 60，`$2a$` 开头）。客户端一律发送**明文**，由服务端承担哈希——**禁止在客户端对密码做任何哈希**（BCrypt 前预哈希属反模式）。存量 MD5 账号保留双验证并在登录成功时自动升级；批量迁移接口**不需要**（明文不可得，双哈希账号只能走邮箱找回密码）。守卫：`node scripts/verify/verify_password_handoff.mjs`。
+2. **密码安全**：**BCrypt** 加密存储（`user_info.password` 列宽 60）。客户端一律发送**明文**，由服务端承担哈希——**禁止在客户端对密码做任何哈希**（BCrypt 前预哈希属反模式）。存量 MD5 账号保留双验证并在登录成功时自动升级；批量迁移接口**不需要**（明文不可得，双哈希账号只能走邮箱找回密码）。守卫：`node scripts/verify/verify_password_handoff.mjs`。
+   > ⚠️ **不得把「`$2a$` 开头」写成规范（2026-10-04 订正）**：本条曾写「`$2a$` 开头」，
+   > `PasswordEncoder#isBCrypt` 很可能**据此**写成只认单一前缀，结果与 `matches()`
+   > 对同一串密码给出相反答案——库中若出现 `$2b$`/`$2y$` 哈希，
+   > `login` 的「MD5→BCrypt 自动升级」会把**已加密的哈希再加密一次**，账号永久无法登录。
+   > 契约是「**长度为 60 的 BCrypt modular-crypt 格式**」，前缀 `$2a$` 只是
+   > `spring-security-crypto 5.6.0` 的当前默认输出，属**实现细节而非契约**。
+   > 判定口径与不变式见 `openspec/specs/password-bcrypt/spec.md`。
 3. **SQL 注入**：禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数绑定。
 4. **操作权限**：用户只能操作自己的资源（消息、好友等），接口内必须校验当前用户身份与资源归属。
 5. **文件上传**：限制文件类型与大小，禁止可执行文件上传。
