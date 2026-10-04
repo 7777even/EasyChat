@@ -82,14 +82,16 @@ EasyChat/
 | 对外接口增删改 | 接口联冒烟 |
 | L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
-### 2.1 验证的六条硬纪律
+### 2.1 验证的九条硬纪律
 
 1. **任何写入 CI / Git hook / 门禁的脚本，交付前必须实跑一次并贴出退出码。** 「脚本存在」不等于「门禁有判别力」——本仓 `npm run lint` 长期 `exit 2`（`eslint .` 报 `No files matching`），却被接进 CI 导致流水线恒红（2026-10-02 事故，见 `engineering/retro/2026-10-02-group-join-approval.md` §三.1）。**门禁必须先在当前 main 上跑通，才允许接入。**
 2. **门禁报错信息里的每条处置建议，都要亲自照着走一遍。** 写「处置：把 X 设为 Y」的人必须验证过「照 X 那样做之后，脚本真的会读到这个值」。2026-10-04 靠此发现 `preflight-baseline-check.mjs` 只读 properties 默认值、不读 env，**把它自己报错信息里建议的处置路径堵死**（运维声明版本号 9 → 闸门仍按 12 判「声称最新」→ 拒绝启动）。
 3. **静态断言有固有上限，超出部分须主动登记而非假装覆盖。** 静态断言只能验证「代码里有什么字面量」，**无法验证「条件分支的方向」**——把 `if (!missing) {放行}` 反写成 `if (missing) {放行}` 后，所有基于字面量的断言照样通过。遇到此类项：① 从变异清单**撤除**该用例（不做假覆盖）② 登记为「已知不可静态检测项」③ 改由**真机验证**兜底。参见 `docs/system-facts.md` §14 遗留 #11。
 4. **Windows 上一律用 `edit` / `write` 工具改源码，不得用 PowerShell 重定向或 `Set-Content` 改文件。** 实测三类事故：BOM 导致 `javac` 报 `非法字符 '\ufeff'`；`-replace` 正则批量替换产生重复行；换行丢失导致行粘连（2026-10-02 连续踩中三次）。
 5. **新增方法必须走完 TDD 红阶段**：先只加方法签名 + `throw new UnsupportedOperationException()` 桩让测试**编译通过并跑红**，再填实现。Java 中「测试引用不存在的方法 → 编译失败」容易让人顺手把实现一起写掉，从而跳过红阶段（2026-10-02 在 `join-type-and-blacklist` 实际发生）。若已跳过，须用**变异检验**（故意破坏守卫/逻辑，确认对应用例转红）补偿并在 QA 中说明。
-6. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
+7. **判「某写法不该出现在代码里」时，先剥注释再匹配**。注释里**引用**某个反模式是应该的（那是解释），代码里出现才是问题。2026-10-04 在 `verify_local_db_core.mjs` 踩中：判「`ADB.js` 不得再内联 `if (paramData[item])`」，而我自己在文件顶部写了解释该缺陷的注释、注释里就含这段原文 → 断言把自己的注释判成了违规。
+8. **子串断言只对"整条 SQL / 整个标识符"这种唯一形态成立**。判「某字段是否出现在列清单里」必须**解析结构**（`insert into t(b)values(?)` 里的 `b`），不能用 `sql.includes('b')` —— 而 `includes('a')` 对 `insert or ignore into` 恒为 true。同类：判「某字段的值是否为 undefined」不能看 SQL 里有没有该**列名**（列名必然在）。
+9. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
 
 ## 3. 接口契约规则
 
@@ -370,6 +372,8 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_audit_and_at_all.mjs` | 推送前（`pre-push` hook）/ CI | `recordLog` 未自动补齐客户端 IP（6 处调用点全传 null → 最需溯源的 `LOGIN_FAILED` / `FORCE_OFFLINE` / `UPDATE_PASSWORD` 无 IP）；`@所有人` 权限仅在客户端生效（普通成员可冒用管理员身份） |
 | `scripts/verify/verify_mapper_params.mjs` | CI | Mapper 方法带 `@Param` 但 XML 用裸属性占位符（运行期抛 `BindingException`，编译期无感） |
 | `scripts/verify/verify_call_store_core.mjs` | CI | 通话 store 编排逻辑（`callStoreCore.mjs`）：结束态重置补丁有遗漏或越界；**1800ms 复位守卫缺通话身份校验**（陈旧定时器会抹掉新通话的结束态）；空 `reason` 时 `endReason` 未清空（显示上一通通话的原因）；出站帧号与 `callFrameCore` 漂移；`callId` 为空时仍发帧；`useCallStore.js` 内联裸守卫或裸写 `messageType`（绕开纯核心 → 缺陷复活） |
+| `scripts/verify/verify_local_db_core.mjs` | CI | 本地 SQLite SQL 构造核心（`dbSqlCore.mjs`）：**where 条件真值过滤**（空串/0 被静默丢弃 → 更新命中范围扩大）、字段不在列映射时被静默丢弃、空 set / 空 where 未短路（前者拼出 `update t  where` 弹原生框、后者退化为全表更新）、`add column` 非幂等仍逐条立即执行、列名可由值注入 |
+| `scripts/verify/mutation_call_store_core.cjs` / `mutation_local_db_core.cjs` | **反向验证**（不进 CI，见下） | 变异未被门禁捕获即 exit=1。**两者都含「变异前基线必须跑通」的自检**——门禁自身崩溃（Windows ESM 路径未转 `file://` URL 等）会被误记成「全部捕获」，该自检把「门禁能跑」从前提变成硬校验 |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
 > 它按 **fail-closed** 设计：连不上库即 `exit 1`（错误信息说明如何用 `SCHEMA_DB_*` 指定连接参数），
