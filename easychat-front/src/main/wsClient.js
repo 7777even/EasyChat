@@ -3,8 +3,8 @@ const NODE_ENV = process.env.NODE_ENV
 import { saveMessage, saveMessageBatch, updateMessage, existsMessage } from "./db/ChatMessageModel"
 import {
     saveOrUpdateChatSessionBatch4Init, saveOrUpdate4Message,
-    updateGroupName, delChatSession, selectUserSessionByContactId,
-    updateSessionBySessionId, topChatSession, updateSessionAttr,
+    updateGroupName, selectUserSessionByContactId,
+    updateSessionBySessionId, updateSessionAttr,
     updateSessionPreviewOnly
 } from "./db/ChatSessionUserModel"
 import { updateContactNoReadCount } from "./db/UserSetting"

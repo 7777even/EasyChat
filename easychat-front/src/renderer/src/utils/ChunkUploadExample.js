@@ -179,15 +179,20 @@ const uploadFileDo = async (file) => {
 
 /**
  * 示例5: 配置自定义参数
+ *
+ * 2026-10-04 删除原实现。原代码写的是 `new ChunkUpload({...})`，但：
+ *   ① 全仓不存在名为 `ChunkUpload` 的类或文件（lint: no-undef）
+ *   ② chunkSize / maxConcurrent / retryTimes 是 `ChunkUploadApi` 内部构造器的
+ *      默认值，**外部无法配置**（它导出的是单例 `new ChunkUploadApi()`）
+ * 即该示例演示的是一个并不存在的 API，照抄必然报错。
+ *
+ * 若确实需要自定义分片大小/并发数，应修改
+ * `ChunkUploadApi.js` 内 `constructor` 里的默认值，而不是在调用处 new。
  */
-export function customConfigExample() {
-  // 创建自定义配置的上传器
-  const customUploader = new ChunkUpload({
-    chunkSize: 10 * 1024 * 1024, // 10MB 分片
-    maxConcurrent: 5,             // 最大并发5个
-    retryTimes: 5                 // 重试5次
-  })
-  
-  return customUploader
+export function customConfigTip() {
+  return {
+    chunkSize: '在 ChunkUploadApi.js 的 constructor 中修改默认值',
+    maxConcurrent: '同上',
+    retryTimes: '同上'
+  }
 }
-`

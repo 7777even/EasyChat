@@ -7,7 +7,7 @@
 // ⚠ 本文件若被清空，`verify_frontend_test_base.mjs` 门禁会直接失败
 //   （它断言本文件存在且含 ResizeObserver 桩）——缺桩属高频坑，值得机控。
 
-import { vi, beforeEach } from 'vitest'
+import { beforeEach } from 'vitest'
 
 // ── 1. 尺寸观察器 ────────────────────────────────────────────
 // MessageVirtualList 用它监听容器高度以驱动虚拟滚动。

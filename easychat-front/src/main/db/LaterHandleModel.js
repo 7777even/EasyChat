@@ -1,4 +1,4 @@
-import { run, insert, queryAll, queryOne, del } from "./ADB";
+import { run, queryAll, queryOne } from "./ADB";
 
 /**
  * 稍后处理 Model 层

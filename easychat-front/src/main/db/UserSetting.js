@@ -1,5 +1,5 @@
 const os = require('os');
-import { queryOne, run, insertOrIgnore, update, queryAll, insert } from "./ADB";
+import { queryOne, run, insertOrIgnore, update, queryAll } from "./ADB";
 import { startLocalServer } from "../file"
 import store from "../store"
 const userDir = os.homedir();
