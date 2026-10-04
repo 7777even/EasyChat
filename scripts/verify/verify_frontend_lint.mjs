@@ -22,7 +22,7 @@
  * 用法：node scripts/verify/verify_frontend_lint.mjs
  * 退出码：0 全通过 / 1 有失败项
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
@@ -72,8 +72,71 @@ check('声明了 env.es2020（否则 globalThis 等标准全局被判 no-undef�
 check('声明了 env.browser / env.node（渲染层与主进程混用）',
   /browser:\s*true/.test(cfg) && /node:\s*true/.test(cfg))
 
-// ── 3. 当前错误数不超过基线 ─────────────────────────────────
-console.log('\n=== 3. 当前 lint 错误数（不超基线）===')
+// ── 3. 已修复缺陷不得复活 ────────────────────────────────────
+console.log('\n=== 3. 已修复缺陷不得复活 ===')
+// `new Promise(async (resolve, reject) => {...})` 共 11 处已于 2026-10-04 修完。
+// 该写法是真缺陷（executor 内 await 抛错不进 .catch() → 静默失败），
+// eslint 规则 `no-async-promise-executor` 已重新启用；此处再加一道
+// 「规则确实开着 + 代码里确实没有」的双重断言：
+// 只靠 eslint 规则不够 —— 若有人为省事把规则改回 'off'，门禁会跟着一起失效。
+const cfgOff = /'no-async-promise-executor':\s*'off'/.test(cfg)
+check('no-async-promise-executor 规则未被关掉',
+  !cfgOff,
+  cfgOff ? '规则被设为 off —— 2026-10-04 已修完 11 处，应保持启用以防复发' : '')
+
+// ⚠ 统计必须**跳过注释**：本仓大量注释里引用该反模式作为说明
+//   （如「// 原为 `new Promise(async (resolve, reject) => {`」），
+//   子串匹配会把注释算成「未修」，产生「明明改完了却报剩余 N 处」的假警报。
+//   2026-10-04 因此误判过一次。
+function stripComments (src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((l) => {
+      let inS = null
+      let out = ''
+      for (let i = 0; i < l.length; i++) {
+        const c = l[i]
+        if (inS) {
+          if (c === '\\') { out += l.slice(i, i + 2); i++; continue }
+          if (c === inS) inS = null
+          out += c
+        } else if (c === '"' || c === "'" || c === '`') {
+          inS = c; out += c
+        } else if (c === '/' && l[i + 1] === '/') {
+          break
+        } else { out += c }
+      }
+      return out
+    })
+    .join('\n')
+}
+
+const leftovers = []
+for (const rel of ['src/main/file.js', 'src/main/wsClient.js', 'src/main/ipc.js',
+  'src/main/index.js', 'src/main/store.js', 'src/main/notification.js',
+  'src/main/windowProxy.js', 'src/main/exportChat.js',
+  'src/main/db/ADB.js', 'src/main/db/ChatMessageModel.js',
+  'src/main/db/ChatSessionUserModel.js', 'src/main/db/UserSetting.js',
+  'src/main/db/LaterHandleModel.js']) {
+  const p = join(FRONT, rel)
+  if (!existsSync(p)) continue
+  if (stripComments(readFileSync(p, 'utf8')).includes('new Promise(async')) leftovers.push(rel)
+}
+check('真实代码中无 `new Promise(async`（注释里的说明不计入）',
+  leftovers.length === 0,
+  leftovers.length ? `残留于：${leftovers.join(', ')}` : '')
+
+// 「提前返回」类问题 eslint 规则抓不到，靠反向断言守住这两处已修的点
+const cmm = readFileSync(join(FRONT, 'src/main/db/ChatMessageModel.js'), 'utf8')
+check('saveMessageBatch 不用 forEach(async …)（forEach 不等待异步回调 → 提前返回）',
+  !stripComments(cmm).includes('forEach(async'))
+const fj = readFileSync(join(FRONT, 'src/main/file.js'), 'utf8')
+check('saveFile2Local 的 uploadFile 已 await（原未 await 就返回）',
+  /await uploadFile\(/.test(fj))
+
+// ── 4. 当前错误数不超过基线 ─────────────────────────────────
+console.log('\n=== 4. 当前 lint 错误数（不超基线）===')
 const BASELINE = 20   // 见 QA：2026-10-04 实测基线
 let errCount = null
 try {
