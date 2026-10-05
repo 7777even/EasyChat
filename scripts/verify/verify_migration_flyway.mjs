@@ -13,6 +13,9 @@
  *      在存量库被**静默跳过**（本项目已因「只改基线忘迁移」吃过两次 500）。
  *   ③ 迁移文件不得含 `DELIMITER` / `CREATE PROCEDURE` —— 那是 mysql 客户端指令，
  *      Flyway 的 MySQL 解析器过不了，会让自动执行路径直接失败。
+ *   ④ 结构性 DDL（ADD COLUMN / ADD INDEX / DROP INDEX）必须被存在性守卫包裹 ——
+ *      否则脚本**不可重复执行**：每份脚本头部都印着给运维的 `mysql < xxx.sql` 手工命令，
+ *      重跑即 `ERROR 1060 Duplicate column name`（实测 5 份全中）。
  *
  * 用法：node scripts/verify/verify_migration_flyway.mjs
  * 退出码：0 全通过 / 1 有失败项
@@ -108,13 +111,58 @@ for (const f of migFiles) {
   check(`${f} 不建存储过程/函数/触发器`, !/CREATE\s+(PROCEDURE|FUNCTION|TRIGGER|EVENT)\b/i.test(c))
 }
 
-// ── 5. 幂等性声明与现实一致 ─────────────────────────────────
-console.log('\n=== 5. 幂等性：文档不得与现实矛盾 ===')
-// 项目规范要求迁移幂等，但实测 6/12 迁移并非幂等。门禁此处不做强制（改造成本高），
-// 只断言「不存在'全部迁移都幂等'这种错误声明」，避免后来人误信。
-const agentsDoc = has('AGENTS.md') ? read('AGENTS.md') : ''
-check('AGENTS 未声称「全部迁移脚本幂等」',
-  !/全部迁移脚本[^。]*幂等|所有迁移[^。]*均幂等/.test(agentsDoc))
+// ── 5. 幂等性：结构性 DDL 必须被守卫包裹 ─────────────────────
+console.log('\n=== 5. 幂等性：结构性 DDL 必须被存在性守卫包裹 ===')
+// 背景（openspec/changes/2026-10-05-migration-idempotency-guards，遗留 #10）：
+//   本门禁此前**只断言「AGENTS 没声称全部迁移幂等」**——即把「迁移非幂等」当作
+//   已知事实接受，从不强制。那正是缺陷能长期存在 5 份脚本的直接原因。
+//   实测修复前 5 份脚本重跑全部 `ERROR 1060 Duplicate column name`。
+//   2026-10-05 已补齐守卫，故改为**正向强制**。
+//
+// ⚠ 判定口径的固有上限（AGENTS §2.1 第 3 条，须登记而非假装覆盖）：
+//   本断言只能验证「存在性探针的**字面量**在不在同一条语句里」，
+//   **无法验证守卫条件写对了**。把 `COLUMN_NAME = 'role'` 改成
+//   `COLUMN_NAME = 'xxx'`，本断言照样通过。
+//   正确性由真机验证兜底：每份脚本**连跑两次**均须 exit 0
+//   （见 engineering/qa/2026-10-05-migration-idempotency-guards.md）。
+//
+// ⚠ 判定必须**按语句边界**，不得用「向上 N 字符」窗口（AGENTS §2.1 第 8 条）：
+//   初版取「ALTER TABLE 向上 1200 字符内出现 information_schema 即算有守卫」，
+//   结果**相邻语句的守卫会替当前语句背书** —— 变异检验里 3 条本该捕获的
+//   无守卫 DDL 全部假通过。改为切分语句后逐条判定。
+//
+// ⚠ 判定信号是「**存在性探针**」而非 `PREPARE`：
+//   `SET @ddl :=` / `PREPARE` / `EXECUTE` 只是**动态执行机制**，
+//   不构成幂等性 —— 把探针注释掉、机制留着，脚本照样每次都执行 ALTER。
+const stripSqlComments = (sql) => sql
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')            // 块注释
+  .replace(/--[^\n]*/g, ' ')                   // 行注释
+  .replace(/^[ \t]*#[^\n]*/gm, ' ')
+
+const PROBE_RE = /information_schema|SHOW\s+COLUMNS|SHOW\s+INDEX/i
+// ⚠ 标识符的**尾反引号必须可选**（`` `?\w+`? ``）：
+//   初版写成 `` `?\w+` ``（尾反引号必需），于是**不带反引号**的标识符
+//   —— 如 002 里的 `ADD COLUMN seq` / `ADD INDEX idx_session_seq` —— 全部匹配不到，
+//   断言因「没扫到任何 DDL」而**空转通过**。
+//   这正是 AGENTS §2.1 第 3 条的典型形态：断言通过 ≠ 断言在做事。
+//   教训：新增静态断言后必须用**反向变异**确认它真能扫到目标（见变异清单）。
+const STRUCT_DDL_RE = /ALTER\s+TABLE[\s\S]*?\b(?:ADD\s+(?:COLUMN\s+|UNIQUE\s+|INDEX\s+|KEY\s+)?`?\w+`?|DROP\s+INDEX\s+`?\w+`?)/i
+
+for (const f of migFiles) {
+  const code = stripSqlComments(read(f))
+  const unguarded = []
+  // 按分号切句。守卫块 `SET @ddl := IF(<探针>, 'DO 0', '<DDL>')` 本身就是一条语句，
+  // 其内的 DDL 与探针同处一条 —— 故「同语句内既有 DDL 又有探针」即判定为已守卫。
+  for (const stmt of code.split(';')) {
+    if (!STRUCT_DDL_RE.test(stmt)) continue
+    if (!PROBE_RE.test(stmt)) {
+      unguarded.push(stmt.replace(/\s+/g, ' ').trim().slice(0, 90))
+    }
+  }
+  check(`${f} 的结构性 DDL 均被存在性探针守卫（可重复执行）`,
+    unguarded.length === 0,
+    unguarded.length ? `无守卫 ${unguarded.length} 处：${unguarded.join(' ｜ ')}` : '')
+}
 
 // ── 6. 前置校验（fail-closed） ────────────────────────────────
 console.log('\n=== 6. 存量库纳管前置校验 ===')
