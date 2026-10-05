@@ -85,14 +85,19 @@ function mutateSandboxFile (rel, edits) {
   const p = path.join(sandbox, rel)
   if (!fs.existsSync(p)) return '文件不存在'
   let src = fs.readFileSync(p, 'utf8')
+  // ⚠️ 锚点换行不敏感（AGENTS §2.1 第 10 条 ④）：被改文件在 Windows checkout 下多为 CRLF，
+  //   锚点里的字面量 `\n` 会恒不命中 → 变异静默空转而汇总行仍显示已捕获。
+  const eol = src.includes('\r\n') ? '\r\n' : '\n'
+  let srcLf = src.replace(/\r\n/g, '\n')
   for (let i = 0; i < edits.length; i++) {
-    const { find, repl } = edits[i]
-    if (!src.includes(find)) return `第 ${i + 1} 处锚点未命中`
-    const mutated = src.replace(find, repl)
-    if (mutated === src) return `第 ${i + 1} 处变异后内容未变化`
-    src = mutated
+    const findLf = edits[i].find.replace(/\r\n/g, '\n')
+    const replLf = edits[i].repl.replace(/\r\n/g, '\n')
+    if (!srcLf.includes(findLf)) return `第 ${i + 1} 处锚点未命中`
+    const mutated = srcLf.replace(findLf, replLf)
+    if (mutated === srcLf) return `第 ${i + 1} 处变异后内容未变化`
+    srcLf = mutated
   }
-  fs.writeFileSync(p, src, 'utf8')
+  fs.writeFileSync(p, srcLf.replace(/\n/g, eol), 'utf8')
   return null
 }
 

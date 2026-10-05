@@ -72,14 +72,27 @@ function runGate () {
   return res
 }
 
-/** 对沙箱副本做替换；锚点未命中则抛错（避免「变异没生效」被误判成「门禁抓到了」） */
+/**
+ * 对沙箱副本做替换；锚点未命中则抛错（避免「变异没生效」被误判成「门禁抓到了」）。
+ *
+ * ⚠️ 匹配前必须把内容与锚点都归一化为 LF：
+ *   `callStoreCore.mjs` / `useCallStore.js` 在 Windows checkout 下是 **CRLF**
+ *   （实测 callStoreCore.mjs CRLF=103 / 裸 LF=0），而锚点里写的是字面量 `\n`
+ *   → `src.includes(find)` 恒 false → 11 条变异里 10 条**静默空转**，
+ *   而汇总行仍显示「11/11 全部捕获」（2026-10-06 实测才发现，见 AGENTS §2.1 第 10 条 ④）。
+ *   写回时按原文件风格还原 EOL，避免把 CRLF 文件改成 LF（无谓的全文件 diff）。
+ */
 function mutate (rel, find, repl) {
   const p = path.join(sandbox, rel)
   const src = fs.readFileSync(p, 'utf8')
-  if (!src.includes(find)) {
-    throw new Error('锚点未命中：' + rel + ' ← ' + JSON.stringify(find.slice(0, 90)))
+  const eol = src.includes('\r\n') ? '\r\n' : '\n'
+  const srcLf = src.replace(/\r\n/g, '\n')
+  const findLf = find.replace(/\r\n/g, '\n')
+  const replLf = repl.replace(/\r\n/g, '\n')
+  if (!srcLf.includes(findLf)) {
+    throw new Error('锚点未命中：' + rel + ' ← ' + JSON.stringify(findLf.slice(0, 90)))
   }
-  fs.writeFileSync(p, src.replace(find, repl), 'utf8')
+  fs.writeFileSync(p, srcLf.replace(findLf, replLf).replace(/\n/g, eol), 'utf8')
 }
 
 const CORE = FILES[0]

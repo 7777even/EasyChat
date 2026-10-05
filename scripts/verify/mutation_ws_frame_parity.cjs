@@ -25,6 +25,9 @@ const CHAT = path.join(ROOT, 'easychat-java/src/main/java/com/easychat/service/i
 const targets = [CLIENT, ENUM, CHAT]
 const originals = {}
 for (const t of targets) originals[t] = fs.readFileSync(t, 'utf8')
+// 归一化副本：锚点一律在 LF 形态下匹配（见下方 for 循环内的说明）
+const originalsLf = {}
+for (const t of targets) originalsLf[t] = originals[t].replace(/\r\n/g, '\n')
 
 // 前置守卫：工作区必须干净，否则还原会覆盖未提交改动
 try {
@@ -131,14 +134,19 @@ console.log('=== 变异检验：verify_ws_frame_parity.mjs ===')
 console.log('（临时改写 ' + targets.length + ' 个源文件，结束时全部还原）\n')
 
 for (const m of mutations) {
-  const src = originals[m.file]
-  if (!src.includes(m.find)) {
+  // ⚠️ 锚点换行不敏感（AGENTS §2.1 第 10 条 ④）。本脚本原先的锚点里**写死了 `\r\n`**，
+  //   即反向锁死「目标文件必须是 CRLF」——一旦某天目标文件变成 LF，全部锚点同时落空。
+  //   改为内容与锚点**双向归一化为 LF** 后匹配，两种换行都能工作（2026-10-06 补）。
+  const src = originalsLf[m.file]
+  const findLf = m.find.replace(/\r\n/g, '\n')
+  const replLf = m.repl.replace(/\r\n/g, '\n')
+  if (!src.includes(findLf)) {
     console.log(`  [FAIL ] ${m.name} —— 锚点未命中，变异未生效（脚本需更新，不算通过）`)
     allCaught = false
     skipped++
     continue
   }
-  const mutated = src.replace(m.find, m.repl)
+  const mutated = src.replace(findLf, replLf)
   if (mutated === src) {
     console.log(`  [FAIL ] ${m.name} —— 变异后内容未变化`)
     allCaught = false

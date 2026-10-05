@@ -56,10 +56,16 @@ function runGate (extraArgs = []) {
 function mutateBaseline (find, repl) {
   const p = path.join(sandbox, BASELINE_REL)
   const src = fs.readFileSync(p, 'utf8')
-  if (!src.includes(find)) return '锚点未命中'
-  const mutated = src.replace(find, repl)
-  if (mutated === src) return '变异后内容未变化'
-  fs.writeFileSync(p, mutated, 'utf8')
+  // ⚠️ 锚点换行不敏感（AGENTS §2.1 第 10 条 ④）：easychat.sql 在 Windows checkout 下是 CRLF，
+  //   而锚点里写的是字面量 `\n` → includes 恒 false → 变异静默空转而汇总行仍显示已捕获。
+  const eol = src.includes('\r\n') ? '\r\n' : '\n'
+  const srcLf = src.replace(/\r\n/g, '\n')
+  const findLf = find.replace(/\r\n/g, '\n')
+  const replLf = repl.replace(/\r\n/g, '\n')
+  if (!srcLf.includes(findLf)) return '锚点未命中'
+  const mutated = srcLf.replace(findLf, replLf)
+  if (mutated === srcLf) return '变异后内容未变化'
+  fs.writeFileSync(p, mutated.replace(/\n/g, eol), 'utf8')
   return null
 }
 

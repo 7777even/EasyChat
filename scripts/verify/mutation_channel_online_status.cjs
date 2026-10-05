@@ -21,6 +21,8 @@ const ROOT = path.resolve(__dirname, '..', '..')
 const JAVA_ROOT = path.join(ROOT, 'easychat-java')
 const TARGET = path.join(JAVA_ROOT, 'src/main/java/com/easychat/websocket/ChannelContextUtils.java')
 const original = fs.readFileSync(TARGET, 'utf8')
+// 归一化副本：锚点一律在 LF 形态下匹配（见下方 for 循环内的说明）
+const originalLf = original.replace(/\r\n/g, '\n')
 
 // Windows 上 Maven 是 mvn.cmd，execFileSync 不经 shell 无法执行 .cmd
 const MVN = process.env.MVN_BIN ||
@@ -98,14 +100,19 @@ console.log('=== 变异检验：ChannelContextUtilsOnlineStatusTest ===')
 console.log('（临时改写 ChannelContextUtils.java，结束时还原；每条跑一次 mvn test）\n')
 
 for (const m of mutations) {
-  if (!original.includes(m.find)) {
+  // ⚠️ 锚点换行不敏感（AGENTS §2.1 第 10 条 ④）：ChannelContextUtils.java 在 Windows
+  //   checkout 下是 CRLF（实测 652 CRLF / 0 裸 LF），锚点里的字面量 `\n` 会恒不命中
+  //   → 变异静默空转，而汇总行仍会显示「全部捕获」。2026-10-06 补。
+  const findLf = m.find.replace(/\r\n/g, '\n')
+  const replLf = m.repl.replace(/\r\n/g, '\n')
+  if (!originalLf.includes(findLf)) {
     console.log(`  [FAIL ] ${m.name} —— 锚点未命中，变异未生效（脚本需更新，不算通过）`)
     allCaught = false
     skipped++
     continue
   }
-  const mutated = original.replace(m.find, m.repl)
-  if (mutated === original) {
+  const mutated = originalLf.replace(findLf, replLf)
+  if (mutated === originalLf) {
     console.log(`  [FAIL ] ${m.name} —— 变异后内容未变化`)
     allCaught = false
     skipped++

@@ -179,9 +179,12 @@ const CASES = [
   {
     name: 'ADB.js 退回「查完 pragma 立刻执行 ALTER」（非幂等）',
     apply () {
+      // ⚠️ 锚点缩进必须与 ADB.js 现状一致（4 空格）。
+      //   2026-10-06 实测：本条曾因 ADB.js 一次重排（缩进 8→4）而恒不命中，
+      //   脚本如实报「[无效]」——若只盯汇总行的「11/12」就会以为门禁仍有判别力。
       mutate(ADB,
-        '        const pending = [];\n        for (const item of alter_tables) {\n            const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);\n            const exists = Array.isArray(fieldList) && fieldList.some(row => row && row.name === item.field);\n            if (!exists) {\n                pending.push(item);\n            }\n        }\n        for (const item of pending) {\n            await run(item.sql, []);\n        }',
-        '        for (const item of alter_tables) {\n            const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);\n            const field = fieldList.some(row => row.name === item.field);\n            if (!field) {\n                await run(item.sql, []);\n            }\n        }')
+        '    const pending = [];\n    for (const item of alter_tables) {\n        const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);\n        const exists = Array.isArray(fieldList) && fieldList.some(row => row && row.name === item.field);\n        if (!exists) {\n            pending.push(item);\n        }\n    }\n    for (const item of pending) {\n        await run(item.sql, []);\n    }',
+        '    for (const item of alter_tables) {\n        const fieldList = await queryAll(`pragma table_info(${item.tableName})`, []);\n        const field = fieldList.some(row => row.name === item.field);\n        if (!field) {\n            await run(item.sql, []);\n        }\n    }')
     }
   }
 ]

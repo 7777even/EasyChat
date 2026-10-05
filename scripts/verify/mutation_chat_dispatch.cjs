@@ -61,10 +61,17 @@ function runTests () {
 function mutate (find, repl) {
   savePristine()
   const src = fs.readFileSync(TARGET, 'utf8')
-  if (!src.includes(find)) {
-    throw new Error('锚点未命中 ← ' + JSON.stringify(find.slice(0, 100)))
+  // ⚠ 锚点换行不敏感（AGENTS §2.1 第 10 条 ④）：ChatMessage.vue 在 Windows checkout 下
+  //   是 CRLF（实测 508 CRLF / 0 裸 LF），锚点里的字面量 `\n` 会恒不命中 → 变异静默空转，
+  //   而汇总行仍显示「已捕获」。与下方 editFileTypeBlock 的 `\r?\n` 正则保持同一口径。
+  const eol = src.includes('\r\n') ? '\r\n' : '\n'
+  const srcLf = src.replace(/\r\n/g, '\n')
+  const findLf = find.replace(/\r\n/g, '\n')
+  const replLf = repl.replace(/\r\n/g, '\n')
+  if (!srcLf.includes(findLf)) {
+    throw new Error('锚点未命中 ← ' + JSON.stringify(findLf.slice(0, 100)))
   }
-  fs.writeFileSync(TARGET, src.replace(find, repl), 'utf8')
+  fs.writeFileSync(TARGET, srcLf.replace(findLf, replLf).replace(/\n/g, eol), 'utf8')
 }
 
 /**
