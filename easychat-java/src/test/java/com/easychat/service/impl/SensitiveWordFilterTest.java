@@ -2,6 +2,7 @@ package com.easychat.service.impl;
 
 import com.easychat.entity.po.SensitiveWord;
 import com.easychat.exception.BusinessException;
+import com.easychat.utils.StringTools;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,13 +27,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ol>
  *   <li><b>未定义的 level 值使词条完全失效</b>：第一遍只拦 {@code ==3}，
  *       第二遍只替换 {@code ==1 || ==2 || null}。故 {@code level=0/4/5/99}
- *       的词条<b>既不拦截也不打码</b>，等于不存在。而规格只定义了 1/2/3。</li>
- *   <li><b>替换存在顺序依赖</b>：第二遍用 {@code result = result.replace(...)}
- *       逐词替换，短词先被替换会使长词失去匹配机会，结果随词表顺序而变。</li>
+ *       的词条<b>既不拦截也不打码</b>，等于不存在。而规格只定义了 1/2/3。
+ *       （注：四条写入路径均有范围校验，故生产<b>不可达</b>，此处作为防御性不变式钉住。）</li>
+ *   <li><b>替换曾存在顺序依赖（已于 2026-10-05 修复）</b>：第二遍原按
+ *       {@code result = result.replace(...)} 逐词替换且遍历内存列表顺序，
+ *       而 {@code selectByStatus} <b>无 ORDER BY</b> → 顺序由 DB 决定 →
+ *       短词先被替换会使长词失去匹配机会（{@code ["ab","abcd"] + "abcd"} → {@code ***cd}
+ *       而非 {@code ***}），同一词表在不同环境/不同次 reload 后输出不同。
+ *       修复：{@code reload()} 内预计算「长度降序」列表，第二遍改遍历它。</li>
  * </ol>
  *
- * <p><b>测试手法</b>：{@code wordList} 是 private volatile 字段，用反射注入，
- * 避免启动 Spring 与数据库（与 {@code MomentCanViewTest} 同一手法）。
+ * <p><b>测试手法</b>：{@code sensitiveWordMapper} 用动态代理注入，
+ * 之后一律走<b>真实 {@code reload()}</b> 构建词库 —— 不可直接反射写
+ * {@code wordList}，否则测试会绕过生产构建有序列表的那段逻辑，
+ * 排序被改坏时仍全绿（假覆盖）。避免启动 Spring 与数据库
+ * （与 {@code MomentCanViewTest} 同一手法）。
  */
 @DisplayName("SensitiveWordServiceImpl#filter — 内容治理过滤")
 class SensitiveWordFilterTest {
@@ -50,13 +59,11 @@ class SensitiveWordFilterTest {
 
     private static SensitiveWordServiceImpl serviceWith(SensitiveWord... words) {
         SensitiveWordServiceImpl svc = new SensitiveWordServiceImpl();
-        try {
-            Field f = SensitiveWordServiceImpl.class.getDeclaredField("wordList");
-            f.setAccessible(true);
-            f.set(svc, new ArrayList<>(Arrays.asList(words)));
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("反射注入 wordList 失败（字段已改名？）", e);
-        }
+        injectMapper(svc, words);
+        // ⚠ **必须走真实 reload()**，不能直接反射写 wordList —— 否则测试绕过
+        //   生产构建有序列表的那段逻辑，排序被改坏时测试仍全绿（假覆盖）。
+        //   mapper 由 injectMapper 注入，故 reload() 不会 NPE。
+        svc.reload();
         return svc;
     }
 
@@ -200,25 +207,254 @@ class SensitiveWordFilterTest {
     // ═══════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("★ 替换存在顺序依赖：短词先替换会使长词漏匹配（结果随词表顺序而变）")
-    void maskingIsOrderDependent() {
+    @DisplayName("★★ 打码结果与词表顺序无关：互含词条两种排列产出**逐字节相同**的输出")
+    void maskingIsOrderIndependent() {
         // 短词 "ab"、长词 "abcd"，内容 "abcd"：
-        //   短词先处理 → "abcd" → "***cd"，此后 "abcd" 已不存在 → 长词漏替换 → 结果 "***cd"
-        //   长词先处理 → "abcd" → "***"，短词不再命中 → 结果 "***"
-        // 两种顺序下**打码范围不同**（"cd" 残留），说明实现不是顺序无关的。
+        //   修复前：短词先 → "***cd"（cd 残留）；长词先 → "***"  ← 两种顺序输出不同
+        //   修复后：两种顺序均 → "***"（长词优先）
+        //
+        // 修复前此用例名为 maskingIsOrderDependent，断言锁的是**缺陷行为**
+        // （assertEquals("***cd", ...)）。那记录的是现象，不是契约，故随本次修复改写。
         SensitiveWordServiceImpl shortFirst = serviceWith(word("ab", 1), word("abcd", 1));
         SensitiveWordServiceImpl longFirst = serviceWith(word("abcd", 1), word("ab", 1));
 
         String a = shortFirst.filter("abcd");
         String b = longFirst.filter("abcd");
 
-        assertEquals("***cd", a, "短词先替换 → 长词漏匹配（cd 残留）");
-        assertEquals("***", b, "长词先替换 → 完整打码");
-        assertFalse(a.equals(b),
-                "★ 同一词表、不同顺序产生不同输出 —— 实现存在顺序依赖。"
-                        + "若词表由管理员任意排序，打码结果不可预期。"
-                        + "当前影响有限（残留部分本身不是敏感词，不构成泄露），"
-                        + "但「同样的词表在不同环境下打码结果不同」会使问题难以复现。");
+        assertEquals("***", a, "短词在前也应长词优先完整打码");
+        assertEquals(a, b, "★ 同一词表、不同顺序产生不同输出 —— 替换阶段存在顺序依赖");
+    }
+
+    @Test
+    @DisplayName("★ 长词优先：短词为长词前缀时，输出等于「只按长词替换」的结果")
+    void longerWordMasksFirst() {
+        SensitiveWordServiceImpl svc = serviceWith(word("abcd", 1), word("abc", 1), word("ab", 1));
+        assertEquals("***", svc.filter("abcd"), "最长词应整体打码，不应残留 cd");
+        assertEquals("***与***", svc.filter("abcd与abc"), "两个长词各自完整打码");
+        assertEquals("***", svc.filter("abc"), "最长词不在其中时由次长词整体打码");
+        // 只命中最短词时按该词打码
+        assertEquals("***xx", svc.filter("abxx"), "只命中短词时按该词打码");
+    }
+
+    @Test
+    @DisplayName("★ 性质断言：输出中不得残留任何**在册**敏感词作为子串")
+    void noRegisteredWordSurvivesInOutput() {
+        // 不硬编码「哪些词该被替换」，而是断言**性质**：
+        // 任意词表 + 任意内容 → 输出 SHALL NOT 含任何在册词作为子串。
+        // 注意：这**不断言**「输出不含在册词的片段」—— 长词优先后残留的片段
+        //       （如上面的 cd）本身不是在册词，不构成整词泄露。
+        List<SensitiveWord> dict = Arrays.asList(
+                word("ab", 1), word("abcd", 1), word("bc", 2), word("x", 1), word("xy", null));
+        SensitiveWordServiceImpl svc = serviceWith(dict.toArray(new SensitiveWord[0]));
+
+        for (String content : new String[]{
+                "abcd", "xabcd", "abc", "xx", "abxabcdbc", "aaa", "", "abcdabcd"}) {
+            String out = svc.filter(content);
+            for (SensitiveWord sw : dict) {
+                String w = sw.getWord();
+                assertFalse(out.contains(w),
+                        "内容「" + content + "」输出「" + out + "」仍含在册词「" + w + "」");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("★★ 任意排列一致性：3 词表取**全排列**逐一断言输出相同")
+    void allPermutationsProduceSameOutput() {
+        SensitiveWord[] base = {word("ab", 1), word("abcd", 2), word("bc", 1)};
+        String[] contents = {"abcd", "bcabcd", "ab", "zzzabcdbczz"};
+
+        // 以第一排列的输出为基准，其余排列必须逐字节相同
+        SensitiveWordServiceImpl first = serviceWith(base);
+        for (String c : contents) {
+            String expected = first.filter(c);
+            List<SensitiveWord[]> perms = permutations(base);
+            for (int i = 1; i < perms.size(); i++) {
+                SensitiveWordServiceImpl p = serviceWith(perms.get(i));
+                assertEquals(expected, p.filter(c),
+                        "排列 #" + i + " 下内容「" + c + "」输出与基准不一致 —— 顺序依赖未消除"
+                                + "（该排列词序：" + describeOrder(perms.get(i)) + "）");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("★ 空词 / null 词不使排序与替换抛 NPE（比较器须把它们排最后）")
+    void nullAndBlankWordsSortWithoutNpe() {
+        SensitiveWordServiceImpl svc = serviceWith(
+                word(null, 1), word("", 2), word("abcd", 1), word("ab", 1));
+        assertEquals("***", svc.filter("abcd"), "含空词时仍应长词优先完整打码");
+        assertEquals("这里有***", svc.filter("这里有abcd"));
+        // 全部为空词时内容原样通过
+        SensitiveWordServiceImpl onlyBlank = serviceWith(word(null, 1), word("", 3));
+        assertEquals("任意内容", onlyBlank.filter("任意内容"), "全空词不拦截不打码");
+    }
+
+    @Test
+    @DisplayName("★ 不变式：有序列表与原始词库**元素集合恒等**（仅顺序不同）")
+    @SuppressWarnings("unchecked")
+    void maskingListMirrorsWordListElements() {
+        SensitiveWord[] words = {word("ab", 1), word("abcd", 1), word(null, 2), word("x", 3)};
+        SensitiveWordServiceImpl svc = serviceWith(words);
+
+        List<SensitiveWord> raw = readField(svc, "wordList");
+        List<SensitiveWord> masked = readField(svc, "maskingList");
+
+        assertEquals(raw.size(), masked.size(), "两个列表元素数应一致");
+        List<String> rawIds = ids(raw);
+        List<String> maskedIds = ids(masked);
+        Collections.sort(rawIds);
+        Collections.sort(maskedIds);
+        assertEquals(rawIds, maskedIds, "两个列表元素集合应恒等（仅顺序不同）");
+    }
+
+    @Test
+    @DisplayName("★ reload 与 filter 并发时不出现撕裂状态（有序列表须与词库成对发布）")
+    void reloadDoesNotExposeTornState() throws InterruptedException {
+        // 两个字段若分两次赋值，读线程可能看到「新 wordList + 旧 maskingList」。
+        // 本用例用「单线程反复 reload + 多线程 filter」压测并断言：
+        //   输出要么是「长词优先」的 ***，要么是「旧行为」的 ***cd，
+        //   但**不得出现第三种**（既非完整打码也非旧行为 = 撕裂）。
+        SensitiveWord[] words = {word("ab", 1), word("abcd", 1)};
+        SensitiveWordServiceImpl svc = serviceWith(words);
+        final SensitiveWordServiceImpl target = svc;
+        final String allowed1 = "***";
+        final String allowed2 = "***cd";
+        final boolean[] torn = {false};
+
+        Thread writer = new Thread(() -> {
+            for (int i = 0; i < 2000; i++) {
+                target.reload();
+            }
+        });
+        Thread[] readers = new Thread[4];
+        for (int i = 0; i < readers.length; i++) {
+            readers[i] = new Thread(() -> {
+                for (int k = 0; k < 5000; k++) {
+                    String out = target.filter("abcd");
+                    if (!allowed1.equals(out) && !allowed2.equals(out)) {
+                        torn[0] = true;
+                    }
+                }
+            });
+        }
+        writer.start();
+        for (Thread r : readers) {
+            r.start();
+        }
+        writer.join();
+        for (Thread r : readers) {
+            r.join();
+        }
+        assertFalse(torn[0], "观察到撕裂状态：输出既非长词优先结果也非旧行为");
+    }
+
+    @Test
+    @DisplayName("★ 不变式：maskingList 的排序形态 = 空词在尾 + 非空长度降序 + 同长字面量升序")
+    @SuppressWarnings("unchecked")
+    void maskingListSortOrderInvariant() {
+        // ⚠ **白盒断言**：直接读 maskingList 检查排序形态，而非只看 filter 的输出。
+        //   原因：空词在 filter 里恒被 `isEmpty → continue` 跳过，故「空词排最后」
+        //   这一条**在任何输入下都不可从输出观测** —— 变异把空词键从 -1 改成
+        //   MAX_VALUE（使空词排到最前）时，全部输出不变、测试全绿（实测漏网）。
+        //   但 ADR-002 明确声明了「空词排最后」，故用白盒断言把该声明钉住，
+        //   避免文档与实现悄悄分家。
+        SensitiveWord[] words = {
+                word("ab", 1), word(null, 2), word("abcd", 1), word("", 1),
+                word("xy", 1), word("q", 3), word("b", null)};
+        SensitiveWordServiceImpl svc = serviceWith(words);
+        List<SensitiveWord> masked = readField(svc, "maskingList");
+
+        // 1) 全部非空词在前、全部空词在后
+        int lastNonEmpty = -1;
+        int firstEmpty = masked.size();
+        for (int i = 0; i < masked.size(); i++) {
+            boolean empty = StringTools.isEmpty(masked.get(i).getWord());
+            if (empty) {
+                firstEmpty = Math.min(firstEmpty, i);
+            } else {
+                lastNonEmpty = i;
+            }
+        }
+        assertTrue(lastNonEmpty < firstEmpty,
+                "空词必须全部排在非空词之后，实际序列：" + describeOrder(masked));
+
+        // 2) 非空词段：长度严格降序
+        for (int i = 1; i <= lastNonEmpty; i++) {
+            String prev = masked.get(i - 1).getWord();
+            String cur = masked.get(i).getWord();
+            assertTrue(prev.length() >= cur.length(),
+                    "非空词段应长度降序，第 " + (i - 1) + "~" + i + " 项逆序：" + describeOrder(masked));
+        }
+
+        // 3) 同长度段：字面量升序（不依赖排序算法是否稳定）
+        for (int i = 1; i <= lastNonEmpty; i++) {
+            String prev = masked.get(i - 1).getWord();
+            String cur = masked.get(i).getWord();
+            if (prev.length() == cur.length()) {
+                assertTrue(prev.compareTo(cur) <= 0,
+                        "同长度词应字面量升序，第 " + (i - 1) + "~" + i + " 项逆序：" + describeOrder(masked));
+            }
+        }
+    }
+
+    // ── 排列 / 反射 辅助 ─────────────────────────────────────────────
+
+    /** 返回 base 的全部排列（n=3 → 6 个）。 */
+    private static List<SensitiveWord[]> permutations(SensitiveWord[] base) {
+        List<SensitiveWord[]> out = new ArrayList<>();
+        permute(base, 0, out);
+        return out;
+    }
+
+    private static void permute(SensitiveWord[] arr, int k, List<SensitiveWord[]> out) {
+        if (k == arr.length) {
+            out.add(arr.clone());
+            return;
+        }
+        for (int i = k; i < arr.length; i++) {
+            SensitiveWord tmp = arr[k];
+            arr[k] = arr[i];
+            arr[i] = tmp;
+            permute(arr, k + 1, out);
+            SensitiveWord t2 = arr[k];
+            arr[k] = arr[i];
+            arr[i] = t2;
+        }
+    }
+
+    private static String describeOrder(SensitiveWord[] arr) {
+        StringBuilder sb = new StringBuilder();
+        for (SensitiveWord sw : arr) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(sw.getWord());
+        }
+        return sb.toString();
+    }
+
+    private static String describeOrder(List<SensitiveWord> list) {
+        return describeOrder(list.toArray(new SensitiveWord[0]));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<SensitiveWord> readField(SensitiveWordServiceImpl svc, String name) {
+        try {
+            Field f = SensitiveWordServiceImpl.class.getDeclaredField(name);
+            f.setAccessible(true);
+            return (List<SensitiveWord>) f.get(svc);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("读取字段 " + name + " 失败（字段未实现或已改名？）", e);
+        }
+    }
+
+    private static List<String> ids(List<SensitiveWord> list) {
+        List<String> out = new ArrayList<>();
+        for (SensitiveWord sw : list) {
+            out.add(sw == null ? "<null元素>" : String.valueOf(sw.getWord()));
+        }
+        return out;
     }
 
     @Test
