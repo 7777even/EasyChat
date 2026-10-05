@@ -31,7 +31,7 @@ HTTP 请求参数 ──Spring 绑定──▶ *Query（裸 setter：orderBy / p
 HTTP sortField / sortDirection（可选）
         │
         ▼
-Service：白名单校验 ──未命中──▶ 回退默认枚举项
+Service：白名单校验 ──未命中──▶ 抛 BusinessException(CODE_1001)
         │ 命中
         ▼
 Query.sortOption = 枚举值（不是字符串）
@@ -88,7 +88,7 @@ Mapper XML：<choose> + <when test="sortOption == 'CREATE_TIME_DESC'">
 - 鉴权: 三个受影响端点均 `checkAdmin = true`
   （已由 `GlobalInterceptorAnnotationContractTest` 反射扫描 118 个受保护端点的断言 B 保证），本次不动鉴权语义。
 - 数据权限: 不变。
-- 输入校验: 排序参数走**枚举白名单**（`SortOptionEnum.fromHttp`）；非法值静默回退。
+- 输入校验: 排序参数走**枚举白名单**（`SortOptionEnum.fromHttp`）；非法值**抛 `CODE_1001`**，不静默回退。
 - SQL 注入防护: 本变更核心。零 `${}`，并由 `verify_sql_concat_guard.mjs` 机控。
 
 ### 附：一个曾被我误判、已证伪并撤回的点
