@@ -18,6 +18,10 @@ easychat-front/assets/ffmpeg.exe
 # AI 工具本地记忆目录（不入库）
 .workbuddy/
 
+# Python 字节码缓存（scripts/smoke 的探针脚本被 py_compile 时产生）
+__pycache__/
+*.pyc
+
 # 运行时真实凭据（模板见 .env.example，入库）
 .env
 .env.local
