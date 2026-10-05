@@ -123,6 +123,27 @@ EasyChat/
       宁可先说「需要再查一轮」也不要给一个后来被推翻的二选一。
     - **登记前先自查「我是否只看了入口」**。一句话自检：
       *「这条写入/调用路径的另一端我读过吗？」*
+13. **★ 扫文件统计数量前，必须先独立确定「应有多少」，再看实扫到多少；两者不等即停。**
+    正则/门禁的匹配结果**不能当作计数来源** —— 它常在首个匹配处就截断，或形态不唯一。
+    正确做法：**先按语句/记录切分后逐条清点**得出基数，再用匹配结果**交叉验证**。
+    2026-10-05 一天内**三次**栽在同一处（正则每条语句只取第一个匹配）：
+    | 场景 | 应有 | 实扫到 | 后果 |
+    |---|---|---|---|
+    | 敏感词互相包含词对 | 逐对判定 | 只扫到首个匹配 | 差点漏判「缺陷未在发作」 |
+    | `selectByStatus` 守卫 | 逐列判定 | 只数到首个 | 差点错报「011 非幂等」 |
+    | 迁移脚本 DDL 子句 | **13** | **6** | 差点只补一半守卫 |
+    **台账 / 变更日志是二手记录**：涉及**数量与范围**的任何断言必须**当场重算**，
+    不得引用其措辞作为前提。上一轮的失准不会因为已写进台账而变成事实。
+14. **★ 新增静态断言后，必须先造一条「它本该抓住」的反例并确认它报出来，再谈基线自检。**
+    **基线自检通过是必要不充分条件** —— 它只证明「当前仓库不触发」，
+    **不证明这条断言扫得到目标**。2026-10-05 新写的幂等性断言首版即**空转通过**：
+    正则的尾反引号必需 → 不带引号的标识符（`ADD COLUMN seq`）扫不到 →
+    断言因「没扫到任何 DDL」而通过。**断言通过 ≠ 断言在做事。**
+    同理，判定边界必须**显式定义**（按语句 / 按行 / 按括号配平），
+    **禁用「向上 N 字符」这类经验窗口** —— 相邻语句的守卫会替当前语句背书
+    （AGENTS §2.1 第 8 条的同族陷阱）。
+    不可静态检测项（条件**方向**、字面量写对没有）统一登记为三字段：
+    **盲区 + 兜底手段 + 兜底手段的实测证据**，缺一不算登记完成。
 
 ## 3. 接口契约规则
 
@@ -229,12 +250,8 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 1. 表结构变更必须同步更新 `easychat.sql`
 2. **改了基线必须同批产出迁移脚本**（`easychat-migration-<NNN>-*.sql`）并在目标库执行——只改基线是最隐蔽的故障源：`easychat.sql` 是最新基线，不代表存量库已对齐。真实事故：`user_info.password` 列宽只改基线未迁移，BCrypt 哈希写入被截断，登录直接 500；`emoji`/`favorite`/`user_status`/`operation_log` 四张表在存量库根本不存在。**门禁**：`node scripts/verify/verify_schema_drift.mjs`（2026-10-03 已实现，接 pre-push + CI 独立 job；比对基线与活库 `information_schema`，另钉死 `user_info.password` 需 `varchar(≥60)` 硬不变量）
 3. 迁移脚本必须**幂等**（建表用 `IF NOT EXISTS`、列宽放宽向后兼容），并写明执行方式与重复执行的影响
-   > ⚠️ **本条与现状存在偏差（2026-10-04 实测，勿按本条想当然）**：
-   > 001 / 002 / 006 / 007 / 009 / 011 六份含 `ADD COLUMN` 却**无存在性守卫**，
-   > 其中 001 注释自述「MySQL 5.7 不支持 ADD COLUMN IF NOT EXISTS，此处按首次迁移处理」，
-   > 即它们**明确不是幂等的**，按「只跑一次」设计。补齐守卫须统一用
-   > `SET @ddl=(SELECT IF(...)) + PREPARE/EXECUTE`（MySQL 5.7 无原生 `ADD COLUMN IF NOT EXISTS`）。
-   > 在补齐前**不要手工重跑**这六份。
+   > ✅ **2026-10-05 已全部补齐**（`openspec/archive/2026-10-05-migration-idempotency-guards`）：`001` / `002` / `006` / `007` / `009` 五份的全部结构性 DDL（**13 个子句**）已改为 `information_schema` 判存在 + `SET @ddl` + `PREPARE/EXECUTE/DEALLOCATE`，**实测连跑两次均 exit 0 且表结构不变**（修复前 5 份全部 `ERROR 1060 Duplicate column name`）。
+   > ⚠ **不要再手工重跑任何迁移脚本**：走 Flyway 即可（`baseline-version` 之下的迁移本就不执行，改脚本也不会动 checksum）。本条现由门禁 `verify_migration_flyway.mjs` 第 5 节正向强制。
 4. 迁移脚本**不得含 mysql 客户端专有指令**：`DELIMITER` 与 `CREATE PROCEDURE|FUNCTION|TRIGGER|EVENT`
    都不行——`DELIMITER` 是客户端指令而非 SQL，Flyway 的 MySQL 解析器过不了，会让自动执行路径整体失败。
    幂等加列统一用 PREPARE/EXECUTE 写法。守卫：`node scripts/verify/verify_migration_flyway.mjs`
@@ -406,7 +423,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_file_type_content_type.mjs` | 推送前（`pre-push` hook）/ CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 缺前端在用的 fileType（→ content-type 拼成 `undefined<ext>`、浏览器无法解码、静默失败）、MIME 前缀不合法、语音 `fileType=3` 非 `audio/*` |
 | `scripts/verify/verify_password_session.mjs` | 推送前（`pre-push` hook）/ CI | 改密 / 找回密码成功后未吊销该用户全部端 Token、未推 `FORCE_OFF_LINE`；验证码被交给 logger；未登录端点限流存在「token 缺失直接 return」早退；邮件未配置时未 fail-closed；邮件主题拼接用户邮箱 |
 | `scripts/verify/verify_schema_drift.mjs` | 推送前（`pre-push` hook）/ CI（独立 job + MySQL service） | 基线有的表 / 列活库没有（**迁移未执行**）、列类型漂移、`user_info.password` 列宽不足 60（BCrypt 截断）、解析器静默漏表、迁移脚本编号缺口 |
-| `scripts/verify/verify_migration_flyway.mjs` | 推送前（`pre-push` hook）/ CI | `flyway-core` 版本被改回随 parent（Community 8.0+ 不支持 MySQL 5.7，本机开发库正是 5.7）；迁移文件未打包进产物；`baseline-version` 与仓库最大迁移号不等（新增迁移会在存量库**静默跳过**）；迁移编号断裂；任一迁移含 `DELIMITER` / `CREATE PROCEDURE`（Flyway 解析器过不了）；编排中应用不依赖前置闸门（fail-closed 失效） |
+| `scripts/verify/verify_migration_flyway.mjs` | 推送前（`pre-push` hook）/ CI | **迁移脚本的结构性 DDL（`ADD COLUMN`/`ADD [UNIQUE] INDEX`/`DROP INDEX`）未被存在性探针守卫**（→ 脚本不可重复执行，重跑报 `ERROR 1060`；实测曾有 5 份如此）；`flyway-core` 版本被改回随 parent（Community 8.0+ 不支持 MySQL 5.7，本机开发库正是 5.7）；迁移文件未打包进产物；`baseline-version` 与仓库最大迁移号不等（新增迁移会在存量库**静默跳过**）；迁移编号断裂；任一迁移含 `DELIMITER` / `CREATE PROCEDURE`（Flyway 解析器过不了）；编排中应用不依赖前置闸门（fail-closed 失效） |
 | `scripts/verify/verify_audit_and_at_all.mjs` | 推送前（`pre-push` hook）/ CI | `recordLog` 未自动补齐客户端 IP（6 处调用点全传 null → 最需溯源的 `LOGIN_FAILED` / `FORCE_OFFLINE` / `UPDATE_PASSWORD` 无 IP）；`@所有人` 权限仅在客户端生效（普通成员可冒用管理员身份） |
 | `scripts/verify/verify_mapper_params.mjs` | CI | Mapper 方法带 `@Param` 但 XML 用裸属性占位符（运行期抛 `BindingException`，编译期无感） |
 | `scripts/verify/verify_call_store_core.mjs` | CI | 通话 store 编排逻辑（`callStoreCore.mjs`）：结束态重置补丁有遗漏或越界；**1800ms 复位守卫缺通话身份校验**（陈旧定时器会抹掉新通话的结束态）；空 `reason` 时 `endReason` 未清空（显示上一通通话的原因）；出站帧号与 `callFrameCore` 漂移；`callId` 为空时仍发帧；`useCallStore.js` 内联裸守卫或裸写 `messageType`（绕开纯核心 → 缺陷复活） |
@@ -415,7 +432,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件未覆盖后端**落库白名单**中的消息类型（→ 历史漫游能拉到、界面什么都不显示、不抛异常不报错）；`ChatMessage.vue` 未 import 语音/位置子组件（**死组件**，2026-10-03 实际事故）；纯文本兜底分支排在 24/25 分支之前（会抢走它们） |
 | `scripts/verify/verify_frontend_test_base.mjs` | CI | 测试依赖未钉死版本（`^` 会某天自动升到 vitest 2/3/5，连带要求 vite 5+ 从而拖坏 `electron-vite@1`）；`vite` 被顺带升级出 4.x；生产依赖混入测试框架；`vitest.config.mjs` 缺 jsdom / 缺 `@vitejs/plugin-vue`（`.vue` 解析不了）；`@` 别名与 `electron.vite.config.js` 两处不一致；全局桩缺 `ResizeObserver`（组件挂载即崩）；CI 未跑 `npm run test` |
 | `scripts/verify/verify_frontend_lint.mjs` | 推送前（`pre-push` hook）/ CI | **`lint` 脚本被塞回 `--fix`**（检查与修复必须分两条命令：实测一次「看一眼有没有问题」就重排 50 个文件 +4458/−3524 行，第二次在改脚本本身时执行它、又重排 45 个）；`lint:fix` 缺失或不带 `--fix`；eslint 缺 `ecmaVersion` / `sourceType: module` / `env.es2020`（顶层 `await` 与 `globalThis` 会被误报）；**已修复缺陷复发**：真实代码中再现 `new Promise(async`（统计**跳过注释**，否则注释里的反模式说明会被误判为未修）、`no-async-promise-executor` 被改回 `off`、`forEach(async …)` 复活；**当前 error 数超过基线 20** |
-| **（纪律类，非脚本）** §2.1 第 12 条「禁止用局部证据推断系统行为」 | 人工自查，无机控 |
+| **（纪律类，非脚本）** §2.1 第 12 条「禁止用局部证据推断系统行为」、第 13 条「先定基数再看实扫」、第 14 条「新增断言须先造反例验证 + 判定边界显式定义」 | 人工自查，无机控 |
 | `scripts/verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及三处缺陷复发：① `filterMembers` 只匹配 `contactName`（面板**显示**却是 `contactName \|\| userId` → 未设昵称者**看得见却搜不到**）② `extraData.atAll` 未叠加角色权限（**手工键入** `@所有人` 绕过面板守卫 → 服务端 `CODE_2305` → **整条消息发不出去**）③ `extraData.atUserIds` 与 `atUserIds` 字段口径分叉；④ **组件把判定内联回 `MessageSend.vue`**（抽离白做、缺陷原地复活）⑤ 组件复制第二份 @ 正则 ⑥ `myGroupRole` 未传入核心导致 `atAll` 恒判无权限。变异 `scripts/verify/mutation_at_mention_core.mjs`（**9/9 捕获**） |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
