@@ -94,9 +94,14 @@ SPRING_FLYWAY_BASELINE_VERSION=9 mvn spring-boot:run
 >
 > migration-003 是**有意留空**的占位说明文件（原 message-read-status 随已读回执下线被删除），不要复用该编号。
 >
-> ⚠️ **幂等性现状**：001 / 002 / 006 / 007 / 009 / 011 六份**不是幂等的**
-> （MySQL 5.7 无 `ADD COLUMN IF NOT EXISTS`，且它们未加存在性守卫），
-> 补齐前不要手工重跑这六份。详见 AGENTS §6.4-3。
+> ✅ **幂等性**：含结构性 DDL 的 6 份迁移（001 / 002 / 006 / 007 / 009 + 011 对照）
+> **已全部可重复执行**（2026-10-05 补齐，遗留 #10）。MySQL 5.7 无
+> `ADD COLUMN IF NOT EXISTS`，故一律用 `information_schema` 判存在 +
+> `SET @ddl` + `PREPARE/EXECUTE/DEALLOCATE` 守卫；实测 6 份各连跑两次
+> **共 12 次执行全部 exit 0**，`information_schema` 结构快照 diff 为空。
+> 但**仍不要手工重跑** —— 迁移由 Flyway 记账执行（见上），`baseline-version`
+> 之下的迁移本就不执行，改脚本也不会动 checksum。
+> 门禁：`node scripts/verify/verify_migration_flyway.mjs`（第 5 节正向强制守卫存在）。
 >
 > ⚠️ 迁移脚本不得含 `DELIMITER` / `CREATE PROCEDURE` —— 那是 mysql 客户端专有语法，
 > Flyway 的解析器过不了。门禁：`node scripts/verify/verify_migration_flyway.mjs`。
@@ -119,7 +124,7 @@ java -jar target/easychat-1.0.jar
 > 该参数已配在 `pom.xml` 的 `spring-boot-maven-plugin.jvmArguments`；容器镜像则配在 `Dockerfile` 的 `JAVA_OPTS`。
 > `mvn test` / `mvn package` 不经该插件，**本地跑测试时无需手动加**。
 
-### 4.5 运行时配置（三段 profile + .env）
+### 4.4 运行时配置（三段 profile + .env）
 
 配置分层与敏感项策略：
 
@@ -144,7 +149,7 @@ docker compose --env-file .env up -d     # .env 中需含 SPRING_PROFILES_ACTIVE
 > 加载优先级：`application.properties` → `application-${profile}.properties` → 系统环境变量。
 > 纪律由门禁 `node scripts/verify/verify_no_hardcoded_secret.mjs` 强制（已入 CI）。
 
-### 4.4 前端
+### 4.5 前端
 
 ```bash
 cd easychat-front
@@ -167,28 +172,51 @@ npm run build:win  # Windows 打包（NSIS）
 | pom / 依赖 / 构建配置 | `mvn package -DskipTests` |
 | 对外接口增删改 | 接口联冒烟 |
 
-自动化门禁（CI 与本地同款）：
+自动化门禁（CI 与本地同款；**完整清单与阻断条件以 `AGENTS.md` §10 为唯一真源**）：
 
 ```bash
+# ── 契约与规范（CI gates job / pre-push 前 4 条）──
 node scripts/check-api-contract.mjs --strict      # 前后端路由漂移
 node scripts/check-ipc-registration.mjs --strict  # IPC 通道漏注册
 node scripts/check-openspec-hygiene.mjs            # 四件套/归档闭环
-node scripts/verify/verify_no_hardcoded_secret.mjs # 运行时配置分层与硬编码凭据
 node scripts/verify/verify_mapper_params.mjs      # Mapper @Param 与 XML 占位符一致性
+
+# ── 安全与契约红线 ──
+node scripts/verify/verify_no_hardcoded_secret.mjs # 运行时配置分层与硬编码凭据
 node scripts/verify/verify_password_handoff.mjs   # 密码明文交接红线
-node scripts/verify/verify_virtual_core.mjs       # 虚拟列表核心算法
-node scripts/verify/verify_call_core.mjs          # 通话核心逻辑
-node scripts/verify/verify_ws_frame_parity.mjs    # WS 帧号两端对账
-node scripts/verify/verify_file_type_content_type.mjs  # 文件类型与 content-type 一致性
 node scripts/verify/verify_password_session.mjs   # 改密后会话失效 + 验证码投递契约
+node scripts/verify/verify_audit_and_at_all.mjs   # 审计 IP 补齐 + @所有人 服务端鉴权
+node scripts/verify/verify_file_type_content_type.mjs  # 文件类型与 content-type 一致性
+node scripts/verify/verify_ws_frame_parity.mjs    # WS 帧号两端对账
+
+# ── 数据库 ──
+node scripts/verify/verify_migration_flyway.mjs   # Flyway 迁移自动化契约（幂等守卫等）
 node scripts/verify/verify_schema_drift.mjs       # 基线 ⇄ 活库 表结构漂移（需 MySQL）
+
+# ── 前端纯核心与测试基线 ──
+node scripts/verify/verify_virtual_core.mjs       # 虚拟列表核心算法
+node scripts/verify/verify_call_core.mjs          # 通话帧核心逻辑
+node scripts/verify/verify_call_store_core.mjs    # 通话 store 编排逻辑核心
+node scripts/verify/verify_local_db_core.mjs      # 本地 SQLite SQL 构造核心
+node scripts/verify/verify_export_chat_core.mjs   # 聊天记录导出纯逻辑核心
+node scripts/verify/verify_at_mention_core.mjs    # 群聊 @ 提及判定纯核心
+node scripts/verify/verify_chat_message_dispatch.mjs   # 前端消息分发 ⇄ 后端枚举对账
+node scripts/verify/verify_frontend_test_base.mjs # 前端测试基线契约
+node scripts/verify/verify_frontend_lint.mjs      # lint 基线守护（不得带 --fix 等）
 ```
 
-> 末条 `verify_schema_drift.mjs` 是**唯一需要活库**的门禁：连不上库即失败（fail-closed）。
+> `verify_schema_drift.mjs` 是**唯一需要活库**的门禁：连不上库即失败（fail-closed）。
 > 连接参数可用 `SCHEMA_DB_HOST` / `SCHEMA_DB_PORT` / `SCHEMA_DB_USER` / `SCHEMA_DB_PASSWORD` /
 > `SCHEMA_DB_NAME` 覆盖；离线场景显式加 `--no-live`。
 
-以上全部为纯静态检查，无需启动服务。
+除末条外全部为纯静态检查，无需启动服务。
+
+> ⚠️ **`mutation_*.cjs` / `mutation_*.mjs` 不在此列，且刻意不进 CI**：
+> 它们是**反向验证**（故意破坏代码，确认门禁会转红），每次运行都要起子进程、耗时数十秒。
+> 代价是**会静默腐烂** —— 2026-10-06 实测发现 9 个里有 2 个因锚点与源码漂移而空转
+> （已修复，并由门禁 `verify_mutation_anchor_safety.mjs` 守住换行不敏感；
+> 背景与九条变异脚本的逐条用法见 `scripts/README.md` 末节）。
+> **改了被测核心就必须重跑对应变异脚本**，否则「已验证 N/N 捕获」这句话会变成谎言。
 
 Git hooks：`node scripts/setup-git-hooks.mjs`
 

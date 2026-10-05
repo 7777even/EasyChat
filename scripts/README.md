@@ -4,20 +4,39 @@
 
 ## 脚本清单
 
+> **真源是 `AGENTS.md` §10 的门禁表**（含每条阻断条件）。本表只作「有哪些文件、在哪跑」的索引，
+> 两者不一致时以 §10 为准。2026-10-06 订正：此前本表只收录 11 个，而仓库实际有 21 个门禁脚本。
+
 | 脚本 | 触发时机 | 守门内容 |
 |------|----------|----------|
 | `commit-msg-lint.mjs` | git hook `commit-msg` | 提交格式 `type(scope): 描述`、type / scope 枚举、描述含中文、禁止 body |
 | `pre-commit-guard.mjs` | git hook `pre-commit` | 暂存区黑名单（构建产物、日志、临时文件）；QA 证据附件除外 |
-| `check-api-contract.mjs` | 本地手动 / CI | 后端 Controller 路由 vs 前端 `Api.js` 调用，找出孤儿路由 / 潜在漂移 |
-| `check-openspec-hygiene.mjs` | git hook `pre-push` | 进行中的 Change 是否四件套齐全、tasks.md 全勾但未归档阻断推送、archive 内 tasks.md 存在未勾选任务阻断推送 |
+| `check-api-contract.mjs` | git hook `pre-push` / CI | 后端 Controller 路由 vs 前端 `Api.js` 调用，找出孤儿路由 / 潜在漂移 |
+| `check-openspec-hygiene.mjs` | git hook `pre-push` / CI | 进行中的 Change 四件套齐全、tasks.md 全勾但未归档阻断、archive 内存在未勾选任务阻断 |
 | `check-ipc-registration.mjs` | git hook `pre-push` / CI | `ipc.js` 导出与 `index.js` 调用不匹配（漏注册即静默失效） |
 | `verify/verify_no_hardcoded_secret.mjs` | git hook `pre-push` / CI | 配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 默认可用密码、`.env` 入库 |
-| `verify/verify_mapper_params.mjs` | git hook `pre-push` / CI | Mapper XML 占位符与方法签名不匹配（写错运行期才抛 `BindingException`） |
+| `verify/verify_mapper_params.mjs` | CI | Mapper XML 占位符与方法签名不匹配（写错运行期才抛 `BindingException`） |
+| `verify/verify_sql_concat_guard.mjs` | 手动（**暂未接入 CI**，待遗留 #24 闭环） | Mapper XML 出现 `${}` 字符串拼接（违反 §6.2-3）；可绑定 Query 的 `orderBy` 未在端点侧硬编码覆盖 |
 | `verify/verify_ws_frame_parity.mjs` | git hook `pre-push` / CI | WS 帧号两端对账：漂移 / 重复 / 空洞 / 落库帧无 case / 新增帧未声明意图 / `KNOWN_GAP` 过期 |
-| `verify/mutation_ws_frame_parity.cjs` | 手动（改帧协议后必跑） | 变异检验：故意破坏 9 处帧协议，验证上面的门禁**真的会失败** |
-| `verify/mutation_channel_online_status.cjs` | 手动（改 WS 在线状态逻辑后必跑） | 变异检验：故意破坏 8 处 `ChannelContextUtils` 隐私逻辑，验证单测**真的会转红** |
-| `verify/verify_file_type_content_type.mjs` | git hook `pre-push` / CI | 本地文件服务器 `FILE_TYPE_CONTENT_TYPE` 必须覆盖前端在用的 `fileType`（缺失 → `undefined<ext>`、浏览器不解码、静默失败）；MIME 前缀须以 `/` 结尾；语音 `fileType=3` 须为 `audio/*` |
-| `setup-git-hooks.mjs` | 一键安装脚本 | 把上述脚本注册到 `.git/hooks/` |
+| `verify/verify_file_type_content_type.mjs` | git hook `pre-push` / CI | `FILE_TYPE_CONTENT_TYPE` 覆盖前端在用 `fileType`（缺失 → `undefined<ext>`、静默失败）；MIME 前缀须以 `/` 结尾；语音 `fileType=3` 须为 `audio/*` |
+| `verify/verify_password_session.mjs` | git hook `pre-push` / CI | 改密 / 找回密码后未吊销全部端 Token、未推 `FORCE_OFF_LINE`；验证码交给 logger；未登录端点限流存在「token 缺失直接 return」早退；邮件未配置未 fail-closed |
+| `verify/verify_password_handoff.mjs` | CI | 密码明文交接红线：客户端哈希密码、MD5 存量双验证被移除、`isBCrypt` 与 `matches` 口径分叉 |
+| `verify/verify_audit_and_at_all.mjs` | git hook `pre-push` / CI | `recordLog` 未自动补齐客户端 IP；`@所有人` 权限仅在客户端生效 |
+| `verify/verify_schema_drift.mjs` | git hook `pre-push` / CI（**独立 job + MySQL service**） | 基线 ⇄ 活库表结构漂移、`user_info.password` 列宽 ≥60、解析器静默漏表、迁移编号缺口。**唯一需要活库**，fail-closed |
+| `verify/verify_migration_flyway.mjs` | git hook `pre-push` / CI | 结构性 DDL 未被存在性探针守卫、`flyway-core` 版本被改回、迁移未打包、`baseline-version` 与最大迁移号不等、含 `DELIMITER` / `CREATE PROCEDURE` |
+| `verify/verify_virtual_core.mjs` | CI | 虚拟滚动算法（`virtualListCore.mjs`）偏移表二分定位、高度/偏移一致性、越界索引 |
+| `verify/verify_call_core.mjs` | CI | 通话帧核心（`callFrameCore.mjs`）帧→状态转移与 `MessageTypeEnum` 的一致性 |
+| `verify/verify_call_store_core.mjs` | CI | 通话 store 编排（`callStoreCore.mjs`）：1800ms 复位守卫通话身份校验、`endReason` 清空、补丁无遗漏/越界、store 未复用纯核心 |
+| `verify/verify_local_db_core.mjs` | CI | 本地 SQLite（`dbSqlCore.mjs`）where 真值过滤、字段丢弃可见化、空 set/where 短路、`add column` 幂等 |
+| `verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件覆盖后端落库白名单、子组件未 import（死组件）、纯文本兜底抢分支 |
+| `verify/verify_frontend_test_base.mjs` | CI | 测试依赖钉死版本、`vite` 仍 4.x、生产依赖不混入测试框架、`vitest.config.mjs` 挂 `@vitejs/plugin-vue`、全局桩含 `ResizeObserver`、`@` 别名两处一致、CI 跑 `npm run test` |
+| `verify/verify_frontend_lint.mjs` | git hook `pre-push` / CI | `lint` 不得带 `--fix`、eslint 现代解析目标、已修缺陷复发（`new Promise(async` 等）、error 数不超基线 |
+| `verify/verify_export_chat_core.mjs` | CI | 导出纯逻辑（`exportChatCore.mjs`）`csvCell` 前置单引号防护、TXT/CSV 字段错位 |
+| `verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及判定（`atMentionCore.mjs`）搜索/显示口径一致、`atAll` 叠加角色权限、组件未把判定内联回去 |
+| `migrate/preflight-baseline-check.mjs` | 启动前（人工 / 运维执行） | 「声称自己是最新版」却结构不符时拒绝启动（`SPRING_FLYWAY_BASELINE_VERSION` 的人工声明入口） |
+| `setup-git-hooks.mjs` | 一键安装脚本 | 把 hook 类脚本注册到 `.git/hooks/` |
+
+`verify/` 下另有 9 个 `mutation_*.cjs` / `mutation_*.mjs`，**刻意不进 CI**，见文末「变异检验」。
 
 ## 安装
 
@@ -65,25 +84,51 @@ WS 帧号是服务端 `MessageTypeEnum` ↔ 客户端 `wsClient.js` `case` 的**
 
 新增帧号却未声明 → **阻断**。已登记的 `KNOWN_GAP` 若后来被接通 → **阻断**（提示删除登记）。
 
-## 变异检验（配套脚本）
+## 变异检验（配套脚本，反向验证）
 
-「脚本存在」不等于「门禁有判别力」。改动帧协议或 WS 逻辑后，必须跑对应变异检验：
+「脚本存在」不等于「门禁有判别力」。`verify/` 下 9 个 `mutation_*.{cjs,mjs}` 做的是**反向**验证：
+故意把被测代码改回缺陷实现，确认对应门禁**真的会转红**。
 
 ```bash
-node scripts/verify/mutation_ws_frame_parity.cjs          # 9 条变异，改 3 个源文件
-node scripts/verify/mutation_channel_online_status.cjs   # 8 条变异，每次跑一次 mvn test（约 2–3 分钟）
+node scripts/verify/mutation_at_mention_core.mjs        #  9 条变异
+node scripts/verify/mutation_call_store_core.cjs        # 11 条变异
+node scripts/verify/mutation_channel_online_status.cjs  #  8 条变异，每次跑一次 mvn test（约 2–3 分钟）
+node scripts/verify/mutation_chat_dispatch.cjs          #  6 条变异
+node scripts/verify/mutation_local_db_core.cjs          # 12 条变异
+node scripts/verify/mutation_migration_flyway.cjs       # 14 条变异
+node scripts/verify/mutation_password_session.cjs       # 12 条变异
+node scripts/verify/mutation_schema_drift.cjs           #  若干条变异
+node scripts/verify/mutation_ws_frame_parity.cjs        #  9 条变异，改 3 个源文件
 ```
 
-三条纪律：
+**为什么它们不进 CI**：每次运行都要起子进程、跑门禁甚至跑 `mvn test`，耗时数十秒到数分钟。
+代价是**会静默腐烂，且腐烂时不会有人知道**——见下面第 4 条。
 
-0. **锚点会随源码漂移**。变异脚本用**手写源码片段**作锚点，被测源码一改就失配。
-   `[FAIL] 锚点未命中` 说明失配（脚本已判失败）；
+### 五条纪律
+
+1. **锚点会随源码漂移**。变异脚本用**手写源码片段**作锚点，被测源码一改就失配。
+   `[FAIL] 锚点未命中` / `[无效]` 说明失配（脚本已判失败）；
    但**更危险的是「锚点命中却只覆盖了部分片段」**——变异看起来生效了，实际没改变要测的行为，
    门禁会 exit 0 → 报 `[MISSED]`。此时不要怀疑门禁，**先怀疑自己的锚点**。
 
-1. **两个脚本都会临时改写源文件再还原**，因此带前置守卫：目标文件有未提交改动时
+2. **锚点必须对换行不敏感**。仓库文件多为 **CRLF**（Windows checkout），锚点里写 `\n`
+   会命中 0 次 → 全部变异静默空转，而汇总行照样显示「N/N 捕获」。
+   正确做法：匹配前把内容归一化为 LF（`src.replace(/\r\n/g, '\n')`），
+   写回时按原风格还原 EOL。**已在本仓形成两套标准实现**：
+   `mutation_migration_flyway.cjs` 的 `toLf()`、`mutation_at_mention_core.mjs` 的 `edit(file, findLf, replLf)`。
+
+3. **两个脚本会临时改写源文件再还原**，因此带前置守卫：目标文件有未提交改动时
    直接 `exit 2` 拒绝执行（还原会覆盖你的工作）。
-2. **`[SKIP]`（锚点未命中）与 `exit === null`（命令启动失败）一律判失败**。
+4. **`[SKIP]` / `[无效]`（锚点未命中）与 `exit === null`（命令启动失败）一律判失败**。
    只看汇总的 `[CAUGHT]` 会被这些假通过骗过去——首版就因
    Windows 上 `execFileSync('mvn')` 跑不了 `.cmd`（ENOENT → `status=null`）
    而误报「全部捕获」。
+5. **改了被测核心就必须重跑对应变异脚本**。这是本节最重要的一条：变异脚本不在 CI 里，
+   「上次跑过 N/N 全捕获」对今天的源码**不构成任何保证**。
+
+> **实测教训（2026-10-06）**：在一次只读盘点中实跑全部 9 个变异脚本，发现 **2 个已腐烂**——
+> `mutation_call_store_core.cjs` 实测 1/11（10 条锚点因 CRLF 全部落空）、
+> `mutation_local_db_core.cjs` 实测 11/12（1 条锚点随 `ADB.js` 重排漂移）。
+> 而台账与 QA 记录里写的仍是「11/11」「12/12」。
+> **即：变异脚本自身的验证结论会过期，而过期后没有任何机制会提醒。**
+> 本次已修复两处锚点，并由 `verify_mutation_anchor_safety.mjs` 门禁守住第 2 条（换行不敏感）。
