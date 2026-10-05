@@ -221,6 +221,20 @@ import emojiList from '@/utils/Emoji.js'
 import {useUserInfoStore} from '@/stores/UserInfoStore'
 import {useSysSettingStore} from '@/stores/SysSettingStore'
 import ChunkUploadApi from '@/utils/ChunkUploadApi'
+// @ 提及判定已抽为纯核心（2026-10-04，openspec 2026-10-04-at-mention-pure-core）。
+// 本组件只保留副作用（nextTick 光标复位、proxy 提示、成员拉取、面板开关），
+// **判定逻辑一律不得在此内联**，否则抽离失效、缺陷可原地复活。
+// 守卫：node scripts/verify/verify_at_mention_core.mjs
+import {
+  AT_ALL_TEXT,
+  GROUP_CONTACT_TYPE,
+  canAtAll as canAtAllRole,
+  roleText as roleTextOf,
+  filterMembers,
+  spliceAtText,
+  buildExtraData as buildExtraDataOf,
+  buildAtUserIdsField
+} from '@/utils/atMentionCore.mjs'
 
 const {proxy} = getCurrentInstance()
 const userInfoStore = useUserInfoStore()
@@ -261,19 +275,16 @@ defineExpose({
 //发送消息（需先于下方草稿 watch 声明，否则 setup 阶段 TDZ 报错导致整页白屏）
 const msgContent = ref('')
 
-// ===== 群聊 @ 提及 =====
-const AT_ALL_TEXT = '@所有人'
-const AT_ALL_ROLE = 0 // 群主
-const AT_ADMIN_ROLE = 1 // 管理员
+// ===== 群聊 @ 提及（判定在 @/utils/atMentionCore.mjs，本节只做状态与副作用） =====
+// 角色常量（AT_ALL_ROLE / AT_ADMIN_ROLE）已由纯核心持有，本组件不再重复定义，
+// 避免「同一常量两份」再次分叉。
 // 仅群聊出现 @ 按钮
-const isGroupChat = computed(() => props.currentChatSession.contactType == 1)
+const isGroupChat = computed(() => props.currentChatSession.contactType == GROUP_CONTACT_TYPE)
 // 本人群角色（0 群主 / 1 管理员 / 2 成员），来自 getGroupInfo4Chat 的 userContactList
 const myGroupRole = ref(2)
 // 仅群主/管理员可 @所有人（普通成员面板不渲染该选项）
-const canAtAll = computed(
-  () => myGroupRole.value === AT_ALL_ROLE || myGroupRole.value === AT_ADMIN_ROLE
-)
-const roleText = (role) => ({ 0: '群主', 1: '管理员', 2: '成员' })[role] || '成员'
+const canAtAll = computed(() => canAtAllRole(myGroupRole.value))
+const roleText = (role) => roleTextOf(role)
 
 const showAtPopover = ref(false)
 const atKeyword = ref('')
@@ -285,15 +296,9 @@ const inputRef = ref()
 const atAllEnabled = ref(false)
 
 // 按关键词过滤群成员
-const filteredAtMemberList = computed(() => {
-  const keyword = (atKeyword.value || '').trim().toLowerCase()
-  if (!keyword) {
-    return atMemberList.value
-  }
-  return atMemberList.value.filter((item) => {
-    return (item.contactName || '').toLowerCase().includes(keyword)
-  })
-})
+const filteredAtMemberList = computed(() =>
+  filterMembers(atMemberList.value, atKeyword.value)
+)
 
 // 打开 @ 面板时按需拉取群成员 + 我的角色（同一群只拉一次，切换会话后重置）
 const loadAtMemberList = async () => {
@@ -339,21 +344,22 @@ const closeAtPopover = () => {
 }
 
 // 在光标处插入 @ 文本（沿用既有 @Ux 格式，服务端 atUserIds 解析依赖此形态）
+// 字符串拼接在纯核心（spliceAtText）；本函数只保留 DOM 副作用。
 const insertAtText = (text) => {
   const textarea = inputRef.value && inputRef.value.textarea
+  const content = msgContent.value
   if (!textarea) {
-    msgContent.value = msgContent.value + text
+    msgContent.value = content + text
     return
   }
-  const start = textarea.selectionStart ?? msgContent.value.length
+  const start = textarea.selectionStart ?? content.length
   const end = textarea.selectionEnd ?? start
-  msgContent.value =
-    msgContent.value.slice(0, start) + text + msgContent.value.slice(end)
+  const spliced = spliceAtText(content, text, start, end)
+  msgContent.value = spliced.content
   // 插入后把光标移到文本之后
   nextTick(() => {
-    const cursor = start + text.length
     textarea.focus()
-    textarea.setSelectionRange(cursor, cursor)
+    textarea.setSelectionRange(spliced.cursor, spliced.cursor)
   })
 }
 
@@ -473,37 +479,23 @@ const sendMessage = async (e) => {
  * 组装消息扩展数据：引用回复 / 群 @ 提及 / @所有人
  * 均落在 extraData（JSON 字符串），@ 另落 atUserIds（服务端用于红点提醒）。
  * 三者可共存，按需合并，避免引用消息丢失 @ 标记。
+ *
+ * 判定在纯核心（@/utils/atMentionCore.mjs）；本函数只负责把响应式状态喂进去。
  */
-const buildExtraData = (messageContent) => {
-  const extra = {}
-  if (quoteInfo.value) {
-    extra.quoteId = quoteInfo.value.messageId
-    extra.quoteContent = quoteInfo.value.quoteContent
-    extra.quoteNickName = quoteInfo.value.quoteNickName || ''
-  }
-  // 群 @ 提及：正文里形如 "@Uxxxx" 的用户 ID
-  if (props.currentChatSession.contactType == 1 && messageContent) {
-    const matched = messageContent.match(/@(U[A-Za-z0-9]+)/g)
-    if (matched && matched.length > 0) {
-      extra.atUserIds = matched.map((item) => item.substring(1))
-    }
-    // @所有人：以面板勾选标记为准，正文出现 @所有人 也认（兼容草稿恢复后重发）
-    if (atAllEnabled.value || messageContent.indexOf(AT_ALL_TEXT) >= 0) {
-      extra.atAll = true
-    }
-  }
-  return Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
-}
+const buildExtraData = (messageContent) =>
+  buildExtraDataOf({
+    quoteInfo: quoteInfo.value,
+    contactType: props.currentChatSession.contactType,
+    messageContent,
+    atAllEnabled: atAllEnabled.value,
+    role: myGroupRole.value
+  })
 
 const buildAtUserIds = (messageContent) => {
-  if (props.currentChatSession.contactType != 1 || !messageContent) {
+  if (props.currentChatSession.contactType != GROUP_CONTACT_TYPE) {
     return null
   }
-  const matched = messageContent.match(/@(U[A-Za-z0-9]+)/g)
-  if (!matched || matched.length == 0) {
-    return null
-  }
-  return Array.from(new Set(matched.map((item) => item.substring(1)))).join(',')
+  return buildAtUserIdsField(messageContent)
 }
 
 //添加好友
