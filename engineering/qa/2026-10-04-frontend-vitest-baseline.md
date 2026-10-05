@@ -166,7 +166,7 @@ vitest **不会**自动启用该插件（它只对 electron-vite 构建生效）
 | `Chat.vue` 的 mount 测试未做 | 依赖过多、成本过高（见 §4.2）。**这是有意的取舍，不是遗漏** |
 | 快照测试未做 | 快照易碎，且「快照没变」不等于「行为对」 |
 | 路由 / 守卫测试未做 | 需更多桩 |
-| CI 未实跑 | 本地 `npm run test` / `npm run build` 均已实跑；**GitHub Actions 未实际执行**（沙箱无网络与远端） |
+| ~~CI 未实跑~~ | ✅ **2026-10-05 已实际执行并通过**（当时沙箱无网络）：GitHub Actions run #1（SHA `2884cbc`）**4 job 全绿**，前端 job 跑完 `npm ci` + `npm run lint` + 组件测试；「契约与规范门禁」job 含本变更新增的两个门禁。证据见 `engineering/qa/2026-10-05-live-verification.md` §① |
 | `npm run lint` 仍失效 | **既有技术债**，与本变更无关。测试命令独立故不叠加 |
 
 ## 九、证据文件

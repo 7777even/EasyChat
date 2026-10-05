@@ -86,7 +86,7 @@
 | 快照测试 | 快照易碎，且「快照没变」≠「行为对」 | 视需要 |
 | 路由 / 守卫测试 | 需更多桩 | 独立 Change |
 | `npm run lint` 失效 | **既有技术债**（存量 311 errors / 20537 warnings），与本变更无关；测试命令独立故不叠加 | 既有 retro 已登记 |
-| GitHub Actions 未实跑 | 沙箱无网络与远端 | 本地 `npm run test` / `build` 均已实跑 |
+| ~~GitHub Actions 未实跑~~ | ✅ 2026-10-05 已实跑：run #1（SHA `2884cbc`）4 job 全绿，前端 job 含 `npm run lint` + 组件测试 | 原缺口：当时沙箱无网络与远端 |
 
 ## DoD 自检
 
