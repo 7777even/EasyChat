@@ -1,18 +1,18 @@
-# Spec Delta — 收口 Mapper 的 `${}` 字符串拼接与管理端查询对象的请求绑定面
+# Spec Delta — 收口 Mapper 的 `${}` 字符串拼接，并把排序改为列名枚举白名单
 
 - 关联 Tasks: `2026-10-06-mapper-orderby-sql-injection/tasks.md`
 - 创建日期: 2026-10-06
 - 目标 capability: `openspec/specs/sql-safety/spec.md`（**新建**）
 
 > 格式对齐 `openspec/specs/<capability>/spec.md`。
-> 与 proposal Capabilities 一一对应。
+> 与 proposal Capabilities 一一对应（C1~C5）。
 
 ## ADDED Requirements
 
 ### Requirement: Mapper 层禁止字符串拼接（对齐 Capability C1）
 
 Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变输入必须通过 `#{}` 参数绑定，
-排序等结构性 SQL 片段必须写为 XML 内字面量。
+排序等结构性 SQL 片段必须写为 XML 内字面量（可为 `<choose>` 枚举分支）。
 
 #### Scenario: Mapper XML 中出现 `${}`
 
@@ -27,9 +27,8 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 - **AND** 报出自检项「解析器能识别 `${}`」失败
 
 > **为何要有这条 Scenario**：首版正则写成「反引号可选 + 反引号必需」的组合，
-> 导致 `ADD COLUMN seq`、`order by ${query.orderBy}` 这类**不带反引号**的标识符匹配不到，
-> 门禁因「没扫到任何 DDL」而**空转通过**（AGENTS §2.1 第 14 条）。
-> **断言通过 ≠ 断言在做事。**
+> 导致不带反引号的标识符匹配不到，门禁因「没扫到任何 DDL」而**空转通过**
+> （AGENTS §2.1 第 14 条）。**断言通过 ≠ 断言在做事。**
 
 #### Scenario: 注释中说明 `${}` 的用法
 
@@ -39,35 +38,51 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 
 ---
 
-### Requirement: 列表端点的查询字段白名单化（对齐 Capability C2）
+### Requirement: 排序走列名枚举白名单，能力保留但不可指定任意串（对齐 Capability C2）
 
-可从 HTTP 请求绑定的查询对象，其字段必须是显式声明的白名单；
-调用方**不得**通过请求参数指定排序表达式或任意 WHERE 条件。
+调用方**仍可指定排序**，但只能取自代码内的列名枚举白名单；
+未命中白名单的值一律回退默认排序项，不报错、不拼接。
 
-#### Scenario: 请求携带 orderBy 参数
+#### Scenario: 请求指定白名单内的排序
 
-- **WHEN** 调用方对管理端列表端点传入 `orderBy=<任意字符串>`
-- **THEN** 该参数**不参与** SQL 构造（绑定器无该字段可写）
-- **AND** 端点按 Service / Mapper 内硬编码的固定排序返回结果
-- **AND** 不抛异常、不返回错误码（该参数被静默忽略）
+- **WHEN** 调用方传 `sortField` / `sortDirection`，且组合命中枚举白名单
+- **THEN** 按该枚举项对应的**固定 SQL 片段**排序
+- **AND** 该片段是 XML 内字面量，不含任何运行时字符串
 
-#### Scenario: 请求携带未声明的查询字段
+#### Scenario: 请求指定白名单外的排序
 
-- **WHEN** 调用方传入白名单之外的字段名
-- **THEN** 该字段被 Spring 绑定器忽略，不进入任何 SQL 条件
+- **WHEN** 调用方传 `sortField=(select 1 from information_schema.tables)`
+      或 `sortField=id desc`（含空格与方向）或空串
+- **THEN** 回退默认排序项
+- **AND** 不抛异常、不返回错误码
+- **AND** 该值**不出现**在任何 SQL 片段中
+
+#### Scenario: 枚举项与 XML 分支数量不匹配
+
+- **WHEN** 排序枚举新增一项但 XML 的 `<choose>` 未加对应 `<when>` 分支（或反之）
+- **THEN** `verify_sql_concat_guard.mjs` 报 FAIL（断言枚举项数 == 分支数）
+- **AND** 退出码为 1
+
+> **为何要有这条 Scenario**：ADR-001 保留了排序能力，代价是新增
+> 「枚举 ↔ XML 分支」这个**需要维护的契约**；少一个分支即该排序项**静默失效**
+> （不报错、只是排序不生效），是最难发现的一类退化。
+
+#### Scenario: 保留的 `orderBy` 字段
+
+- **WHEN** 调用方仍传 `orderBy=<任意字符串>`（旧参数）
+- **THEN** 该参数**不参与** SQL 构造（setter 已收窄为包内可见，外部不可写）
 
 ---
 
-### Requirement: 凭据字段不得出现在查询对象与 HTTP 面（对齐 Capability C3）
+### Requirement: 凭据字段不得存在于查询对象（对齐 Capability C3）
 
-`password` / `passwordFuzzy` 等凭据相关字段不得作为查询条件存在，
-更不得可从 HTTP 请求到达 —— 存量 MD5 账号的哈希无盐且确定，
-对其做 `LIKE` 匹配等价于**明文口令猜测预言机**。
+`password` / `passwordFuzzy` 等凭据相关字段**不得**作为查询条件存在 ——
+存量 MD5 账号的哈希无盐且确定，对其做 `LIKE` 匹配等价于**明文口令猜测预言机**。
 
 #### Scenario: 请求携带 passwordFuzzy
 
-- **WHEN** 调用方对 `/admin/loadUser` 传入 `passwordFuzzy=<MD5(猜测)>`
-- **THEN** 该字段不参与 SQL 构造
+- **WHEN** 调用方对 `/admin/loadUser` 传 `passwordFuzzy=<MD5(猜测)>`
+- **THEN** 该字段在 `UserInfoQuery` 中**不存在**，绑定器无从写入
 - **AND** `UserInfoMapper.xml` 中不存在任何以 `password` 列为条件的 `<if>`
 
 #### Scenario: 出参含 PO 的 password 字段
@@ -82,13 +97,33 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 
 ---
 
-### Requirement: SQL 拼接禁令由机控强制且门禁自身可证（对齐 Capability C4）
+### Requirement: 分页列表恒有 ORDER BY（对齐 Capability C4）
 
-上述三条必须由门禁持续强制，且门禁自身的判别力须由变异检验证明。
+所有走 `BaseMapper.selectList` + 分页的列表查询，在任何入参组合下都必须带确定性排序。
 
-#### Scenario: 有人把字面量排序改回 `${}` 拼接
+#### Scenario: 调用方未指定排序
 
-- **WHEN** 任一 Mapper 的排序被改回 `order by ${query.orderBy}`
+- **WHEN** `/admin/loadGroup` 或 `/admin/loadBeautyAccountList` 未传 `sortField`
+- **THEN** 使用该端点的**默认排序项**（不是「无 ORDER BY」）
+
+#### Scenario: 翻页结果稳定性
+
+- **WHEN** 对同一页码与同一筛选条件重复请求 3 次
+- **THEN** 三次返回的行序完全一致（无重复行、无漏行）
+
+> **为何要有这条 Scenario**：收口前这两个端点在 `orderBy` 为空时走 `<if>` 的 else 分支，
+> 即**完全没有 ORDER BY**；MySQL 不保证无 ORDER BY 时的稳定输出，
+> 翻页时可能同一行落在两页或某行不出现。**这是本 Change 顺带修掉的既有缺陷。**
+
+---
+
+### Requirement: SQL 拼接禁令由机控强制且门禁自身可证（对齐 Capability C5）
+
+上述四条必须由门禁持续强制，且门禁自身的判别力须由变异检验证明。
+
+#### Scenario: 有人把枚举分支改回 `${}` 拼接
+
+- **WHEN** 任一 Mapper 的 `<choose>` 被改回 `order by ${query.orderBy}`
 - **THEN** `verify_sql_concat_guard.mjs` 退出码 1
 - **AND** `mutation_sql_concat_guard.cjs` 中对应的变异被记为「捕获」
 
@@ -96,7 +131,7 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 
 - **WHEN** `verify_sql_concat_guard.mjs` 被写入 `.github/workflows/ci.yml` 或 `pre-push`
 - **THEN** 必须已存在「基线自检 exit 0」与「反例转红」两条实跑记录
-- **AND** AGENTS §10 该行不再标注「暂未接入」
+- **AND** AGENTS §10 该行不再标注「当前 exit=1，暂未接入」
 
 #### Scenario: 已登记的不可静态检测项
 
@@ -105,7 +140,9 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 - **AND** 该盲区按三字段登记：盲区 + 兜底手段（变异检验 / 活体注入实测）+ 兜底手段的实测证据
 
 > **为何「一律阻断」而不分级**：分级需要跨 Controller / Service 的可达性推断，
-> 而这正是 AGENTS §2.1 第 12 条点名的高危动作（局部证据推断系统行为）。
+> 而这正是 AGENTS §2.1 第 12 条点名的高危动作。本轮我恰好在该推断上栽了两次 ——
+> 一次把「3 个端点可达」说成事实（实际 2 个，端点 1 在 Service 层已被覆盖排序），
+> 一次把「PO 出参泄露哈希」说成事实（实际有 `@JsonIgnore`）。
 
 ---
 
@@ -115,14 +152,14 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 
 > 说明：`orderBy` 曾是「事实存在但从未被任何规格描述过」的行为 ——
 > `openspec/specs/` 下无任何 spec 提及调用方可指定排序。
-> 故此处不是 MODIFIED 而是 ADDED（新增一条「它现在被禁止」的规格）。
+> 故此处不是 MODIFIED 而是 ADDED（新增一条「它现在必须走白名单」的规格）。
 
 ## REMOVED Requirements
 
-**无。** 无 capability 被移除。
+**无 capability 被移除。**
 
-> 但**移除了一项事实能力**：调用方自定义排序。ADR-001 已把它记为需人工拍板的取舍点。
-> 若人工决定保留该能力，本节需改为 REMOVED 并在 spec 中写明枚举白名单形态。
+> 初版曾提议移除「调用方自定义排序」这一能力（ADR-001），
+> **人工决策为保留**，故本节为空。若将来改回移除方案，需在此声明并写明替代能力。
 
 ---
 
@@ -130,7 +167,8 @@ Mapper XML 中不得出现任何 `${}` 形式的字符串拼接；所有可变�
 
 | Proposal Capability | Delta Requirement | Task 编号 |
 |---------------------|-------------------|-----------|
-| C1 | ADDED: Mapper 层禁止字符串拼接 | 阶段零.1、阶段一.1~3 |
-| C2 | ADDED: 列表端点的查询字段白名单化 | 阶段二.1~3 |
-| C3 | ADDED: 凭据字段不得出现在查询对象与 HTTP 面 | 阶段一.3、阶段二.1~2 |
-| C4 | ADDED: SQL 拼接禁令由机控强制且门禁自身可证 | 阶段零.1~2、阶段三、阶段四 |
+| C1 | ADDED: Mapper 层禁止字符串拼接 | 阶段零.1~2、阶段二.1~2 |
+| C2 | ADDED: 排序走列名枚举白名单 | 阶段一全部、阶段二.1、阶段三.1~2 |
+| C3 | ADDED: 凭据字段不得存在于查询对象 | 阶段二.3、阶段三.1 |
+| C4 | ADDED: 分页列表恒有 ORDER BY | 阶段三.3、阶段五（翻页稳定性） |
+| C5 | ADDED: SQL 拼接禁令由机控强制且门禁自身可证 | 阶段零.1~4、阶段四、阶段五 |

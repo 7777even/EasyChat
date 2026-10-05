@@ -6,11 +6,20 @@
  *   AGENTS §6.2-3 明令「禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数绑定」，
  *   但这条规范**自始至终零机控** —— `verify_mapper_params.mjs` 只审计 `#{...}`
  *   根名与 `@Param` 是否匹配，对 `${}` 一条断言都没有。
- *   结果仓库里有 **17 处** `order by ${query.orderBy}`，其中 3 个管理端端点的
- *   `orderBy` 可由请求参数直达（`AdminCallLogController#loadCallLog`、
- *   `AdminGroupController#loadGroup`、`AdminUserInfoBeautyController#loadBeautyAccountList`
- *   三者直接绑定 `*Query` 且未调 `setOrderBy`，`BaseParam.orderBy` 又是裸 setter，
+ *   结果仓库里有 **17 处** `order by ${query.orderBy}`，其中 **2 个**管理端端点的
+ *   `orderBy` 可由请求参数直达（`AdminGroupController#loadGroup` →
+ *   `GroupInfoServiceImpl#findListByPage` → `groupInfoMapper.selectList`；
+ *   `AdminUserInfoBeautyController#loadBeautyAccountList` →
+ *   `UserInfoBeautyServiceImpl#findListByPage` → `userInfoBeautyMapper.selectList`；
+ *   两条链上 Controller 与 Service **均未设排序**，而 `BaseParam.orderBy` 是裸 setter，
  *   全仓无 `@InitBinder` / 无白名单 / 无过滤器清洗）。
+ *
+ *   ⚠️ 端点数曾被高估为 3：`/admin/callLog/loadCallLog` 一度被算进去，
+ *   逐层核实后它走的是 `AdminCallLogServiceImpl#loadCallLog` —— 内部
+ *   `setOrderBy("cl.id desc")` 已覆盖，且用的是 `callLogReadMapper`
+ *   （排序本就是 XML 字面量），**根本没触及 `CallLogMapper`**。
+ *   「只读到 Controller 就断言可达」是 AGENTS §2.1 第 12 条点名的反模式，
+ *   故在此写明结论的推导链，供后续复核。
  *
  *   佐证这不是过度解读：`CallLogReadMapper.xml` 的注释已写明「不引用 ${query.orderBy}」，
  *   即该类问题**项目自己已识别并单独修过一处**，其余 17 处留存至今。
