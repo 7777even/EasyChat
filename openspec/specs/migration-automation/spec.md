@@ -199,3 +199,59 @@
 > **已知不可静态检测项**：前置校验的**拒绝分支方向**无法从源码文本推出
 > （把放行条件反写后，字面量不变、静态断言仍通过）。该情形由**真机三路径验证**兜底
 > （无漂移放行 / 有漂移拒绝 / 环境变量声明后放行），不做假覆盖。
+
+---
+
+## Requirement: 迁移脚本可重复执行（migration-idempotency）
+
+仓库根 `easychat-migration-*.sql` 中**所有**结构性 DDL 语句（`ALTER TABLE ... ADD COLUMN` / `ADD [UNIQUE] INDEX` / `DROP INDEX`） SHALL 具备存在性守卫：目标已存在时退化为 `DO 0` 而非报错。任意一份脚本 SHALL 可连续执行两次而两次均成功，且数据库结构 SHALL 不变。
+
+守卫 SHALL 使用 MySQL 5.7 支持的动态 SQL（`SET @var := IF(<存在性探针>, 'DO 0', '<DDL>')` + `PREPARE` / `EXECUTE` / `DEALLOCATE PREPARE`），SHALL NOT 使用 `DELIMITER`、`CREATE PROCEDURE|FUNCTION|TRIGGER|EVENT`，SHALL NOT 使用 MariaDB 专有的 `DROP INDEX IF EXISTS`。
+
+一条 `ALTER TABLE` 内含**多个** `ADD COLUMN` 时 SHALL **拆成逐列独立守卫**（而非以「全部列已存在」为单条守卫）—— 后者在「上次执行中途失败、只加了部分列」时会永久卡死。
+
+一条 `ALTER TABLE` 内同时含 `DROP INDEX` 与 `ADD [UNIQUE] INDEX` 时，守卫条件 SHALL 取**目标对象**（新索引）是否存在，而**非**被 `DROP` 的对象。
+
+#### Scenario: 重复执行不报错
+
+- **WHEN** 对已执行过的库再次执行任一 `easychat-migration-*.sql`
+- **THEN** 退出码 SHALL 为 0，SHALL NOT 出现 `ERROR 1060 Duplicate column name` / `ERROR 1061 Duplicate key name` / `ERROR 1091 Can't DROP`
+- **AND** 表结构 SHALL 与执行前一致
+
+#### Scenario: 首次执行照常生效
+
+- **WHEN** 对缺少目标列/索引的库首次执行脚本
+- **THEN** 守卫条件为假，SHALL 执行与补齐前**逐字相同**的 DDL，最终结构与基线 `easychat.sql` 一致
+
+#### Scenario: 部分已存在时可自愈
+
+- **WHEN** 上次执行中途失败，`user_contact` 已有 `role` 但尚无 `mute_end_time`
+- **THEN** 再次执行 SHALL 只补 `mute_end_time`（`role` 退化为 `DO 0`），SHALL NOT 报 1060
+
+#### Scenario: 组合语句按目标态守卫
+
+- **WHEN** 对已存在 `uk_word_flag`、且 `uk_word` 已被删除的库执行 `easychat-migration-007-sensitive-word-admin.sql`
+- **THEN** 守卫命中、整条退化为 `DO 0`，SHALL NOT 报 `ERROR 1091 Can't DROP`
+
+---
+
+## Requirement: 迁移脚本幂等性由门禁正向强制（migration-idempotency-gate）
+
+`verify_migration_flyway.mjs` SHALL **正向断言**全部迁移脚本的结构性 DDL 均被存在性探针（`information_schema` / `SHOW COLUMNS` / `SHOW INDEX`）守卫。判定 SHALL **按语句边界**而非固定字符窗口 —— 相邻语句的守卫**不得**替当前语句背书。存在任一无守卫 DDL 时 SHALL 以非 0 退出。
+
+> ⚠ 该断言只能验证「存在性探针的字面量在不在同一条语句里」，**无法验证探针条件写对了**：把 `COLUMN_NAME = 'role'` 改成 `COLUMN_NAME = 'xxx'`、或把 `> 0` 反写成 `< 0`，断言均照样通过。正确性由**真机验证**兜底 —— 每份脚本连跑两次均须 exit 0。
+
+#### Scenario: 无守卫 DDL 被阻断
+
+- **WHEN** 某迁移脚本出现裸 `ALTER TABLE ... ADD COLUMN`（无探针）
+- **THEN** 门禁以非 0 退出并指出具体文件与语句
+
+#### Scenario: 探针只在相邻语句中不算数
+
+- **WHEN** 文件中前一条语句有守卫、而当前 `ALTER TABLE` 是裸的
+- **THEN** 门禁 SHALL 判为无守卫
+
+#### Scenario: 无引号标识符同样被识别
+
+- **WHEN** DDL 使用不带反引号的标识符（`ADD COLUMN seq`、`ADD INDEX idx_session_seq`）
+- **THEN** 门禁 SHALL 识别为结构性 DDL 并纳入判定（识别不到即等于断言空转）
