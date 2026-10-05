@@ -17,8 +17,23 @@
 -- 执行注意：
 --   MySQL 5.7 加列 = INPLACE 列式重建；chat_message 为最大表，
 --   ADD COLUMN DEFAULT 0 为即时元数据变更 + 后台重建，建议低峰执行。
---   重复执行会报 Duplicate column（1060），属预期，可忽略。
+--
+-- 幂等性（2026-10-05 补齐，遗留 #10）：
+--   MySQL 5.7 **不支持** ADD COLUMN IF NOT EXISTS，故用
+--   information_schema 判存在 + SET @ddl 动态执行。
+--   **可重复执行**：列已存在时退化为 DO 0，不报错、不重复添加。
+--   实测：连跑两次均 exit 0，且表结构不变。
 -- ============================================================
 
-ALTER TABLE `chat_message`
-  ADD COLUMN `delete_flag` BIGINT NOT NULL DEFAULT 0 COMMENT '0=存活，非0=删除时间戳ms';
+SET @ddl := IF(
+  (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME   = 'chat_message'
+       AND COLUMN_NAME  = 'delete_flag') > 0,
+  'DO 0',
+  'ALTER TABLE `chat_message`
+     ADD COLUMN `delete_flag` BIGINT NOT NULL DEFAULT 0
+       COMMENT ''0=存活，非0=删除时间戳ms''');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
