@@ -1,13 +1,13 @@
 # Spec — 内容治理（content-moderation）
 
-> 能力来源：openspec/changes/2026-09-26-content-moderation（已归档）、openspec/changes/2026-09-26-sensitive-word-admin（已归档，新增「词库管理」子能力并修改敏感词加载范围）、openspec/archive/2026-09-29-admin-message-delete（已归档，新增「管理端消息删除位」子能力并修改举报处理 dealReport 语义）
+> 能力来源：openspec/changes/2026-09-26-content-moderation（已归档）、openspec/archive/2026-10-05-sensitive-word-masking-determinism（已归档，替换阶段改为「长词优先 + 与词表顺序无关」）、openspec/changes/2026-09-26-sensitive-word-admin（已归档，新增「词库管理」子能力并修改敏感词加载范围）、openspec/archive/2026-09-29-admin-message-delete（已归档，新增「管理端消息删除位」子能力并修改举报处理 dealReport 语义）
 
 ## Requirement: 敏感词实时过滤（C1）
 
 系统 SHALL 在聊天消息发送、朋友圈动态发布、朋友圈评论提交的三条写入链路中，对文本内容执行敏感词过滤。过滤规则：
 
 - 命中 `level=3`（禁止发送）的敏感词时，系统 SHALL 拒绝写入并返回错误码 `CODE_2701`，内容不入库、不发送；
-- 命中 `level=1/2`（提醒/替换）的敏感词时，系统 SHALL 将内容中的该词替换为 `***` 后继续；
+- 命中 `level=1/2`（提醒/替换）的敏感词时，系统 SHALL 将内容中的该词替换为 `***` 后继续；替换 SHALL 按**词条长度降序**执行，使互为子串的词条中长词优先获得匹配机会，最终输出 SHALL 与词表行顺序无关。排序 SHALL 在词库加载时预计算，不在消息过滤热路径内执行；
 - 敏感词库来自 `sensitive_word` 表 `status=1 AND delete_flag=0` 的记录，应用启动时加载到内存，且管理端每次词库写变更（保存/删除/导入）后自动 `reload()` 热更；空词库时不产生任何拦截或替换。
 
 #### Scenario: 发送含禁止词的消息被拦截
@@ -24,6 +24,46 @@
 
 - **WHEN** `sensitive_word` 表中无启用词
 - **THEN** 所有内容原样通过
+
+---
+
+## Requirement: 打码结果与词表顺序无关（masking-order-independence）
+
+内容过滤的**替换（打码）阶段**输出 SHALL 是**在册词条集合的纯函数**，不得依赖词条在内存列表 / 数据库结果集中的行顺序。当两个词条互为子串时，顺序 SHALL NOT 影响打码范围。
+
+#### Scenario: 互含词条的两种排列产出相同输出
+
+- **WHEN** 词表含短词 `ab` 与长词 `abcd`，内容为 `abcd`
+- **THEN** 无论 `ab` / `abcd` 在内存列表中的先后，`filter` 的输出 SHALL 逐字节相同
+- **AND** 该输出 SHALL 等于「仅按长词 `abcd` 替换」的结果（`***`），而非残留片段的 `***cd`
+
+#### Scenario: 任意排列一致性
+
+- **WHEN** 同一组 N 个词条以任意排列存在于内存列表
+- **THEN** 对同一输入内容，所有排列下的 `filter` 输出 SHALL 相同
+
+#### Scenario: 替换阶段不得泄露完整在册词
+
+- **WHEN** 对任意在册 `level=1/2`（或 `level IS NULL`）词条与任意输入内容执行 `filter`
+- **THEN** 输出 SHALL NOT 包含任何在册词条作为子串
+- **AND** 系统 SHALL NOT 承诺「输出不含在册词的任何**片段**」——长词优先替换后残留的片段不属于在册词，不构成整词泄露
+
+---
+
+### Requirement: 长词优先替换（masking-longest-first）
+
+替换阶段 SHALL 以**词条长度降序**遍历，使长词与短词存在包含关系时长词先获得匹配机会，短词在长词已被替换消失后不再重复命中。词条 SHALL 按「空词 / `null` 词排最后、长度降序、同长度按字面量升序」排序，以消除对具体排序算法稳定性实现的依赖。
+
+#### Scenario: 长词先于其前缀被替换
+
+- **WHEN** 词表含 `abcd` 与其前缀 `ab`，内容为 `abcd`
+- **THEN** 输出 SHALL 为 `***`（长词整体被替换），SHALL NOT 为 `***cd`
+
+#### Scenario: 空词与 null 词不参与排序比较的 NPE
+
+- **WHEN** 内存词表中含 `word` 为 `null` 或空串的词条
+- **THEN** 排序 SHALL 将其置于末尾且 SHALL NOT 抛出 `NullPointerException`
+- **AND** 过滤时 SHALL 跳过该词条（不拦截、不替换），不影响其它词条正常生效
 
 ---
 
