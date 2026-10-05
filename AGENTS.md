@@ -105,6 +105,24 @@ EasyChat/
     每次都靠「无效用例计数」或基线自检才发现。**统一做法**：
     纯字符串锚点先归一化 LF 再替换并按原风格写回；正则一律用 `\r?\n`。
 11. **每次 `edit` 大文件后必须回读改动区域**，确认方法签名、注解、括号等语义完整。`edit` 返回成功只代表字符串替换成功，不代表代码正确（2026-10-02 曾一次替换把 `@GlobalInterceptor` 与方法签名一并删掉）。
+12. **★ 判定「系统行为」前必须穷举相关代码路径，禁止用局部证据推断全局。** 「代码片段看起来是这样」≠「系统行为是这样」。
+    - **同一方法的校验常跨 Controller / Service 两层**。只查 Controller 的 `@NotNull Integer level`
+      就断言「无范围校验」会**得出相反结论** —— Service 层同一方法内可能正调着
+      `checkLevelStatus`。判定「某个值是否被校验」必须**从入口一路读到落库**。
+    - **「可达性」与「严重性」都要先证明再登记**。写台账前须回答两个问题：
+      ① 产生该状态的**写入路径有几条、每条是否都拦得住**？
+      ② 该状态的**后果链**是否真能走通（不是「看起来能」）？
+    - **后果链要读到消费端的判定语义**。2026-10-05 一天内三次凭局部证据下结论，三次都被推翻：
+      | 我的判断 | 实际 |
+      |---|---|
+      | 「白名单含垃圾项 → 所有好友被拒」很严重 | **错**：`canView` 用 `contains(viewerId)`，与空列表行为一致 |
+      | 「敏感词替换顺序依赖有泄露风险」 | **高估**：残留部分本身不是敏感词，不构成泄露 |
+      | 「`level` 填 4 即可让词条静默失效」 | **错**：四条写入路径全有范围校验，**不可达** |
+    - **错误判断会污染台账与他人决策**：我把未验证的判断做成了给你选项的前提，
+      而你据此做的选择建立在错误之上。故**给用户的决策选项必须已验证到可辩护**，
+      宁可先说「需要再查一轮」也不要给一个后来被推翻的二选一。
+    - **登记前先自查「我是否只看了入口」**。一句话自检：
+      *「这条写入/调用路径的另一端我读过吗？」*
 
 ## 3. 接口契约规则
 
@@ -397,6 +415,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件未覆盖后端**落库白名单**中的消息类型（→ 历史漫游能拉到、界面什么都不显示、不抛异常不报错）；`ChatMessage.vue` 未 import 语音/位置子组件（**死组件**，2026-10-03 实际事故）；纯文本兜底分支排在 24/25 分支之前（会抢走它们） |
 | `scripts/verify/verify_frontend_test_base.mjs` | CI | 测试依赖未钉死版本（`^` 会某天自动升到 vitest 2/3/5，连带要求 vite 5+ 从而拖坏 `electron-vite@1`）；`vite` 被顺带升级出 4.x；生产依赖混入测试框架；`vitest.config.mjs` 缺 jsdom / 缺 `@vitejs/plugin-vue`（`.vue` 解析不了）；`@` 别名与 `electron.vite.config.js` 两处不一致；全局桩缺 `ResizeObserver`（组件挂载即崩）；CI 未跑 `npm run test` |
 | `scripts/verify/verify_frontend_lint.mjs` | 推送前（`pre-push` hook）/ CI | **`lint` 脚本被塞回 `--fix`**（检查与修复必须分两条命令：实测一次「看一眼有没有问题」就重排 50 个文件 +4458/−3524 行，第二次在改脚本本身时执行它、又重排 45 个）；`lint:fix` 缺失或不带 `--fix`；eslint 缺 `ecmaVersion` / `sourceType: module` / `env.es2020`（顶层 `await` 与 `globalThis` 会被误报）；**已修复缺陷复发**：真实代码中再现 `new Promise(async`（统计**跳过注释**，否则注释里的反模式说明会被误判为未修）、`no-async-promise-executor` 被改回 `off`、`forEach(async …)` 复活；**当前 error 数超过基线 20** |
+| **（纪律类，非脚本）** §2.1 第 12 条「禁止用局部证据推断系统行为」 | 人工自查，无机控 |
 | `scripts/verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及三处缺陷复发：① `filterMembers` 只匹配 `contactName`（面板**显示**却是 `contactName \|\| userId` → 未设昵称者**看得见却搜不到**）② `extraData.atAll` 未叠加角色权限（**手工键入** `@所有人` 绕过面板守卫 → 服务端 `CODE_2305` → **整条消息发不出去**）③ `extraData.atUserIds` 与 `atUserIds` 字段口径分叉；④ **组件把判定内联回 `MessageSend.vue`**（抽离白做、缺陷原地复活）⑤ 组件复制第二份 @ 正则 ⑥ `myGroupRole` 未传入核心导致 `atAll` 恒判无权限。变异 `scripts/verify/mutation_at_mention_core.mjs`（**9/9 捕获**） |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
