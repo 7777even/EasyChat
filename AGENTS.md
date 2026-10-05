@@ -82,7 +82,12 @@ EasyChat/
 | 对外接口增删改 | 接口联冒烟 |
 | L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
-### 2.1 验证的十一条硬纪律
+### 2.1 验证的十二条硬纪律
+
+> **编号说明**：**6 与 9 为历史删除的编号，刻意留空不回收**——因为大量既有记录
+> （`engineering/qa/`、`docs/system-facts.md` §14、脚本注释）按**编号**交叉引用本清单
+> （如「§2.1 第 12 条」），重排编号会让那些引用全部指错。先例同
+> `easychat-migration-003-retired.sql`。新增条目从 15 起顺延。
 
 1. **任何写入 CI / Git hook / 门禁的脚本，交付前必须实跑一次并贴出退出码。** 「脚本存在」不等于「门禁有判别力」——本仓 `npm run lint` 长期 `exit 2`（`eslint .` 报 `No files matching`），却被接进 CI 导致流水线恒红（2026-10-02 事故，见 `engineering/retro/2026-10-02-group-join-approval.md` §三.1）。**门禁必须先在当前 main 上跑通，才允许接入。**
 2. **门禁报错信息里的每条处置建议，都要亲自照着走一遍。** 写「处置：把 X 设为 Y」的人必须验证过「照 X 那样做之后，脚本真的会读到这个值」。2026-10-04 靠此发现 `preflight-baseline-check.mjs` 只读 properties 默认值、不读 env，**把它自己报错信息里建议的处置路径堵死**（运维声明版本号 9 → 闸门仍按 12 判「声称最新」→ 拒绝启动）。
@@ -240,8 +245,11 @@ Spring Boot + MySQL + Redis + Netty（WebSocket）+ MyBatis（XML 映射）。
 
 ### 6.3 工程约定（Git / 提交）
 
-- **提交格式 `type(scope): 描述`**，scope 固定枚举：
-  `auth`（认证）、`user`（用户）、`chat`（聊天）、`group`（群组）、`contact`（好友）、`moment`（朋友圈）、`file`（文件上传）、`ws`（WebSocket）、`admin`（管理后台）、`common`（公共组件/工具）、`config`（配置）、`docs`（文档）、`chore`（杂项）
+- **提交格式 `type(scope): 描述`**，scope 固定枚举（**真源是 `scripts/commit-msg-lint.mjs` 的 `ALLOWED_SCOPES`**，本表与之不一致时以脚本为准并同步修表——2026-10-06 订正：此前本表遗漏前端域 8 个，导致按本表提交会被 hook 拒绝，而实际历史已有 14 个 `renderer` 提交）：
+  - 后端业务域：`auth`（认证）、`user`（用户）、`chat`（聊天）、`group`（群组）、`contact`（好友）、`moment`（朋友圈）、`file`（文件上传）、`ws`（WebSocket）、`admin`（管理后台）、`common`（公共组件/工具）、`config`（配置）
+  - 前端域（Electron 专属，与 `easychat-front/AGENTS.md` §7 同款）：`main`、`preload`、`renderer`、`ipc`、`ui`、`req`、`db`
+  - 跨域/横向：`build`、`contract`、`openspec`
+  - 文档与杂项：`docs`、`chore`
 - 提交信息**只写一行标题**，禁止正文分点列表
 - 跨域改动**按影响面拆成多个提交**
 
@@ -426,6 +434,11 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_migration_flyway.mjs` | 推送前（`pre-push` hook）/ CI | **迁移脚本的结构性 DDL（`ADD COLUMN`/`ADD [UNIQUE] INDEX`/`DROP INDEX`）未被存在性探针守卫**（→ 脚本不可重复执行，重跑报 `ERROR 1060`；实测曾有 5 份如此）；`flyway-core` 版本被改回随 parent（Community 8.0+ 不支持 MySQL 5.7，本机开发库正是 5.7）；迁移文件未打包进产物；`baseline-version` 与仓库最大迁移号不等（新增迁移会在存量库**静默跳过**）；迁移编号断裂；任一迁移含 `DELIMITER` / `CREATE PROCEDURE`（Flyway 解析器过不了）；编排中应用不依赖前置闸门（fail-closed 失效） |
 | `scripts/verify/verify_audit_and_at_all.mjs` | 推送前（`pre-push` hook）/ CI | `recordLog` 未自动补齐客户端 IP（6 处调用点全传 null → 最需溯源的 `LOGIN_FAILED` / `FORCE_OFFLINE` / `UPDATE_PASSWORD` 无 IP）；`@所有人` 权限仅在客户端生效（普通成员可冒用管理员身份） |
 | `scripts/verify/verify_mapper_params.mjs` | CI | Mapper 方法带 `@Param` 但 XML 用裸属性占位符（运行期抛 `BindingException`，编译期无感） |
+| `scripts/verify/verify_sql_concat_guard.mjs` | **已实现，暂未接入 CI / pre-push**（待 §14 遗留 #24 闭环后接入） | **Mapper XML 出现 `${}` 字符串拼接**（违反 §6.2-3；实测 2026-10-06 有 17 处 `order by ${query.orderBy}`，其中 3 个管理端端点可由请求参数直达）；请求可绑定的 Query 对象其 `orderBy` 在端点侧未硬编码覆盖 |
+| `scripts/verify/verify_call_core.mjs` | CI | 通话**帧**核心逻辑（`callFrameCore.mjs`）：帧 → 状态转移映射与 `MessageTypeEnum` 漂移、非法帧号未拒、状态机存在非法转移 |
+| `scripts/verify/verify_virtual_core.mjs` | CI | 消息列表自研虚拟滚动算法（`virtualListCore.mjs`）：偏移表二分定位错误、高度表与累计偏移不一致、越界索引返回错误条目 |
+| `scripts/verify/verify_export_chat_core.mjs` | CI | 聊天记录导出纯逻辑（`exportChatCore.mjs`）：**`csvCell` 前置单引号防护可被前导空白绕过**（Excel 会先忽略空白再解释公式 → OWASP CSV Injection，实测曾为真实安全缺口）；TXT / CSV 格式化字段错位 |
+| `scripts/verify/verify_password_handoff.mjs` | CI | 密码明文交接红线：客户端对密码做哈希、MD5 存量双验证被移除、`isBCrypt` 与 `matches` 判定口径分叉（曾致已加密哈希被二次加密、账号永久无法登录） |
 | `scripts/verify/verify_call_store_core.mjs` | CI | 通话 store 编排逻辑（`callStoreCore.mjs`）：结束态重置补丁有遗漏或越界；**1800ms 复位守卫缺通话身份校验**（陈旧定时器会抹掉新通话的结束态）；空 `reason` 时 `endReason` 未清空（显示上一通通话的原因）；出站帧号与 `callFrameCore` 漂移；`callId` 为空时仍发帧；`useCallStore.js` 内联裸守卫或裸写 `messageType`（绕开纯核心 → 缺陷复活） |
 | `scripts/verify/verify_local_db_core.mjs` | CI | 本地 SQLite SQL 构造核心（`dbSqlCore.mjs`）：**where 条件真值过滤**（空串/0 被静默丢弃 → 更新命中范围扩大）、字段不在列映射时被静默丢弃、空 set / 空 where 未短路（前者拼出 `update t  where` 弹原生框、后者退化为全表更新）、`add column` 非幂等仍逐条立即执行、列名可由值注入 |
 | `scripts/verify/mutation_call_store_core.cjs` / `mutation_local_db_core.cjs` | **反向验证**（不进 CI，见下） | 变异未被门禁捕获即 exit=1。**两者都含「变异前基线必须跑通」的自检**——门禁自身崩溃（Windows ESM 路径未转 `file://` URL 等）会被误记成「全部捕获」，该自检把「门禁能跑」从前提变成硬校验 |
