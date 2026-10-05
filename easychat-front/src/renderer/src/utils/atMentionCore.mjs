@@ -61,10 +61,13 @@ export function roleText (role) {
 /**
  * 按关键词过滤群成员。
  *
- * ⚠️ **当前仅匹配 `contactName`**（= 抽离前的实际行为）。
- *   面板「显示」用的是 `contactName || userId`，故未设昵称者以 userId 呈现却搜不到。
- *   该不一致由 openspec 的「群成员搜索与显示口径一致」Requirement 覆盖，
- *   在 T3 阶段一并修复并加变异用例。
+ * 搜索**同时匹配昵称与 userId**（任一命中即保留），大小写与首尾空白不敏感。
+ *
+ * <p><b>为何要匹配 userId</b>：面板「显示」用的是 `contactName || userId`，
+ * 即未设昵称者以 userId 呈现。原先「过滤」只用 `contactName`，
+ * 于是这类成员**看得见却搜不到** —— 两个口径对不上（已由 spec 的
+ * 「群成员搜索与显示口径一致」Requirement 覆盖）。
+ * 用户能在列表里看到的，就应当搜得到，这是可预期性底线。
  *
  * @param {Array|null|undefined} list
  * @param {string|null|undefined} keyword
@@ -75,7 +78,11 @@ export function filterMembers (list, keyword) {
   if (!kw) {
     return list || []
   }
-  return (list || []).filter((item) => (item.contactName || '').toLowerCase().includes(kw))
+  return (list || []).filter((item) => {
+    const name = (item.contactName || '').toLowerCase()
+    const uid = (item.userId || '').toLowerCase()
+    return name.includes(kw) || uid.includes(kw)
+  })
 }
 
 /**
@@ -138,18 +145,21 @@ export function buildAtUserIdsField (messageContent) {
  *
  * 三者共存：引用信息、@ 提及、@所有人。按需合并，避免引用消息丢失 @ 标记。
  *
- * ⚠️ **两处已知缺陷，本函数当前保持抽离前的行为**（T3 阶段修复）：
- *   ① `extraData.atUserIds` **不去重**（而 `buildAtUserIdsField` 去重）——两处口径已分叉；
- *   ② `atAll` 的写入条件**不叠加角色权限**（`atAllEnabled || 正文含 @所有人`），
- *      故普通成员手工键入 `@所有人` 也会产出 `atAll: true`，
- *      随后被服务端 `checkGroupRole` 以 `CODE_2305` 拒绝 → **整条消息发送失败**。
+ * <p><b>atAll 的写入条件 = 角色权限 ∧ (面板勾选 ∨ 正文含 @所有人)</b>。
+ * 权限是发送侧的正确性前提：原先条件里**没有**权限判定，只挡住了面板点击，
+ * 普通成员**手工键入** `@所有人` 同样会产出 `atAll: true`，
+ * 随后被服务端 `checkGroupRole` 以 `CODE_2305` 拒绝 → **整条消息发送失败**。
+ * 现在叠加权限后，这类输入降级为「标记不生效、消息正常送达」。
+ *
+ * <p>「正文含 @所有人 也认」的兜底**保留**（草稿只存文本，`atAllEnabled` 是运行时
+ * ref 不持久化，草稿重发必须靠它），但它必须**叠加**权限判定而非替代之。
  *
  * @param {object} opts
  * @param {object|null} [opts.quoteInfo] 引用信息
  * @param {number} opts.contactType 1 群聊 / 0 单聊
  * @param {string} [opts.messageContent]
  * @param {boolean} [opts.atAllEnabled] 面板是否勾选了「@所有人」
- * @param {number} [opts.role] 本人群角色（T3 起参与 atAll 判定）
+ * @param {number} [opts.role] 本人群角色（0 群主 / 1 管理员 / 2 成员）
  * @returns {string|null} 无任何附加信息时返回 null
  */
 export function buildExtraData ({
@@ -169,12 +179,12 @@ export function buildExtraData ({
 
   // 群 @ 提及：正文里形如 "@Uxxxx" 的用户 ID
   if (contactType === GROUP_CONTACT_TYPE && messageContent) {
-    const matched = messageContent.match(AT_USER_ID_PATTERN)
-    if (matched && matched.length > 0) {
-      extra.atUserIds = matched.map((item) => item.substring(1))
+    const ids = extractAtUserIds(messageContent)
+    if (ids.length > 0) {
+      extra.atUserIds = ids
     }
-    // @所有人：以面板勾选标记为准，正文出现 @所有人 也认（兼容草稿恢复后重发）
-    if (atAllEnabled || messageContent.indexOf(AT_ALL_TEXT) >= 0) {
+    // @所有人：权限 ∧ (面板勾选 ∨ 正文含 @所有人)
+    if (canAtAll(role) && (atAllEnabled || messageContent.indexOf(AT_ALL_TEXT) >= 0)) {
       extra.atAll = true
     }
   }

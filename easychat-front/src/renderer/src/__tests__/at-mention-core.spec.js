@@ -12,6 +12,23 @@ import {
   buildAtUserIdsField
 } from '@/utils/atMentionCore.mjs'
 
+/**
+ * 安全地把 `buildExtraData` 的返回值转成对象。
+ *
+ * <p>⚠️ **必须用它而不是 `JSON.parse`**：`buildExtraData` 在「无任何附加信息」时
+ * 返回 **`null`**（而非 `'{}'`），而 `JSON.parse(null)` 会得到 `null`，
+ * 再取属性即 TypeError。本轮两次踩同一个坑（单聊用例、权限剥离用例）。
+ *
+ * <p>这本身也是被断言的行为之一：`null` 表示**服务端拿不到 extraData**，
+ * 对「普通成员手打 @所有人 被剥离」而言正是期望结果。
+ */
+function extraOf (json) {
+  if (json === null || json === undefined) {
+    return {}
+  }
+  return JSON.parse(json)
+}
+
 // ============================================================================
 // 等价性基线测试（T2 阶段）
 //
@@ -73,11 +90,13 @@ describe('T2 等价性 — filterMembers', () => {
     expect(filterMembers(list, 'li').map((i) => i.userId)).toEqual(['U003'])
   })
 
-  it('⚠ 现状：未设昵称者按 userId 搜不到（缺陷 1，T3 修）', () => {
-    // 面板「显示」用的是 contactName || userId，故 U002 以 userId 呈现；
-    // 但「过滤」只用 contactName，于是它看得见却搜不到。
-    expect(filterMembers(list, 'U002')).toHaveLength(0)
-  })
+  // ── 缺陷 1（已修复）────────────────────────────────────────────
+  // 修复前：`(item.contactName || '').toLowerCase().includes(kw)`
+  //   ⇒ `filterMembers(list, 'U002')` 返回 `[]`
+  //   （面板显示用的是 `contactName || userId`，故 U002 以 userId 呈现却搜不到）
+  // 修复后：见 T3 组「按 userId 可搜到未设昵称的成员」。
+  // 本组不再保留「现状」断言 —— 缺陷既已修复，留下相反期望的断言只会
+  // 让后来者无法判断哪组才是当前契约。目标行为集中在 T3 组。
 
   it('null 列表返回空数组', () => {
     expect(filterMembers(null, 'a')).toEqual([])
@@ -164,21 +183,11 @@ describe('T2 等价性 — buildExtraData', () => {
     expect(buildExtraData({ contactType: 0, messageContent: '@U001 你好' })).toBeNull()
   })
 
-  it('⚠ 现状：extraData.atUserIds 不去重（缺陷 3，T3 修）', () => {
-    const extra = JSON.parse(
-      buildExtraData({ contactType: 1, messageContent: '@U001 @U001' })
-    )
-    expect(extra.atUserIds).toEqual(['U001', 'U001'])
-  })
-
-  it('⚠ 现状：正文含 @所有人 即写 atAll，与角色无关（缺陷 2，T3 修）', () => {
-    // 抽离前条件是 `atAllEnabled || 正文含 @所有人`，没有叠加权限判定。
-    // 普通成员手工键入即可产出 atAll=true，随后被服务端 CODE_2305 拒绝。
-    const extra = JSON.parse(
-      buildExtraData({ contactType: 1, messageContent: '大家好 @所有人', atAllEnabled: false, role: 2 })
-    )
-    expect(extra.atAll).toBe(true)
-  })
+  // ── 缺陷 3（已修复）────────────────────────────────────────────
+  // 修复前：`extra.atUserIds = matched.map(item => item.substring(1))`（**不去重**），
+  //   而 `buildAtUserIdsField` 走 `Array.from(new Set(...))`（**去重**）——
+  //   同一正则被复制两份、两处口径相反。
+  // 修复后：两者统一委托 `extractAtUserIds`（去重），见 T3 组。
 
   it('面板勾选 atAllEnabled 时写 atAll', () => {
     const extra = JSON.parse(
@@ -213,5 +222,142 @@ describe('T2 等价性 — buildAtUserIdsField', () => {
     expect(buildAtUserIdsField('没有提及')).toBeNull()
     expect(buildAtUserIdsField('')).toBeNull()
     expect(buildAtUserIdsField(null)).toBeNull()
+  })
+})
+
+// ============================================================================
+// T3 目标行为（缺陷修复）
+//
+// 上面的 ⚠ 用例锁定的是**缺陷修复前**的行为，保留作为「缺陷曾存在」的证据。
+// 本组断言**修复后**的目标行为（openspec 2026-10-04-at-mention-pure-core spec-delta）。
+// 两组对同一函数给出相反期望，是刻意的：修复时须**同时**改代码与把 ⚠ 用例改写为
+// 「修复前 = X」的显式记录，否则后来者无法判断哪组才是当前契约。
+// ============================================================================
+
+describe('T3 目标行为 — 群成员搜索与显示口径一致（缺陷 1）', () => {
+  const list = [
+    { userId: 'U001', contactName: '张三' },
+    { userId: 'U002', contactName: '' },
+    { userId: 'U003', contactName: 'LiSi' }
+  ]
+
+  it('按 userId 可搜到未设昵称的成员（此前搜不到）', () => {
+    expect(filterMembers(list, 'U002').map((i) => i.userId)).toEqual(['U002'])
+  })
+
+  it('按 userId 片段亦可命中', () => {
+    expect(filterMembers(list, 'U00').map((i) => i.userId)).toEqual(['U001', 'U002', 'U003'])
+  })
+
+  it('按昵称搜索行为不变', () => {
+    expect(filterMembers(list, '张').map((i) => i.userId)).toEqual(['U001'])
+    expect(filterMembers(list, 'li').map((i) => i.userId)).toEqual(['U003'])
+  })
+
+  it('昵称与 userId 任一命中即保留（OR 语义）', () => {
+    const mixed = [
+      { userId: 'U777', contactName: '王五' },
+      { userId: 'zhangsan', contactName: '' }
+    ]
+    expect(filterMembers(mixed, '王').map((i) => i.userId)).toEqual(['U777'])
+    expect(filterMembers(mixed, 'zhang').map((i) => i.userId)).toEqual(['zhangsan'])
+  })
+
+  it('首尾空白与大小写不敏感', () => {
+    expect(filterMembers(list, '  ZHANGSAN  ')).toEqual([])
+    expect(filterMembers(list, '  张  ').map((i) => i.userId)).toEqual(['U001'])
+    expect(filterMembers(list, '  LIS  ').map((i) => i.userId)).toEqual(['U003'])
+  })
+})
+
+describe('T3 目标行为 — atAll 写入以角色权限为准（缺陷 2）', () => {
+  it('普通成员(2)手工键入 @所有人 ⇒ 不写 atAll，消息正常发出', () => {
+    const json = buildExtraData({
+      contactType: 1,
+      messageContent: '大家好 @所有人',
+      atAllEnabled: false,
+      role: 2
+    })
+    const extra = extraOf(json)
+    expect(extra.atAll).toBeUndefined()
+    // 正文既无 @Uxxx 又无（被剥离的）@所有人 ⇒ 没有任何附加信息 ⇒ extraData 为 null。
+    // 这正是「标记不生效、消息正常送达」的实现形态。
+    expect(json).toBeNull()
+  })
+
+  it('普通成员即使面板勾选也不写 atAll', () => {
+    const extra = extraOf(
+      buildExtraData({ contactType: 1, messageContent: '大家好', atAllEnabled: true, role: 2 })
+    )
+    expect(extra.atAll).toBeUndefined()
+  })
+
+  it('群主(0)面板勾选 ⇒ 写 atAll', () => {
+    const extra = JSON.parse(
+      buildExtraData({ contactType: 1, messageContent: '大家好', atAllEnabled: true, role: 0 })
+    )
+    expect(extra.atAll).toBe(true)
+  })
+
+  it('★ 管理员(1)草稿重发（atAllEnabled 丢失、正文仍含 @所有人）⇒ 仍写 atAll', () => {
+    // 兜底分支必须保留：草稿只存文本，atAllEnabled 是运行时 ref 不持久化。
+    // 若为修缺陷 2 而删掉「正文含 @所有人 也认」，草稿重发就会丢标记。
+    const extra = JSON.parse(
+      buildExtraData({
+        contactType: 1,
+        messageContent: '大家好 @所有人',
+        atAllEnabled: false,
+        role: 1
+      })
+    )
+    expect(extra.atAll).toBe(true)
+  })
+
+  it('角色未知（undefined）时保守视为无权限', () => {
+    const extra = extraOf(
+      buildExtraData({
+        contactType: 1,
+        messageContent: '大家好 @所有人',
+        atAllEnabled: false,
+        role: undefined
+      })
+    )
+    expect(extra.atAll).toBeUndefined()
+  })
+
+  it('普通成员手打 @所有人 时 atUserIds 仍正常提取（消息本身不受阻）', () => {
+    const extra = JSON.parse(
+      buildExtraData({
+        contactType: 1,
+        messageContent: '@U001 大家好 @所有人',
+        atAllEnabled: false,
+        role: 2
+      })
+    )
+    expect(extra.atUserIds).toEqual(['U001'])
+    expect(extra.atAll).toBeUndefined()
+  })
+})
+
+describe('T3 目标行为 — atUserIds 口径统一且去重（缺陷 3）', () => {
+  it('extraData.atUserIds 去重', () => {
+    const extra = JSON.parse(
+      buildExtraData({ contactType: 1, messageContent: '@U001 @U001 @U002' })
+    )
+    expect(extra.atUserIds).toEqual(['U001', 'U002'])
+  })
+
+  it('★ extraData.atUserIds 与 atUserIds 字段口径完全一致', () => {
+    // 这是缺陷 3 的核心断言：两处曾各自复制同一正则、且去重口径相反。
+    for (const content of ['@U001 @U001', '@U001 @U002 @U001', '@U001 纯文本 @U002 @U002']) {
+      const extra = JSON.parse(buildExtraData({ contactType: 1, messageContent: content }))
+      const field = buildAtUserIdsField(content)
+      expect(extra.atUserIds, `content=${content}`).toEqual(field.split(','))
+    }
+  })
+
+  it('extraData.atUserIds 为去重后的**数组**（非逗号串）', () => {
+    const extra = JSON.parse(buildExtraData({ contactType: 1, messageContent: '@U001 @U002' }))
+    expect(Array.isArray(extra.atUserIds)).toBe(true)
   })
 })
