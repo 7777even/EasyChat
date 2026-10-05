@@ -25,7 +25,8 @@ AGENTS §6.2-3 明令「禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数�
     排序方向独立枚举。**枚举值是代码常量，不是运行时字符串。**
 - 后端（Controller）:
   - `AdminGroupController#loadGroup`、`AdminUserInfoBeautyController#loadBeautyAccountList` ——
-    请求可传 `sortField` / `sortDirection`，**取值必须命中白名单枚举**，否则回退默认排序。
+    请求可传 `sortField` / `sortDirection`，**取值必须命中白名单枚举**，
+    **未命中即抛 `CODE_1001`（不静默回退）**。
   - `AdminUserInfoController#loadUser` —— `password` / `passwordFuzzy` **彻底删除**，排序同样走白名单。
   - 其余 9 处列表端点维持现状（它们已在 Controller 或 Service 硬编码排序）。
 - 后端（Mapper XML）:
@@ -49,7 +50,7 @@ AGENTS §6.2-3 明令「禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数�
 ## Capabilities
 
 - C1: Mapper XML 中**不存在任何 `${}` 字符串拼接**，排序一律为 XML 内字面量分支
-- C2: 调用方**仍可指定排序**，但只能取自**列名枚举白名单**，未命中则回退默认
+- C2: 调用方**仍可指定排序**，但只能取自**列名枚举白名单**；**未命中即报错 `CODE_1001`**
 - C3: `password` / `passwordFuzzy` 两个字段**彻底删除**（HTTP 面与类型上均不可达）
 - C4: 分页列表**恒有 ORDER BY**（修掉「orderBy 为空则无排序」这一既有缺陷）
 - C5: 上述四条由 `verify_sql_concat_guard.mjs` 机控强制，且门禁自身有变异检验证明判别力
@@ -59,7 +60,8 @@ AGENTS §6.2-3 明令「禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数�
 - 对外接口: **URL、HTTP method、响应结构、权限注解全部不变**；
   `check-api-contract --strict` 保持 0 漂移。
   行为变化：新增 `sortField` / `sortDirection` 两个**可选**入参（不传即默认排序）；
-  `orderBy` / `password` / `passwordFuzzy` 变为**无效参数**（被忽略，不报错）。
+  传了非法值 → `CODE_1001`；`orderBy` / `password` / `passwordFuzzy` 变为**无效参数**（被忽略）。
+  **不新增错误码**，复用 §3.1 通用段的 `1001 参数非法`。
 - 存量数据: **零影响**，无 DDL、无数据迁移。
 - 性能: 无影响。
 - 安全: 消除「已认证管理员可 SQL 注入」与「MD5 账号口令猜测预言机」两个面。
@@ -81,7 +83,8 @@ AGENTS §6.2-3 明令「禁止字符串拼接 SQL，MyBatis 使用 `#{}` 参数�
 |---|------|------|----------------|
 | 1 | 调用方自定义排序是否保留 | **保留，改走列名枚举白名单** | C2 由「排序不可寻址」改为「排序白名单化」；XML 用 `<choose>` 枚举分支，**仍然零 `${}`** |
 | 2 | `password` / `passwordFuzzy` 如何处理 | **彻底删除** | C3 改为「从 HTTP 面与类型上均删除」 |
-| 3 | 验收证据强度 | **活体注入实测列为 DoD 硬项** | tasks.md 阶段四 + DoD 均标注「不接受代码级可达代替」 |
+| 3 | 验收证据强度 | **活体注入实测列为 DoD 硬项** | tasks.md 阶段五 + DoD 均标注「不接受代码级可达代替」 |
+| 4 | 非法 `sortField` 是否静默回退 | **不静默回退，抛 `CODE_1001`** | ADR-004 由「待确认」改为「已接受」；C2 与 spec-delta 的 Scenario 同步改为报错 |
 
 ### 确认过程中连带查出的一处事实更正
 

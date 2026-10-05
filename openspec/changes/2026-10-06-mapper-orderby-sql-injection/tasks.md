@@ -21,8 +21,9 @@
 
 ## 阶段一：排序白名单（枚举）
 
-- [ ] **[TDD]** 先写失败单测：枚举 `fromHttp(String)` 对「白名单内值」返回枚举项、
-      对「`id desc`」「`(select 1)`」「空串」返回默认项 — ≤1h
+- [ ] **[TDD]** 先写失败单测：枚举 `fromHttp(String)` 对「白名单内值」返回对应枚举项；
+      对「`id desc`」「`(select 1)`」「空串」「`create_time desc`（含空格与方向）」**抛
+      `BusinessException(CODE_1001)`**（ADR-004：显式报错，**不静默回退**） — ≤1h
 - [ ] 新增排序白名单枚举：列名 + 方向 → SQL 片段字面量；
       **逐一映射 design.md §7 的 11 类现有排序值**，多列排序（`role asc, create_time asc`）
       作为固定组合项 — ≤2h
@@ -44,7 +45,7 @@
 
 - [ ] **[TDD]** 新增单测：用 `WebDataBinder` 直接构造绑定器，断言
       `password` / `passwordFuzzy` **不可绑定**（字段已删 → 绑定器忽略）、
-      `sortField` 非法值回退默认 — ≤1h
+      `sortField` 非法值**抛 `CODE_1001` 而非回退** — ≤1h
 - [ ] 3 个端点改用 `sortField` / `sortDirection`；`loadUser` 去除 `password*` — ≤1h
 - [ ] 两个可达端点补**默认排序**（修掉「orderBy 为空则无 ORDER BY」的既有缺陷，
       MySQL 不保证稳定序 → 翻页可能重复/漏行） — ≤1h
@@ -62,7 +63,10 @@
       对 `/admin/loadGroup` 与 `/admin/loadBeautyAccountList` 各发
       `sortField=(select 1 from information_schema.tables)`、`sortField=id desc`、
       `sortDirection=desc; drop table x` 等载荷，确认
-      ① 不执行注入 SQL ② 非法值回退默认排序 ③ 合法值生效 — ≤1.5h
+      ① **不执行注入 SQL** ② 非法值**返回 `CODE_1001`**（ADR-004） ③ 合法值生效 — ≤1.5h
+      > 修复前的对照实验同样要留证：修复前 `sortField=(select 1 …)` 会被拼进 SQL。
+      > 本机 MySQL **5.7.39** 已在运行（服务 `MySQL57`），`easychat` 库 26 张表与基线全对齐
+      > （`verify_schema_drift.mjs` 实跑 0 ERROR / 1 WARN，WARN 为 `flyway_schema_history` 工具表）。
 - [ ] 活库核查 `/admin/loadUser`：确认 `password` 列不可再被 WHERE 引用 — ≤30min
 - [ ] 活库核查分页稳定性：同一页码重复请求 3 次，返回行序一致（验证 C4） — ≤30min
 - [ ] 前端 `npm run test` + `npm run build` exit 0 — ≤30min

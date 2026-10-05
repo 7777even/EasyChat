@@ -68,13 +68,16 @@ Mapper XML：<choose> + <when test="sortOption == 'CREATE_TIME_DESC'">
 
 | 端点 | Method | 入参变化 | 出参 | 权限 |
 |------|--------|----------|------|------|
-| `/api/admin/loadGroup` | POST | 去掉 `orderBy`；新增可选 `sortField` / `sortDirection` | `Result<PaginationResultVO>` | `checkAdmin=true` |
+| `/api/admin/loadGroup` | POST | 去掉 `orderBy`；新增可选 `sortField` / `sortDirection`（非法 → `CODE_1001`） | `Result<PaginationResultVO>` | `checkAdmin=true` |
 | `/api/admin/loadBeautyAccountList` | POST | 同上 | `Result<PaginationResultVO<UserInfoBeauty>>` | `checkAdmin=true` |
-| `/api/admin/loadUser` | POST | 去掉 `orderBy` / `password` / `passwordFuzzy`；新增可选 `sortField` / `sortDirection` | `Result<PaginationResultVO>` | `checkAdmin=true` |
+| `/api/admin/loadUser` | POST | 去掉 `orderBy` / `password` / `passwordFuzzy`；新增可选 `sortField` / `sortDirection`（非法 → `CODE_1001`） | `Result<PaginationResultVO>` | `checkAdmin=true` |
 
 ### 错误码
 
-**无新增**。排序参数非法**不报错**，回退默认项（避免为一次排序尝试增加失败路径与错误码分段压力）。
+**无新增码**，复用 `1001 参数非法`（AGENTS §3.1 通用段）。
+
+非法排序参数 → 抛 `BusinessException(CODE_1001)`，**不静默回退**（ADR-004，人工决策）。
+因前端当前不发送排序参数（grep 零命中），该路径在现状下不会被触发。
 
 ## 3. 数据模型
 
@@ -132,13 +135,21 @@ Mapper XML：<choose> + <when test="sortOption == 'CREATE_TIME_DESC'">
   待本 Change 修复完再接 CI + pre-push，**两者必须同批**。
 - 后果: 避免「刚写的门禁立刻把流水线打红」这一 2026-10-02 事故的重演。
 
-### ADR-004: 非法排序值静默回退默认，不报错
+### ADR-004: 非法排序值显式报错（`CODE_1001`），不静默回退
 
-- 状态: 待确认（低风险，可与 ADR-001 一并确认）
-- 上下文: 报错需要占用错误码分段（§3.1），且排序属非关键体验。
-- 决策: 未命中白名单即回退默认项，不抛异常。
-- 后果: 正面 —— 零新增失败路径。负面 —— 调用方传错排序**无显式反馈**，
-  排障需靠「排序没生效」的现象反推。**若人工认为需要显式反馈，可改抛 `CODE_1001`。**
+- 状态: **已接受**（2026-10-06 人工决策）
+- 上下文: 初版我提议「未命中白名单即静默回退默认项」，理由是排序属非关键体验、不必占用错误码分段。
+  人工决策为**必须有显式反馈**。
+- 决策: `sortField` / `sortDirection` 未命中白名单 → 抛 `BusinessException(CODE_1001)`，
+  **不静默回退**。错误码落在 AGENTS §3.1 的 `1000-1999` 通用（参数）段，复用既有的 `1001 参数非法`，
+  **不新增错误码**。
+- 后果:
+  - 正面 —— 调用方传错排序**立即可见**；排障不需靠「排序没生效」反推；
+    也让「枚举 ↔ XML 分支」契约的破坏（排序项静默失效）更早暴露。
+  - 负面 —— 新增一条失败路径，管理端需处理该错误码；
+    但因前端当前**不发送**排序参数（已 grep 确证零使用），实际不会触发。
+- 与 ADR-001 的关系: 二者共同决定了「排序白名单」的完整形态 ——
+  **合法值走枚举分支，非法值报错，二者都不是「静默接受」。**
 
 ## 6. 风险与缓解
 
