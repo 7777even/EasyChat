@@ -64,8 +64,19 @@ public class IdListTools {
         String[] arr = temp.split(",");
         Set<String> set = new HashSet<>();
         for (String s : arr) {
-            if (!StringTools.isEmpty(s)) {
-                set.add(s.trim().replaceAll("\"", ""));
+            // ⚠️ 顺序要紧：**先规范化、再判空**（2026-10-05 修复）。
+            //
+            // 原写法是「先判空、再 trim 并剥引号」，而判空作用于**未剥引号的原文**：
+            //   isEmpty("\"\"")    长度 2 → false → 进入分支 → 剥引号后留下空串
+            //   isEmpty("\"   \"") 长度 5 → false → 进入分支 → 剥引号后留下 "   "
+            // 即 javadoc 承诺的「忽略空项」**从未生效**，空串/空白会真的成为名单成员。
+            // （这类缺陷不会报错，只表现为「多了个不存在的用户」，最难靠回归发现。）
+            //
+            // 第二次 trim 不可省：`"  "` 剥掉引号后得到 `  `，若只在剥引号前 trim
+            // 一次，这段空白仍会漏进结果。
+            String norm = s.trim().replaceAll("\"", "").trim();
+            if (!StringTools.isEmpty(norm)) {
+                set.add(norm);
             }
         }
         result.addAll(set);

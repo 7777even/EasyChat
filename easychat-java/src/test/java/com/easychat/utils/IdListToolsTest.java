@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -80,37 +81,93 @@ class IdListToolsTest {
                 asSet(IdListTools.parse("\"U001\",\"U002\"")));
     }
 
+    // ── D1/D2 已修：先规范化、再判空 ───────────────────────────────
+    // 修复前（javadoc 声明「忽略空项」但实测不忽略）：
+    //   parse('[""]')                  → [""]              size=1
+    //   parse('["U001","","U002"]')    → ["", U002, U001]  size=3
+    //   parse('["U001","   ","U002"]') → ["   ", U002, U001] size=3
+    //
+    // 根因（D1 与 D2 **同根**）：判空作用于**未剥引号的原文**，规范化在其后 ——
+    //   `isEmpty("\"\"")` 长度 2 → false；`isEmpty("\"   \"")` 同理 → false。
+    //   故「先 trim 判空、再剥引号」这个顺序根本拦不住任何空项。
+    // 修复：先规范化（trim → 剥引号 → 再 trim），再判空。
+    //
+    // ⚠ 断言必须看 size，**不能看 toString**：`{""}.toString()` 与 `{}.toString()`
+    //   都是 `[]`，二者无法区分。（本轮最初就误把 `[, U002, U001]` 里的空串读成了逗号。）
+
     @Test
-    @DisplayName("⚠ 现状 parse: 空串元素**未被忽略**，与 javadoc「忽略空项」矛盾")
-    void parseKeepsEmptyStringItem() {
-        // ⚠ 现状（已登记为缺陷）：javadoc 声明「忽略空项」，实测空串项**照样收进来**。
-        //   根因：`StringTools.isEmpty("\"\"")` 为 false（长度 2，非空白），
-        //   于是进入集合，随后 `.replaceAll("\"", "")` 把两个引号剥掉 → 留下空串。
-        //
-        //   ⚠ 断言必须看 size / containsEmpty，**不能看 toString**：
-        //   `{""}.toString()` 与 `{}.toString()` 都是 `[]`，二者无法区分。
-        //   （本轮最初就误把 `[, U002, U001]` 里的空串读成了逗号。）
-        List<String> single = IdListTools.parse("[\"\"]");
-        assertEquals(1, single.size(), "空串项被收进来了");
-        assertTrue(single.contains(""), "收到的空串项内容为空串");
-
-        List<String> middle = IdListTools.parse("[\"U001\",\"\",\"U002\"]");
-        assertEquals(3, middle.size(), "中间空串项也被收进来了");
-        assertTrue(middle.contains(""));
-
-        // 两个空串元素会被去重成一个
-        assertEquals(1, IdListTools.parse("[\"\",\"\"]").size());
+    @DisplayName("parse: 空串元素被忽略（修复前会产出一个空串 id）")
+    void parseSkipsEmptyStringItem() {
+        assertTrue(IdListTools.parse("[\"\"]").isEmpty(), "空串元素应被忽略");
+        assertEquals(0, IdListTools.parse("[\"\",\"\"]").size(), "两个空串元素应全部被忽略");
+        // 对照：修复前 `["",""]` 会去重成 1 项空串
+        assertFalse(IdListTools.parse("[\"\",\"\"]").contains(""),
+                "空串不得作为 id 进入结果");
     }
 
     @Test
-    @DisplayName("⚠ 现状 parse: 元素空白不被 trim，纯空白元素整体保留")
-    void parseDoesNotTrimElementWhitespace() {
-        // ⚠ 现状（已登记为缺陷）：元素只做了 `.trim()` 后再判空，
-        //   但 trim 结果**未被写回**，故 `"   "` 以 3 个空格的形式成为一个「用户 id」。
-        List<String> r = IdListTools.parse("[\"U001\",\"   \",\"U002\"]");
-        assertEquals(3, r.size());
-        assertTrue(r.contains("   "), "纯空白元素以原样保留");
-        assertFalse(r.contains(""), "本用例确认与上一条不同：此处不是空串而是空白串");
+    @DisplayName("parse: 中间与末尾的空串元素被忽略")
+    void parseSkipsEmptyItemsAroundRealIds() {
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[\"U001\",\"\",\"U002\"]")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[\"U001\",\"U002\",\"\"]")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[\"\",\"U001\",\"\",\"U002\",\"\"]")));
+    }
+
+    @Test
+    @DisplayName("parse: 纯空白元素被忽略，不再成为「用户 id」")
+    void parseSkipsBlankItems() {
+        assertTrue(IdListTools.parse("[\"   \"]").isEmpty(), "纯空白元素应被忽略");
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[\"U001\",\"   \",\"U002\"]")));
+    }
+
+    @Test
+    @DisplayName("parse: 剥引号后仍带空白也被忽略（第二次 trim 的必要性）")
+    void parseSkipsBlanksRemainingAfterQuoteStripping() {
+        // `"  "` 剥引号后是 `  `。若只在剥引号**之前** trim 一次，
+        // 这段空白会漏进结果 —— 故规范化后必须再 trim 一次。
+        assertTrue(IdListTools.parse("[\"  \"]").isEmpty(), "引号内空格的元素应被忽略");
+        // ⚠️ 制表符必须用字符串拼接，不能在源码里写真实 TAB。
+        //   本轮初版写成 Java 转义 "\\t"，它到达 parse 时是**字面反斜杠 + t**，
+        //   于是被剥引号后剩 `\t` 两个字符（非空白）→ 产出 "t" 附近的怪 id。
+        //   这是本会话第五次「写锚点/字面量时转义层级错一层」，与 AGENTS §2.1 第 8 条同源。
+        assertTrue(IdListTools.parse("[\"" + "\t" + "\"]").isEmpty(), "引号内制表符的元素应被忽略");
+    }
+
+    @Test
+    @DisplayName("parse: 合法元素的值被去首尾空白")
+    void parseTrimsRealValues() {
+        assertEquals(asSet(Collections.singletonList("U001")),
+                asSet(IdListTools.parse("[\"  U001  \"]")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[  \"U001\"  ,  \"U002\" ]")));
+    }
+
+    @Test
+    @DisplayName("parse: 宽松契约 —— 对任意脏输入都不抛异常")
+    void parseNeverThrows() {
+        // parse 用于读可能含历史脏数据的名单列，**永不抛异常**是刻意契约；
+        // 严格校验由 validate 承担。修「忽略空项」不得把它变成严格解析。
+        String[] dirty = {
+                "not-a-json", "[\"U001\",", "[[\"U001\"]]", "{\"a\":1}", "]", "[",
+                "null", "undefined", "NaN", "[,]", "[,,]", "[\"a\"]extra"
+        };
+        for (String d : dirty) {
+            assertNotNull(IdListTools.parse(d), "parse 永不返回 null：" + d);
+        }
+        // 超长输入也不得抛（validate 会抛 CODE_1001，parse 必须容错）
+        StringBuilder huge = new StringBuilder("[");
+        for (int i = 0; i < 8000; i++) {
+            if (i > 0) {
+                huge.append(',');
+            }
+            huge.append("\"U").append(i).append('"');
+        }
+        huge.append(']');
+        assertNotNull(IdListTools.parse(huge.toString()));
     }
 
     @Test
@@ -260,13 +317,49 @@ class IdListToolsTest {
     @Test
     @DisplayName("validate 与 parse 的口径差异：同一脏数据 parse 放行、validate 拒绝")
     void validateIsStricterThanParse() {
-        // 这条用例锁定两者的**分工**：parse 用于读旧数据（必须容错），
+        // 锁定两者的**分工**：parse 用于读旧数据（必须容错），
         // validate 用于写新数据（必须严格）。若有人把 validate 改成复用 parse，
         // 脏数据就能落库，本用例即转红。
         String dirty = "[1]";                       // 元素是数字而非字符串
-        assertEquals(asSet(java.util.Collections.singletonList("1")),
+        assertEquals(asSet(Collections.singletonList("1")),
                 asSet(IdListTools.parse(dirty)), "parse 把数字当字符串收下");
         assertThrows(BusinessException.class, () -> IdListTools.validate(dirty),
                 "validate 必须拒绝");
+    }
+
+    // ── 读写两侧的空项口径必须一致（design.md §2 对照表）─────────────
+    // 修复前 parse 会把空串/空白产出成一个「id」，而 validate 拒绝它们 ——
+    // 即「写得进、读不出」的静默不一致来源。修复后两者对空项的判断一致。
+
+    @Test
+    @DisplayName("★ validate 拒绝的空项输入，parse 一律产出空")
+    void validateRejectsWhatParseEmpties() {
+        String[][] cases = {
+                {"[\"\"]", "单个空串"},
+                {"[\"\",\"\"]", "两个空串"},
+                {"[\"   \"]", "单个纯空白"},
+                {"[\"U001\",\"   \",\"U002\"]", "中间夹纯空白"},
+                {"[\"U001\",\"\",\"U002\"]", "中间夹空串"},
+                {"[\"  \"]", "引号内空格"}
+        };
+        for (String[] c : cases) {
+            assertThrows(BusinessException.class, () -> IdListTools.validate(c[0]),
+                    "validate 应拒绝：" + c[1] + " " + c[0]);
+            List<String> parsed = IdListTools.parse(c[0]);
+            assertFalse(parsed.contains(""), c[1] + "：parse 产出了空串 id");
+            assertFalse(parsed.contains("   "), c[1] + "：parse 产出了空白 id");
+            for (String item : parsed) {
+                assertNotNull(item);
+                assertTrue(!item.trim().isEmpty(), c[1] + "：parse 产出了空白项 <" + item + ">");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("★ 合法名单：validate 通过且 parse 产出完整集合")
+    void validListRoundTripsBothWays() {
+        String good = "[\"U001\",\"U002\"]";
+        assertTrue(IdListTools.validate(good));
+        assertEquals(asSet(Arrays.asList("U001", "U002")), asSet(IdListTools.parse(good)));
     }
 }
