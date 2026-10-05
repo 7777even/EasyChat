@@ -93,11 +93,11 @@ WS 帧号是服务端 `MessageTypeEnum` ↔ 客户端 `wsClient.js` `case` 的**
 node scripts/verify/mutation_at_mention_core.mjs        #  9 条变异
 node scripts/verify/mutation_call_store_core.cjs        # 11 条变异
 node scripts/verify/mutation_channel_online_status.cjs  #  8 条变异，每次跑一次 mvn test（约 2–3 分钟）
-node scripts/verify/mutation_chat_dispatch.cjs          #  6 条变异
+node scripts/verify/mutation_chat_dispatch.cjs          #  9 条变异，每次跑一次 npm run test
 node scripts/verify/mutation_local_db_core.cjs          # 12 条变异
 node scripts/verify/mutation_migration_flyway.cjs       # 14 条变异
 node scripts/verify/mutation_password_session.cjs       # 12 条变异
-node scripts/verify/mutation_schema_drift.cjs           #  若干条变异
+node scripts/verify/mutation_schema_drift.cjs           #  5 条变异
 node scripts/verify/mutation_ws_frame_parity.cjs        #  9 条变异，改 3 个源文件
 ```
 
@@ -127,8 +127,32 @@ node scripts/verify/mutation_ws_frame_parity.cjs        #  9 条变异，改 3 �
    「上次跑过 N/N 全捕获」对今天的源码**不构成任何保证**。
 
 > **实测教训（2026-10-06）**：在一次只读盘点中实跑全部 9 个变异脚本，发现 **2 个已腐烂**——
-> `mutation_call_store_core.cjs` 实测 1/11（10 条锚点因 CRLF 全部落空）、
-> `mutation_local_db_core.cjs` 实测 11/12（1 条锚点随 `ADB.js` 重排漂移）。
+> `mutation_call_store_core.cjs` 实测 **1/11**（10 条锚点因 CRLF 全部落空）、
+> `mutation_local_db_core.cjs` 实测 **11/12**（1 条锚点随 `ADB.js` 重排漂移）。
 > 而台账与 QA 记录里写的仍是「11/11」「12/12」。
 > **即：变异脚本自身的验证结论会过期，而过期后没有任何机制会提醒。**
-> 本次已修复两处锚点，并由 `verify_mutation_anchor_safety.mjs` 门禁守住第 2 条（换行不敏感）。
+> 修复后复跑：**9 个脚本共 89 条变异全部捕获，0 无效、0 漏网、9/9 exit 0**。
+> 本次修复内容：① `mutation_call_store_core.cjs` 的 `mutate()` 补 LF 归一化 + 按原风格还原 EOL
+> （11/11）；② `mutation_local_db_core.cjs` 重锚那条随 `ADB.js` 重排漂移的用例（12/12）；
+> ③ 其余 5 个仍用裸 `src.includes(find)` 的脚本（`schema_drift` / `password_session` /
+> `chat_dispatch` / `channel_online_status` / `ws_frame_parity`）**一并补上归一化**，
+> 消除同类陷阱；④ `ws_frame_parity` 原先把 `\r\n` **写死在锚点里**，
+> 等于反向锁死「目标文件必须是 CRLF」，一并改为双向归一化。
+>
+> ### 为什么没有做成门禁（一次被否掉的尝试，值得记）
+>
+> 曾写 `verify_mutation_anchor_safety.mjs`，试图**静态判定**每个变异脚本的锚点匹配
+> 是否换行安全。结果在 9 个脚本上产生 **2 类假阳性**并被否掉：
+>
+> ① **把锚点文本里的 `.includes(` 当成匹配代码** —— 例如锚点字符串
+>    `'return name.includes(kw) || uid.includes(kw)'` 本身含有 `.includes(`，
+>    正则无法区分「代码在调 includes」与「字符串里写着 includes」。
+> ② **数据流推断不可靠** —— `mutation_migration_flyway.cjs` 的归一化写成
+>    `new RegExp(escapeRe(find).replace(/\\n/g, '\\r?\\n'))`，而该文件里有多个同名局部变量，
+>    「变量 → 赋值表达式」的一跳/两跳追踪会取到**另一个**不含归一化的赋值。
+>
+> **结论**：跨脚本静态推断另一个脚本的内部数据流，**不足以充当门禁**。
+> 宁可只做确定的词法检查（如 `verify_sql_concat_guard.mjs` 扫 `${}`），
+> 也不交付一个自己都判不准的断言 —— **报错 ≠ 断言正确**，
+> 这是 AGENTS §2.1 第 14 条「断言通过 ≠ 断言在做事」的镜像。
+> 「防腐」因此落在纪律（上面第 5 条）而非机控，此为**已知残余风险**。
