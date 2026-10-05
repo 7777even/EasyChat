@@ -1,8 +1,11 @@
 package com.easychat.utils;
 
+import com.easychat.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -19,24 +22,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 日期格式化工具类测试（2026-10-04）
+ * 日期格式化工具类测试（2026-10-04 建立，2026-10-05 随 java.time 迁移更新）
  *
- * <p>{@code SimpleDateFormat} 非线程安全，本类用 {@code ThreadLocal} 规避，
- * 本测试须覆盖并发路径——否则「换了线程就串格式」这类缺陷不会被发现。
+ * <p><b>2026-10-05 背景</b>：实现已由 {@code SimpleDateFormat} + {@code ThreadLocal}
+ * 整体迁移到 {@link java.time.format.DateTimeFormatter}（immutable，天然线程安全）。
+ * 「并发不串扰」用例**保留**——它验证的是**契约**（多线程下格式化结果正确），
+ * 而非某个具体实现手段。手段从 ThreadLocal 换成 ConcurrentHashMap 缓存后，
+ * 该契约仍必须成立，故用例不作废。
  *
- * <p>⚠️ <b>断言口径</b>：锁定现状。标注「⚠ 现状」的用例对应缺陷，
- * 已在 {@code docs/system-facts.md} §14 登记。
+ * <p>另新增一组<b>与迁移前实现逐字节对拍</b>的用例：把 {@code SimpleDateFormat}
+ * 作为参照物留在测试里，证明迁移**没有改变 {@code format} 的输出**。
+ * 这是本次迁移最关键的安全性质——5 个生产调用点都依赖输出不变。
  */
 @DisplayName("DateUtil — 日期格式化与解析")
 class DateUtilTest {
 
     private static Date utc(int y, int m, int d, int h, int mi, int s) {
-        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        try {
-            return f.parse(String.format("%04d-%02d-%02d %02d:%02d:%02d", y, m, d, h, mi, s));
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        return Date.from(LocalDateTime.of(y, m, d, h, mi, s)
+                .atZone(ZoneId.systemDefault()).toInstant());
+    }
+
+    /**
+     * 迁移前的参照实现：{@code SimpleDateFormat}。
+     *
+     * <p>仅用于<b>对拍</b>——证明迁移后 {@code format} 的输出逐字节未变。
+     */
+    private static String formatBySimpleDateFormat(Date date, String pattern) {
+        return new SimpleDateFormat(pattern).format(date);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -61,12 +73,51 @@ class DateUtilTest {
     }
 
     @Test
-    @DisplayName("format: ⚠ 现状 null 日期抛 NullPointerException（本类不拦截）")
+    @DisplayName("format: null 日期抛 NPE（迁移前后一致，仅补上可读信息）")
     void formatNullDateThrows() {
-        // ⚠ 现状：SimpleDateFormat.format(null) 抛 NPE，本类不捕获，
-        //   直接向上抛。调用方需自行保证非 null。
-        //   对比 parse —— 那个方法反而吞掉异常返回 now，两者错误策略不一致。
-        assertThrows(NullPointerException.class, () -> DateUtil.format(null, "yyyy-MM-dd"));
+        NullPointerException e = assertThrows(NullPointerException.class,
+                () -> DateUtil.format(null, "yyyy-MM-dd"));
+        // 迁移前是裸 NPE（无信息）；现补上可读信息，便于定位是哪个参数为 null
+        assertNotNull(e.getMessage());
+    }
+
+    // ── 与迁移前实现逐字节对拍 ─────────────────────────────────────
+    // 这是本次迁移最关键的安全性质：5 个生产调用点（4 个 POJO 的 toString +
+    // ChatMessageServiceImpl 两处按月归档）都依赖 format 输出不变。
+
+    @Test
+    @DisplayName("★ format: 与迁移前 SimpleDateFormat 输出逐字节一致")
+    void formatMatchesLegacyImplementation() {
+        Date[] samples = {
+                utc(2026, 10, 4, 15, 30, 45),
+                utc(2026, 1, 2, 3, 4, 5),
+                utc(1999, 12, 31, 23, 59, 59),
+                utc(2024, 2, 29, 0, 0, 0),
+                utc(2026, 7, 9, 12, 0, 0)
+        };
+        // 覆盖本仓 DateTimePatternEnum 的全部 pattern + 若干额外 pattern
+        String[] patterns = {
+                "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "yyyyMM",
+                "yyyy-MM", "HH:mm:ss", "yyyy", "MM-dd"
+        };
+        for (Date d : samples) {
+            for (String p : patterns) {
+                assertEquals(formatBySimpleDateFormat(d, p), DateUtil.format(d, p),
+                        "pattern=" + p + " 时输出与迁移前不一致");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("★ format: DateTimePatternEnum 的三个生产 pattern 均与迁移前一致")
+    void formatMatchesEnumPatterns() {
+        Date d = utc(2026, 10, 4, 15, 30, 45);
+        for (com.easychat.entity.enums.DateTimePatternEnum e
+                : com.easychat.entity.enums.DateTimePatternEnum.values()) {
+            String p = e.getPattern();
+            assertEquals(formatBySimpleDateFormat(d, p), DateUtil.format(d, p),
+                    "生产 pattern " + p + " 输出变了");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -81,45 +132,66 @@ class DateUtilTest {
         assertEquals("2026-10-04 15:30:45", DateUtil.format(d, "yyyy-MM-dd HH:mm:ss"));
     }
 
-    @Test
-    @DisplayName("⚠ 现状 parse: 解析失败**返回当前时间**而非抛异常")
-    void parseFailureReturnsNow() {
-        // ⚠ 现状（已登记为缺陷）：`catch (ParseException) { e.printStackTrace(); }`
-        //   之后 `return new Date()` —— 即**返回「此刻」**。
-        //   调用方拿到的是一个语法合法、时间错误的值，
-        //   且除 stdout 栈迹外没有任何信号（异常被吞）。
-        //
-        //   注意本方法**当前主代码零调用**（只有 format 被用了 5 处），
-        //   故属潜伏陷阱；但下一个调用者会直接踩中。
-        long before = System.currentTimeMillis();
-        Date d = DateUtil.parse("这不是日期", "yyyy-MM-dd");
-        long after = System.currentTimeMillis();
+    // ── #14 已修：解析失败不再返回「此刻」，改为抛异常 ──────────────
+    // 迁移前：`catch (ParseException) { e.printStackTrace(); } return new Date();`
+    //   → 调用方拿到一个语法合法、时间错误的值，且除 stdout 栈迹外无任何信号。
+    //   叠加 SimpleDateFormat 默认 lenient，「2026-13-45」还会被**静默进位**成 2027-02-14。
+    //   迁移后：STRICT 解析，失败抛 BusinessException(CODE_1001)。
 
-        assertNotNull(d, "现状是返回 now，不是返回 null");
-        assertTrue(d.getTime() >= before && d.getTime() <= after,
-                "返回值应落在调用前后时刻之间（即 now），实际=" + d.getTime());
+    @Test
+    @DisplayName("#14 parse: 解析失败抛 CODE_1001，不再返回「此刻」")
+    void parseFailureThrows() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> DateUtil.parse("这不是日期", "yyyy-MM-dd"));
+        assertEquals(1001, e.getCode());
     }
 
     @Test
-    @DisplayName("⚠ 现状 parse: SimpleDateFormat 宽松模式，非法日期被静默进位")
-    void parseIsLenient() {
-        // ⚠ 现状（已登记为缺陷）：SimpleDateFormat 默认 lenient=true，
-        //   「2026-13-45」不报错而是进位成 2027-02-14。
-        //   即「脏数据」被静默改写成「看似合理」的值。
-        Date d = DateUtil.parse("2026-13-45", "yyyy-MM-dd");
-        assertNotNull(d);
-        String normalized = DateUtil.format(d, "yyyy-MM-dd");
-        assertEquals("2027-02-14", normalized,
-                "宽松模式把 13 月 45 日进位成了次年 2 月 14 日");
+    @DisplayName("#14 parse: 非法日期不再静默进位（13 月 45 日）")
+    void parseRejectsImpossibleDate() {
+        // 迁移前：进位成 2027-02-14，脏数据被改写成「看似合理」的值。
+        assertThrows(BusinessException.class, () -> DateUtil.parse("2026-13-45", "yyyy-MM-dd"));
+        assertThrows(BusinessException.class, () -> DateUtil.parse("2026-02-30", "yyyy-MM-dd"));
     }
 
     @Test
-    @DisplayName("parse: 部分可解析的前缀也能过（宽松的另一面）")
-    void parseAcceptsPartialInput() {
-        // ⚠ 与上一条同源：SimpleDateFormat.parse 只解析能匹配的前缀，
-        //   尾部多余内容被忽略，故「2026-10-04 乱码尾巴」也能解析成功。
-        Date d = DateUtil.parse("2026-10-04 这后面是乱码", "yyyy-MM-dd");
-        assertEquals("2026-10-04", DateUtil.format(d, "yyyy-MM-dd"));
+    @DisplayName("#14 parse: 尾部多余内容不再被忽略")
+    void parseRejectsTrailingGarbage() {
+        // 迁移前：SimpleDateFormat.parse 只解析能匹配的前缀，尾巴被静默丢弃。
+        assertThrows(BusinessException.class,
+                () -> DateUtil.parse("2026-10-04 这后面是乱码", "yyyy-MM-dd"));
+    }
+
+    @Test
+    @DisplayName("#14 parse: 空入参抛 CODE_1001")
+    void parseRejectsEmptyInput() {
+        for (String s : new String[]{null, "", "   "}) {
+            assertThrows(BusinessException.class, () -> DateUtil.parse(s, "yyyy-MM-dd"),
+                    "空入参应被拒：" + s);
+        }
+    }
+
+    @Test
+    @DisplayName("#14 parse: 合法日期仍能解析（未被严格模式误伤）")
+    void parseStillAcceptsValidDates() {
+        assertEquals("2026-10-04", DateUtil.format(
+                DateUtil.parse("2026-10-04", "yyyy-MM-dd"), "yyyy-MM-dd"));
+        // 闰年 2 月 29 日必须接受（STRICT 下靠 proleptic year 才能正确判闰）
+        assertEquals("2024-02-29", DateUtil.format(
+                DateUtil.parse("2024-02-29", "yyyy-MM-dd"), "yyyy-MM-dd"));
+        // 非闰年 2 月 29 日必须拒绝
+        assertThrows(BusinessException.class, () -> DateUtil.parse("2026-02-29", "yyyy-MM-dd"));
+    }
+
+    @Test
+    @DisplayName("#14 toProlepticYear: yyyy 改写为 uuuu，但跳过单引号字面量")
+    void toProlepticYearTranslation() {
+        assertEquals("uuuu-MM-dd HH:mm:ss", DateUtil.toProlepticYear("yyyy-MM-dd HH:mm:ss"));
+        assertEquals("uuuuMM", DateUtil.toProlepticYear("yyyyMM"));
+        // 字面量里的 yyyy 不可改
+        assertEquals("'year yyyy' uuuu", DateUtil.toProlepticYear("'year yyyy' yyyy"));
+        // 非 yyyy 字段原样保留
+        assertEquals("uuuu年MM月dd日 E", DateUtil.toProlepticYear("yyyy年MM月dd日 E"));
     }
 
     @Test
