@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.TokenUserInfoDto;
@@ -142,7 +143,7 @@ public class MomentServiceImpl implements MomentService {
         int realPageSize = pageSize == null || pageSize <= 0 ? PageSize.SIZE20.getSize() : Math.min(pageSize, PageSize.SIZE40.getSize());
         MomentQuery query = new MomentQuery();
         query.setStatus(1);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.MOMENT_CREATE_TIME_DESC);
         query.setSimplePage(new SimplePage((realPageNo - 1) * realPageSize, realPageSize));
         List<Moment> dataList = momentMapper.selectList(query);
         List<MomentVO> resultList = new ArrayList<>();
@@ -295,7 +296,7 @@ public class MomentServiceImpl implements MomentService {
     private List<MomentLikeVO> buildLikeList(Long momentId, Map<String, UserInfo> userCache) {
         MomentLikeQuery likeQuery = new MomentLikeQuery();
         likeQuery.setMomentId(momentId);
-        likeQuery.setOrderBy("create_time asc");
+        likeQuery.setSortOption(SortOption.MOMENT_LIKE_CREATE_TIME_ASC);
         List<MomentLike> likeList = momentLikeMapper.selectList(likeQuery);
         List<MomentLikeVO> result = new ArrayList<>();
         for (MomentLike like : likeList) {
@@ -313,7 +314,7 @@ public class MomentServiceImpl implements MomentService {
         MomentCommentQuery commentQuery = new MomentCommentQuery();
         commentQuery.setMomentId(momentId);
         commentQuery.setStatus(1);
-        commentQuery.setOrderBy("create_time asc");
+        commentQuery.setSortOption(SortOption.MOMENT_COMMENT_CREATE_TIME_ASC);
         List<MomentComment> commentList = momentCommentMapper.selectList(commentQuery);
         List<MomentCommentVO> result = new ArrayList<>();
         for (MomentComment comment : commentList) {
@@ -519,7 +520,7 @@ public class MomentServiceImpl implements MomentService {
         MomentQuery query = new MomentQuery();
         query.setUserId(targetUserId);
         query.setStatus(1);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.MOMENT_CREATE_TIME_DESC);
         query.setSimplePage(new SimplePage((realPageNo - 1) * realPageSize, realPageSize));
         List<Moment> dataList = momentMapper.selectList(query);
         List<MomentVO> result = new ArrayList<>();

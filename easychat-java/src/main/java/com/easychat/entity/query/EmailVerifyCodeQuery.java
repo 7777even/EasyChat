@@ -19,7 +19,9 @@ public class EmailVerifyCodeQuery extends BaseParam {
     /** 只查未过期的（expire_time > now） */
     private Long currentTime;
 
-    private String orderBy;
+    // 2026-10-06：原本类自带 private String orderBy + getter/setter（与 BaseParam 重复），
+    //   现已移除 —— 排序统一走 BaseParam 的 sortField / sortDirection / sortOption 白名单三件套。
+    //   留着它等于在本类上留一个「写任意串进 SQL」的后门。
 
     public Long getId() {
         return id;
@@ -67,13 +69,5 @@ public class EmailVerifyCodeQuery extends BaseParam {
 
     public void setCurrentTime(Long currentTime) {
         this.currentTime = currentTime;
-    }
-
-    public String getOrderBy() {
-        return orderBy;
-    }
-
-    public void setOrderBy(String orderBy) {
-        this.orderBy = orderBy;
     }
 }

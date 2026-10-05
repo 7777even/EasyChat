@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
@@ -545,7 +546,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         query.setContactType(UserContactTypeEnum.GROUP.getType());
         query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
         query.setQueryUserInfo(true);
-        query.setOrderBy("role asc, create_time asc");
+        query.setSortOption(SortOption.USER_CONTACT_ROLE_THEN_CREATE_TIME_ASC);
         int count = userContactMapper.selectCount(query);
         SimplePage page = new SimplePage(1, count, PageSize.SIZE50.getSize());
         query.setSimplePage(page);

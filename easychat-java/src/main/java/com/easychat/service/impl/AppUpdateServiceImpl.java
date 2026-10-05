@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.enums.AppUpdateFileTypeEnum;
@@ -160,7 +161,7 @@ public class AppUpdateServiceImpl implements AppUpdateService {
             }
         }
         AppUpdateQuery updateQuery = new AppUpdateQuery();
-        updateQuery.setOrderBy("id desc");
+        updateQuery.setSortOption(SortOption.APP_UPDATE_ID_DESC);
         updateQuery.setSimplePage(new SimplePage(0, 1));
         List<AppUpdate> appUpdateList = appUpdateMapper.selectList(updateQuery);
         if (!appUpdateList.isEmpty()) {

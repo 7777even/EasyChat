@@ -1,5 +1,6 @@
 package com.easychat.websocket;
 
+import com.easychat.entity.enums.SortOption;
 import com.alibaba.fastjson.JSON;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
@@ -112,7 +113,7 @@ public class ChannelContextUtils {
              */
             ChatSessionUserQuery sessionUserQuery = new ChatSessionUserQuery();
             sessionUserQuery.setUserId(userId);
-            sessionUserQuery.setOrderBy("last_receive_time desc");
+            sessionUserQuery.setSortOption(SortOption.CHAT_SESSION_USER_LAST_RECEIVE_TIME_DESC);
             List<ChatSessionUser> chatSessionList = chatSessionUserMapper.selectList(sessionUserQuery);
             WsInitData wsInitData = new WsInitData();
             wsInitData.setChatSessionList(chatSessionList);

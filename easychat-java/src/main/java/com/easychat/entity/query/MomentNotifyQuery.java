@@ -27,8 +27,9 @@ public class MomentNotifyQuery extends BaseParam {
     /** 已读状态 0未读 1已读 */
     private Integer readStatus;
 
-    /** 排序 */
-    private String orderBy;
+    // 2026-10-06 移除：原本类自带 `private String orderBy` 与访问器（与 BaseParam 重复），
+    //   排序现统一走 BaseParam 的 sortField / sortDirection / sortOption 白名单三件套。
+    //   留着它等于在本类上留一个「写任意串进 SQL」的后门。
 
     public Long getId() {
         return id;
@@ -84,13 +85,5 @@ public class MomentNotifyQuery extends BaseParam {
 
     public void setReadStatus(Integer readStatus) {
         this.readStatus = readStatus;
-    }
-
-    public String getOrderBy() {
-        return orderBy;
-    }
-
-    public void setOrderBy(String orderBy) {
-        this.orderBy = orderBy;
     }
 }

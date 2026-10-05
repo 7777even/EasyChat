@@ -16,6 +16,7 @@ import com.easychat.entity.query.ChatSessionQuery;
 import com.easychat.entity.query.ChatSessionUserQuery;
 import com.easychat.entity.query.GroupInfoQuery;
 import com.easychat.entity.query.UserContactQuery;
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.query.UserInfoQuery;
 import com.easychat.entity.vo.PaginationResultVO;
 import com.easychat.entity.vo.UserInfoVO;
@@ -118,7 +119,11 @@ public class UserContactBlacklistTest {
                 1, q.getStatusArray().length);
         assertEquals(UserContactStatusEnum.BLACKLIST.getStatus(), Integer.valueOf(q.getStatusArray()[0]));
         assertTrue("需联查对方昵称", q.getQueryContactUserInfo());
-        assertEquals("按最近拉黑倒序", "last_update_time desc", q.getOrderBy());
+        // 2026-10-06：排序由字符串 orderBy 改为 SortOption 白名单（SQL 片段仍是 "last_update_time desc"，
+        //   但取值途径从「任意串」变为「枚举」，Mapper 用 <choose> 产出 XML 内字面量）
+        assertEquals("按最近拉黑倒序（白名单枚举，片段为 last_update_time desc）",
+                SortOption.USER_CONTACT_LAST_UPDATE_TIME_DESC, q.getSortOption());
+        assertEquals("last_update_time desc", SortOption.USER_CONTACT_LAST_UPDATE_TIME_DESC.getSql());
     }
 
     @Test

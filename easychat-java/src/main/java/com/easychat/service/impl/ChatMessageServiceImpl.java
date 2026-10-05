@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.config.EasyChatProperties;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
@@ -806,7 +807,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             });
         }
 
-        query.setOrderBy("send_time desc");
+        query.setSortOption(SortOption.CHAT_MESSAGE_SEND_TIME_DESC);
 
         return this.findListByPage(query);
     }
@@ -819,7 +820,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         query.setPageNo(1);
         query.setPageSize(pageSize);
         // 向上翻页：从新到旧
-        query.setOrderBy("message_id desc");
+        query.setSortOption(SortOption.CHAT_MESSAGE_MESSAGE_ID_DESC);
         return this.findListByPage(query);
     }
 
@@ -836,7 +837,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         query.setMessageIdGe(messageId);
         query.setPageNo(1);
         query.setPageSize(pageSize);
-        query.setOrderBy("message_id asc");
+        query.setSortOption(SortOption.CHAT_MESSAGE_MESSAGE_ID_ASC);
         return this.findListByPage(query);
     }
 
@@ -873,7 +874,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 });
                 query.setPageNo(1);
                 query.setPageSize(20);
-                query.setOrderBy("send_time desc");
+                query.setSortOption(SortOption.CHAT_MESSAGE_SEND_TIME_DESC);
                 result.setMessageList(this.findListByParam(query));
             }
         }

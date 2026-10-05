@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.dto.MessageSendDto;
 import com.easychat.entity.dto.SysSettingDto;
 import com.easychat.entity.dto.UserContactSearchResultDto;
@@ -642,7 +643,7 @@ public class UserContactServiceImpl implements UserContactService {
         contactQuery.setStatusArray(new Integer[]{
                 UserContactStatusEnum.BLACKLIST.getStatus()});
         contactQuery.setQueryContactUserInfo(true);
-        contactQuery.setOrderBy("last_update_time desc");
+        contactQuery.setSortOption(SortOption.USER_CONTACT_LAST_UPDATE_TIME_DESC);
         return this.findListByParam(contactQuery);
     }
 

@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.GroupMemberRoleEnum;
@@ -77,7 +78,7 @@ public class GroupFileServiceImpl implements GroupFileService {
         query.setGroupId(groupId);
         query.setStatus(1);
         query.setQueryUploadUserInfo(true);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.GROUP_FILE_CREATE_TIME_DESC);
 
         int count = groupFileMapper.selectCount(query);
         int pNo = (pageNo == null || pageNo < 1) ? 1 : pageNo;

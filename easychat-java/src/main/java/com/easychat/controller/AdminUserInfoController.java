@@ -1,5 +1,6 @@
 package com.easychat.controller;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.query.UserInfoQuery;
 import com.easychat.entity.vo.PaginationResultVO;
@@ -23,7 +24,7 @@ public class AdminUserInfoController extends ABaseController {
     @PostMapping("/loadUser")
     @GlobalInterceptor(checkAdmin = true)
     public Result<PaginationResultVO> loadUser(UserInfoQuery userInfoQuery) {
-        userInfoQuery.setOrderBy("create_time desc");
+        userInfoQuery.setSortOption(SortOption.USER_INFO_CREATE_TIME_DESC);
         PaginationResultVO resultVO = userInfoService.findListByPage(userInfoQuery);
         return success(resultVO);
     }

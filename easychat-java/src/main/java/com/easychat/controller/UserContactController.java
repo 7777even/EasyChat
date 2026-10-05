@@ -1,5 +1,6 @@
 package com.easychat.controller;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.dto.UserContactSearchResultDto;
@@ -101,7 +102,7 @@ public class UserContactController extends ABaseController {
     public Result<PaginationResultVO> loadApply(HttpServletRequest request, Integer pageNo) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         UserContactApplyQuery userContactApplyQuery = new UserContactApplyQuery();
-        userContactApplyQuery.setOrderBy("last_apply_time desc");
+        userContactApplyQuery.setSortOption(SortOption.USER_CONTACT_APPLY_LAST_APPLY_TIME_DESC);
         // 用 currentUserId 而非 receiveUserId：申请单 receive_user_id 恒为群主，
         // 群管理员/群主的群入群申请需一并可见（审批可见性判定见 Mapper query_condition）
         userContactApplyQuery.setCurrentUserId(tokenUserInfoDto.getUserId());
@@ -141,7 +142,7 @@ public class UserContactController extends ABaseController {
                 UserContactStatusEnum.FRIEND.getStatus(),
                 UserContactStatusEnum.DEL_BE.getStatus(),
                 UserContactStatusEnum.BLACKLIST_BE.getStatus()});
-        contactQuery.setOrderBy("last_update_time desc");
+        contactQuery.setSortOption(SortOption.USER_CONTACT_LAST_UPDATE_TIME_DESC);
         List<UserContact> contactList = userContactService.findListByParam(contactQuery);
         return success(contactList);
     }

@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.config.EasyChatProperties;
 import com.easychat.entity.config.AppConfig;
 import com.easychat.entity.constants.Constants;
@@ -450,7 +451,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         query.setEmail(email);
         query.setType(type == null ? 0 : type);
         query.setStatus(0);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.EMAIL_VERIFY_CODE_CREATE_TIME_DESC);
         query.setSimplePage(new SimplePage(0, 1));
         List<EmailVerifyCode> latest = emailVerifyCodeMapper.selectList(query);
         long now = System.currentTimeMillis();
@@ -485,7 +486,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         query.setCode(code);
         query.setType(1);
         query.setStatus(0);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.EMAIL_VERIFY_CODE_CREATE_TIME_DESC);
         query.setSimplePage(new SimplePage(0, 1));
         List<EmailVerifyCode> list = emailVerifyCodeMapper.selectList(query);
         if (list.isEmpty()) {

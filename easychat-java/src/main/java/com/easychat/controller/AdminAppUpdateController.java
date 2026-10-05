@@ -1,5 +1,6 @@
 package com.easychat.controller;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.po.AppUpdate;
 import com.easychat.entity.query.AppUpdateQuery;
@@ -34,7 +35,7 @@ public class AdminAppUpdateController extends ABaseController {
     @PostMapping("/loadUpdateList")
     @GlobalInterceptor(checkAdmin = true)
     public Result<PaginationResultVO> loadUpdateList(AppUpdateQuery query) {
-        query.setOrderBy("id desc");
+        query.setSortOption(SortOption.APP_UPDATE_ID_DESC);
         return success(appUpdateService.findListByPage(query));
     }
 

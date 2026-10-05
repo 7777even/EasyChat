@@ -1,5 +1,6 @@
 package com.easychat.websocket.netty;
 
+import com.easychat.entity.enums.SortOption;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.easychat.entity.constants.Constants;
@@ -202,7 +203,7 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             query.setSessionId(sessionId);
             query.setSeqStart(lastSeq);
             query.setSeqNotNull(true);
-            query.setOrderBy("seq ASC");
+            query.setSortOption(SortOption.CHAT_MESSAGE_SEQ_ASC);
             java.util.List<ChatMessage> missingList = chatMessageMapper.selectList(query);
             if (missingList == null || missingList.isEmpty()) {
                 continue;

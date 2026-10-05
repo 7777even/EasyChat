@@ -1,5 +1,6 @@
 package com.easychat.controller;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.GroupMemberRoleEnum;
@@ -73,7 +74,7 @@ public class GroupController extends ABaseController {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         GroupInfoQuery infoQuery = new GroupInfoQuery();
         infoQuery.setGroupOwnerId(tokenUserInfoDto.getUserId());
-        infoQuery.setOrderBy("create_time desc");
+        infoQuery.setSortOption(SortOption.GROUP_INFO_CREATE_TIME_DESC);
         infoQuery.setStatus(GroupStatusEnum.NORMAL.getStatus());
         List<GroupInfo> groupInfoList = this.groupInfoService.findListByParam(infoQuery);
         return success(groupInfoList);
@@ -114,7 +115,7 @@ public class GroupController extends ABaseController {
         UserContactQuery userContactQuery = new UserContactQuery();
         userContactQuery.setContactId(groupId);
         userContactQuery.setQueryUserInfo(true);
-        userContactQuery.setOrderBy("create_time asc");
+        userContactQuery.setSortOption(SortOption.USER_CONTACT_CREATE_TIME_ASC);
         userContactQuery.setStatus(UserContactStatusEnum.FRIEND.getStatus());
         List<UserContact> userContactList = this.userContactService.findListByParam(userContactQuery);
         GroupInfoVO groupInfoVo = new GroupInfoVO();

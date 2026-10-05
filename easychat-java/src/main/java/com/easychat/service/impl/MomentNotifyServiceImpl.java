@@ -1,5 +1,6 @@
 package com.easychat.service.impl;
 
+import com.easychat.entity.enums.SortOption;
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.MessageSendDto;
 import com.easychat.entity.enums.MessageTypeEnum;
@@ -119,7 +120,7 @@ public class MomentNotifyServiceImpl implements MomentNotifyService {
         int realPageSize = pageSize == null || pageSize <= 0 ? PageSize.SIZE20.getSize() : Math.min(pageSize, PageSize.SIZE40.getSize());
         MomentNotifyQuery query = new MomentNotifyQuery();
         query.setUserId(userId);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.MOMENT_NOTIFY_CREATE_TIME_DESC);
         int count = momentNotifyMapper.selectCount(query);
         SimplePage page = new SimplePage((realPageNo - 1) * realPageSize, realPageSize);
         query.setSimplePage(page);
@@ -133,7 +134,7 @@ public class MomentNotifyServiceImpl implements MomentNotifyService {
     public List<MomentNotifyVO> loadRecentNotify(String userId, Integer limit) {
         MomentNotifyQuery query = new MomentNotifyQuery();
         query.setUserId(userId);
-        query.setOrderBy("create_time desc");
+        query.setSortOption(SortOption.MOMENT_NOTIFY_CREATE_TIME_DESC);
         query.setSimplePage(new SimplePage(0, limit == null || limit <= 0 ? 5 : limit));
         return buildVOList(momentNotifyMapper.selectList(query));
     }
