@@ -202,6 +202,17 @@ jobs:
       - name: 聊天记录导出纯逻辑核心
         run: node scripts/verify/verify_export_chat_core.mjs
 
+      # 2026-10-04 新增。群聊 @ 提及判定核心：
+      # ① filterMembers 必须同时匹配昵称与 userId —— 原先「显示」用
+      #    contactName || userId 而「过滤」只用 contactName，未设昵称者
+      #    **看得见却搜不到**（两个口径对不上）
+      # ② extraData.atAll 必须叠加角色权限 —— 原先条件里没有权限判定，
+      #    只挡住面板点击，普通成员**手工键入** @所有人 同样产出 atAll=true，
+      #    随后被服务端 checkGroupRole 以 CODE_2305 拒绝 → 整条消息发送失败
+      # ③ 组件不得把判定内联回去（抽离白做、缺陷可原地复活）
+      - name: 群聊提及判定纯核心
+        run: node scripts/verify/verify_at_mention_core.mjs
+
   # 2026-10-03 新增。AGENTS §6.4 早已点名「verify_schema_drift.mjs 尚未实现」。
   # 该门禁需要活库，故独立成 job（不能塞进 gates —— 那里没有 DB）。
   #
