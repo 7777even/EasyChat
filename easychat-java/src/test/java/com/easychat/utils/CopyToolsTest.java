@@ -13,6 +13,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -110,17 +111,20 @@ class CopyToolsTest {
     }
 
     @Test
-    @DisplayName("⚠ 现状 copy: 目标类无无参构造器时抛 IllegalArgumentException（非清晰错误）")
+    @DisplayName("目标类无无参构造器时抛出的异常信息指向真实原因（#16 已修）")
     void copyWithoutDefaultConstructorThrows() {
-        // ⚠ 现状（已登记为缺陷）：`classz.newInstance()` 抛 InstantiationException 被
-        //   catch 后仅 `e.printStackTrace()`（打到 stdout，不进 logger），
-        //   目标对象保持 null，随后 `BeanUtils.copyProperties(s, null)`
-        //   抛出语义不明的 IllegalArgumentException("Target must not be null")。
-        //   真实原因是「目标类没有无参构造器」，但错误信息完全没指向它。
-        //   注：本类调用点使用的均为标准 POJO（有隐式无参构造器），故当前不会触发。
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        // 修复前：`newInstance()` 的 InstantiationException 被 `printStackTrace()` 吞掉
+        // （打到 stdout，不受日志级别控制），随后 Spring 抛语义不明的
+        // IllegalArgumentException("Target must not be null")，真实原因未被指向。
+        // 修复后：BusinessException 的信息里含目标类名与「无参构造器」这一真实原因。
+        RuntimeException e = assertThrows(RuntimeException.class,
                 () -> CopyTools.copy(sample(), NoDefaultCtor.class));
-        assertNotNull(e.getMessage());
+        assertTrue(e.getMessage() != null && e.getMessage().contains("NoDefaultCtor"),
+                "异常信息应含目标类名，实际：" + e.getMessage());
+        assertTrue(e.getMessage() != null && e.getMessage().contains("无参构造器"),
+                "异常信息应指出真实原因，实际：" + e.getMessage());
+        assertFalse(e.getMessage() != null && e.getMessage().contains("Target must not be null"),
+                "仍在抛 Spring 的语义不明异常，说明 InstantiationException 仍被吞");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -152,12 +156,11 @@ class CopyToolsTest {
     }
 
     @Test
-    @DisplayName("copyList: ⚠ 现状 null 入参抛 NPE")
-    void copyListNullThrows() {
-        // ⚠ 现状：无入参校验，`for (S s : null)` 直接 NPE。
-        //   22 个调用点均来自 Mapper 查询结果（不会是 null），故当前不会触发。
-        assertThrows(NullPointerException.class,
-                () -> CopyTools.copyList(null, Dst.class));
+    @DisplayName("copyList: null 入参返回空列表（#16 已修，原为裸 NPE）")
+    void copyListNullReturnsEmpty() {
+        // 修复前：`for (S s : null)` 直接 NPE，异常信息完全没指向是入参为 null。
+        assertNotNull(CopyTools.copyList(null, Dst.class));
+        assertTrue(CopyTools.copyList(null, Dst.class).isEmpty());
     }
 
     @Test
