@@ -95,9 +95,9 @@
         <include refid="base_column_list"/>
         FROM app_update
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。本表只有 1 个合法排序项
+             APP_UPDATE_ID_DESC（更新记录按 id 倒序，即最新在前），改为字面量。 -->
+        order by id desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

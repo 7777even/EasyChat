@@ -173,9 +173,27 @@
         <include refid="base_column_list"/>
         FROM chat_message
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接，违反 AGENTS §6.2-3）。
+             现改为 <choose> 枚举分支，每个分支是 XML 内字面量（4 个选项）：
+             按发送时间 / 按 message_id 定位游标（正反）/ 按 seq 补拉空洞。
+             <otherwise> 即默认项 CHAT_MESSAGE_SEND_TIME_DESC。 -->
+        <choose>
+            <when test="query.sortOption != null and query.sortOption.name() == 'CHAT_MESSAGE_SEND_TIME_DESC'">
+                order by send_time desc
+            </when>
+            <when test="query.sortOption != null and query.sortOption.name() == 'CHAT_MESSAGE_MESSAGE_ID_DESC'">
+                order by message_id desc
+            </when>
+            <when test="query.sortOption != null and query.sortOption.name() == 'CHAT_MESSAGE_MESSAGE_ID_ASC'">
+                order by message_id asc
+            </when>
+            <when test="query.sortOption != null and query.sortOption.name() == 'CHAT_MESSAGE_SEQ_ASC'">
+                order by seq asc
+            </when>
+            <otherwise>
+                order by send_time desc
+            </otherwise>
+        </choose>
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

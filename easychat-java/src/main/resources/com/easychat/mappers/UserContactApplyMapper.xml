@@ -132,9 +132,9 @@
             LEFT JOIN group_info g ON g.group_id = a.contact_id
         </if>
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。本表只有 1 个合法排序项
+             USER_CONTACT_APPLY_LAST_APPLY_TIME_DESC，改为字面量。 -->
+        order by last_apply_time desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

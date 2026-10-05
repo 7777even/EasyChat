@@ -37,9 +37,9 @@
         <include refid="base_column_list"/>
         from moment_comment
         <include refid="base_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。本表只有 1 个合法排序项
+             MOMENT_COMMENT_CREATE_TIME_ASC（评论按时间正序），改为字面量。 -->
+        order by create_time asc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

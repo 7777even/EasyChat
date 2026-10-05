@@ -67,9 +67,10 @@
         <if test="query.sex != null">
             and sex = #{query.sex}
         </if>
-        <if test="query.password != null and query.password!=''">
-            and password = #{query.password}
-        </if>
+        <!-- 2026-10-06 移除 `<if test="query.password ..."> and password = #{query.password} </if>`
+             （遗留 #24）：/admin/loadUser 直接绑定 UserInfoQuery，该条件使调用方可把 password
+             列塞进 WHERE。存量 MD5 账号哈希无盐且确定，`password like '%<MD5(猜测)>%'`
+             等价于逐条确认明文口令的预言机。UserInfoQuery 的 password 字段已一并删除。 -->
         <if test="query.personalSignature != null and query.personalSignature!=''">
             and personal_signature = #{query.personalSignature}
         </if>
@@ -106,9 +107,10 @@
             <if test="query.nickNameFuzzy!= null  and query.nickNameFuzzy!=''">
                 and nick_name like concat('%', #{query.nickNameFuzzy}, '%')
             </if>
-            <if test="query.passwordFuzzy!= null  and query.passwordFuzzy!=''">
-                and password like concat('%', #{query.passwordFuzzy}, '%')
-            </if>
+            <!-- 2026-10-06 移除 passwordFuzzy 条件（遗留 #24），理由同上：它是对
+                 **无盐且确定**的 MD5 哈希做 LIKE 匹配，等价于明文口令猜测预言机。
+                 UserInfoQuery.passwordFuzzy 字段已一并删除。
+                 注：BCrypt 账号因盐随机无法这样反查，但存量 MD5 账号仍双验证在用。 -->
             <if test="query.personalSignatureFuzzy!= null  and query.personalSignatureFuzzy!=''">
                 and personal_signature like concat('%', #{query.personalSignatureFuzzy}, '%')
             </if>
@@ -133,9 +135,11 @@
         <include refid="base_column_list"/>
         FROM user_info
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接，违反 AGENTS §6.2-3）。
+             本表只有 1 个合法排序项 USER_INFO_CREATE_TIME_DESC，改为字面量。
+             ⚠️ 同文件内的 password / passwordFuzzy 查询条件属另一项缺陷（遗留 #24），
+             本 Change 只收口排序，那两个 <if> 的删除见 tasks.md 阶段二.3。 -->
+        order by create_time desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

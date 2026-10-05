@@ -38,12 +38,10 @@ public class UserInfoQuery extends BaseParam {
      */
     private Integer sex;
 
-    /**
-     * 密码
-     */
-    private String password;
-
-    private String passwordFuzzy;
+    // 2026-10-06 移除 `password` 与 `passwordFuzzy` 两个字段（遗留 #24）。
+    //   /admin/loadUser 直接绑定本对象，这两个字段使调用方可把 password 列塞进 WHERE；
+    //   存量 MD5 账号哈希无盐且确定，`password like '%<MD5(猜测)>%'` 即明文口令猜测预言机。
+    //   对应的两个 <if> 也已从 UserInfoMapper.xml 删除。查密码不是管理端该有的能力。
 
     /**
      * 个性签名
@@ -153,22 +151,6 @@ public class UserInfoQuery extends BaseParam {
 
     public Integer getSex() {
         return this.sex;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getPassword() {
-        return this.password;
-    }
-
-    public void setPasswordFuzzy(String passwordFuzzy) {
-        this.passwordFuzzy = passwordFuzzy;
-    }
-
-    public String getPasswordFuzzy() {
-        return this.passwordFuzzy;
     }
 
     public void setPersonalSignature(String personalSignature) {

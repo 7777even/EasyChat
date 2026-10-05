@@ -56,9 +56,11 @@
         <include refid="base_column_list"/>
         FROM chat_session
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。本表只有 1 个合法排序项
+             CHAT_SESSION_LAST_RECEIVE_TIME_DESC。改动要点：修复前调用方不设 orderBy 时
+             **完全没有 ORDER BY**，而本表每行对应一个会话、结果集有界，补排序代价可忽略，
+             且消除翻页重复/漏行。 -->
+        order by last_receive_time desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

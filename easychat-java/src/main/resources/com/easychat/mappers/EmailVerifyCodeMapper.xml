@@ -37,9 +37,18 @@
         <include refid="base_column_list"/>
         from email_verify_code
         <include refid="base_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接，违反 AGENTS §6.2-3）。
+             改为 <choose> 枚举分支（2 个选项）。<otherwise> 即默认项
+             EMAIL_VERIFY_CODE_CREATE_TIME_DESC —— 取自生产代码原本就设置的 create_time desc，
+             而非自拟值，保证与修复前行为一致。 -->
+        <choose>
+            <when test="query.sortOption != null and query.sortOption.name() == 'EMAIL_VERIFY_CODE_ID_DESC'">
+                order by id desc
+            </when>
+            <otherwise>
+                order by create_time desc
+            </otherwise>
+        </choose>
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

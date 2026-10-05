@@ -96,9 +96,12 @@
         </if>
         FROM group_info g
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接，违反 AGENTS §6.2-3）。
+             /admin/loadGroup 直接绑定 GroupInfoQuery 且 Controller/Service 均未设排序，
+             调用方原可把任意字符串送进 SQL。现改为字面量：
+             本表只有 1 个合法排序项 GROUP_INFO_CREATE_TIME_DESC，无需 <choose>。
+             同时修掉「orderBy 为空时无 ORDER BY」——分页无稳定序会导致翻页重复/漏行。 -->
+        order by create_time desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

@@ -107,9 +107,23 @@
             </if>
         </if>
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 <if test="query.orderBy!=null"> order by ${query.orderBy} </if>，
+             字符串拼接违反 AGENTS §6.2-3，且 /group/getGroupMemberList 之外的调用方一旦传入
+             orderBy 即可注入。现改为 <choose> 枚举分支：每个分支是 XML 内字面量，
+             运行时**无任何字符串进入 SQL**。取值来源为 SortOption 白名单（3 个选项）。
+             <otherwise> 即默认项 USER_CONTACT_LAST_UPDATE_TIME_DESC，
+             保证分页恒有 ORDER BY（原实现在 orderBy 为空时完全没有排序）。 -->
+        <choose>
+            <when test="query.sortOption != null and query.sortOption.name() == 'USER_CONTACT_ROLE_THEN_CREATE_TIME_ASC'">
+                order by role asc, create_time asc
+            </when>
+            <when test="query.sortOption != null and query.sortOption.name() == 'USER_CONTACT_CREATE_TIME_ASC'">
+                order by create_time asc
+            </when>
+            <otherwise>
+                order by last_update_time desc
+            </otherwise>
+        </choose>
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

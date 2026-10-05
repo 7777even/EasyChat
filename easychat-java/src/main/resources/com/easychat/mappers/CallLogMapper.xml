@@ -60,9 +60,11 @@
         <include refid="base_column_list"/>
         FROM call_log
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。
+             ⚠️ 本 selectList **全仓零调用**（死代码，见 docs/system-facts.md §14 遗留 #23）：
+             管理端通话记录走 CallLogReadMapper，其排序本就是 XML 内字面量 ORDER BY cl.id DESC。
+             保留字面量 id desc 以备将来启用；若届时需要可排序，应接入 SortOption 白名单而非 ${}。 -->
+        order by id desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

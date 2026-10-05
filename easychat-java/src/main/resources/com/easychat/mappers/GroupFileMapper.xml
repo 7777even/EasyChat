@@ -73,9 +73,9 @@
         </if>
         FROM group_file gf
         <include refid="query_condition"/>
-        <if test="query.orderBy!=null">
-            order by ${query.orderBy}
-        </if>
+        <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接）。本表只有 1 个合法排序项
+             GROUP_FILE_CREATE_TIME_DESC（群文件按上传时间倒序），改为字面量。 -->
+        order by create_time desc
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

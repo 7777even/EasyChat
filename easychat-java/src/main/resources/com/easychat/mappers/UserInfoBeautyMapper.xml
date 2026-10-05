@@ -58,9 +58,10 @@
 	<!-- 查询集合-->
 	<select id="selectList" resultMap="base_result_map" >
 		 SELECT <include refid="base_column_list" /> FROM user_info_beauty <include refid="query_condition" />
-		 <if test="query.orderBy!=null">
-			 order by ${query.orderBy}
-		 </if>
+		 <!-- 2026-10-06：原为 order by ${query.orderBy}（字符串拼接，违反 AGENTS §6.2-3）。
+		      /admin/loadBeautyAccountList 直接绑定 UserInfoBeautyQuery 且两端均未设排序，调用方原可注入。
+		      现改为字面量：本表只有 1 个合法排序项 USER_INFO_BEAUTY_ID_DESC（该表无任何时间列）。 -->
+		 order by id desc
 		 <if test="query.simplePage!=null">
 			 limit #{query.simplePage.start},#{query.simplePage.end}
 		 </if>
