@@ -139,7 +139,14 @@
              本表只有 1 个合法排序项 USER_INFO_CREATE_TIME_DESC，改为字面量。
              ⚠️ 同文件内的 password / passwordFuzzy 查询条件属另一项缺陷（遗留 #24），
              本 Change 只收口排序，那两个 <if> 的删除见 tasks.md 阶段二.3。 -->
-        order by create_time desc
+        <choose>
+            <when test="query.sortOption != null and query.sortOption.name() == 'USER_INFO_CREATE_TIME_ASC'">
+                order by create_time asc
+            </when>
+            <otherwise>
+                order by create_time desc
+            </otherwise>
+        </choose>
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>

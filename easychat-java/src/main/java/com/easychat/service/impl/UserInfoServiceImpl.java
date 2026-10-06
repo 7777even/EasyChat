@@ -28,6 +28,7 @@ import com.easychat.service.UserContactService;
 import com.easychat.service.UserInfoService;
 import com.easychat.utils.CopyTools;
 import com.easychat.utils.IdListTools;
+import com.easychat.utils.SortWhitelistTools;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.MessageHandler;
 import org.apache.commons.lang3.ArrayUtils;
@@ -115,6 +116,9 @@ public class UserInfoServiceImpl implements UserInfoService {
      */
     @Override
     public PaginationResultVO<UserInfo> findListByPage(UserInfoQuery param) {
+        // 排序白名单：/admin/loadUser 直接绑定 UserInfoQuery，调用方可指定排序但只能取
+        // 白名单内的项；未指定则回填默认项（table 由服务端写死，不来自请求）
+        SortWhitelistTools.resolveSort(param, "user_info");
         int count = this.findCountByParam(param);
         int pageSize = param.getPageSize() == null ? PageSize.SIZE15.getSize() : param.getPageSize();
 

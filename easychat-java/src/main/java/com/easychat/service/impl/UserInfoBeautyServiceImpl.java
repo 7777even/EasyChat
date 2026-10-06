@@ -14,6 +14,7 @@ import com.easychat.exception.BusinessException;
 import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.service.UserInfoBeautyService;
+import com.easychat.utils.SortWhitelistTools;
 import com.easychat.utils.StringTools;
 import org.springframework.stereotype.Service;
 
@@ -54,6 +55,9 @@ public class UserInfoBeautyServiceImpl implements UserInfoBeautyService {
      */
     @Override
     public PaginationResultVO<UserInfoBeauty> findListByPage(UserInfoBeautyQuery param) {
+        // 排序白名单：/admin/loadBeautyAccountList 直接绑定 UserInfoBeautyQuery，
+        // 调用方可指定排序但只能取白名单内的项；未指定则回填默认项
+        SortWhitelistTools.resolveSort(param, "user_info_beauty");
         int count = this.findCountByParam(param);
         int pageSize = param.getPageSize() == null ? PageSize.SIZE15.getSize() : param.getPageSize();
 

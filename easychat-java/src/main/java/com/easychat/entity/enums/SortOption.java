@@ -26,12 +26,15 @@ public enum SortOption {
 
     // ── group_info（/admin/loadGroup 可由调用方指定）──
     GROUP_INFO_CREATE_TIME_DESC("group_info", "createTime", "desc", "create_time desc"),
+    GROUP_INFO_CREATE_TIME_ASC("group_info", "createTime", "asc", "create_time asc"),
 
     // ── user_info（/admin/loadUser）──
     USER_INFO_CREATE_TIME_DESC("user_info", "createTime", "desc", "create_time desc"),
+    USER_INFO_CREATE_TIME_ASC("user_info", "createTime", "asc", "create_time asc"),
 
     // ── user_info_beauty（/admin/loadBeautyAccountList；该表无时间列，默认按 id 倒序）──
     USER_INFO_BEAUTY_ID_DESC("user_info_beauty", "id", "desc", "id desc"),
+    USER_INFO_BEAUTY_ID_ASC("user_info_beauty", "id", "asc", "id asc"),
 
     // ── app_update ──
     APP_UPDATE_ID_DESC("app_update", "id", "desc", "id desc"),

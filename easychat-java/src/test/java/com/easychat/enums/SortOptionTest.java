@@ -152,6 +152,20 @@ class SortOptionTest {
     }
 
     @Test
+    @DisplayName("三个管理端可达端点各自至少 2 个排序项（否则「保留排序能力」是空壳）")
+    void adminReachableTablesHaveAtLeastTwoOptions() {
+        // 这三张表的排序参数可从 HTTP 到达。若每张表只有 1 个选项，
+        // 则调用方「指定排序」这件事无意义，ADR-001 的「保留能力」落空。
+        for (String t : new String[]{"group_info", "user_info", "user_info_beauty"}) {
+            int n = 0;
+            for (SortOption s : SortOption.values()) {
+                if (s.getTable().equals(t)) n++;
+            }
+            assertTrue(n >= 2, "表 " + t + " 只有 " + n + " 个排序项，调用方无法选择");
+        }
+    }
+
+    @Test
     @DisplayName("枚举项的 table 字段必须出现在其 SQL 片段所属的语义表内（防串表）")
     void enumTableMatchesSqlFragment() {
         for (SortOption s : SortOption.values()) {

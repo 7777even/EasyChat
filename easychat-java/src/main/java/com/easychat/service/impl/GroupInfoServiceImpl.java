@@ -17,6 +17,7 @@ import com.easychat.service.ChatSessionUserService;
 import com.easychat.service.GroupInfoService;
 import com.easychat.service.UserContactService;
 import com.easychat.utils.CopyTools;
+import com.easychat.utils.SortWhitelistTools;
 import com.easychat.utils.StringTools;
 import com.easychat.websocket.ChannelContextUtils;
 import com.easychat.websocket.MessageHandler;
@@ -100,6 +101,9 @@ public class GroupInfoServiceImpl implements GroupInfoService {
      */
     @Override
     public PaginationResultVO<GroupInfo> findListByPage(GroupInfoQuery param) {
+        // 排序白名单：/admin/loadGroup 直接绑定 GroupInfoQuery，调用方可指定排序，
+        // 但只能取 SortOption 白名单内的项；未指定则回填默认项（table 由服务端写死）
+        SortWhitelistTools.resolveSort(param, "group_info");
         int count = this.findCountByParam(param);
         int pageSize = param.getPageSize() == null ? PageSize.SIZE15.getSize() : param.getPageSize();
 

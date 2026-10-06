@@ -101,7 +101,14 @@
              调用方原可把任意字符串送进 SQL。现改为字面量：
              本表只有 1 个合法排序项 GROUP_INFO_CREATE_TIME_DESC，无需 <choose>。
              同时修掉「orderBy 为空时无 ORDER BY」——分页无稳定序会导致翻页重复/漏行。 -->
-        order by create_time desc
+        <choose>
+            <when test="query.sortOption != null and query.sortOption.name() == 'GROUP_INFO_CREATE_TIME_ASC'">
+                order by create_time asc
+            </when>
+            <otherwise>
+                order by create_time desc
+            </otherwise>
+        </choose>
         <if test="query.simplePage!=null">
             limit #{query.simplePage.start},#{query.simplePage.end}
         </if>
