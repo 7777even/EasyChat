@@ -223,6 +223,54 @@ jobs:
       - name: 群聊提及判定纯核心
         run: node scripts/verify/verify_at_mention_core.mjs
 
+  # 2026-10-06 新增（闭环遗留 #27：变异脚本的「防腐」此前无机控）。
+  # 独立 job 而非塞进 gates —— 它要跑 9 个变异脚本，每个内部再起子进程跑门禁，
+  # 其中两个还会跑 mvn test / npm run test，**耗时约 3~6 分钟**，
+  # 放进 gates 会拖慢所有 PR 的快速反馈；**刻意不接 pre-push**。
+  #
+  # 为什么是「跑它们」而不是「静态分析它们」：
+  #   曾写静态门禁判定锚点是否换行安全，在 9 个脚本上产生 2 类假阳性而否决
+  #   （把锚点文本里的 .includes( 当成匹配代码；跨脚本数据流推断取错赋值）。
+  #   既然脚本**本来就自带锚点未命中自报**（[无效]/[漏网] 三态计数 + exit 非 0），
+  #   缺的只是「有人真的跑一遍」，那就直接跑。
+  #
+  # ⚠️ 已知覆盖缺口（门禁会报 SKIP 并写明，不是静默通过）：
+  #   mutation_channel_online_status.cjs 依赖 Windows 专属的 mvn.cmd 绝对路径，
+  #   在 ubuntu 上不可运行 → 其 8 条变异在 CI 中无人校验。
+  mutation-scripts:
+    name: 变异脚本防腐（反向验证判别力）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # mutation_channel_online_status / ws_frame_parity 用 git status 判脏
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 JDK 17（mutation_channel_online_status 跑 mvn test）
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: easychat-java/pom.xml
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: m2-${{ runner.os }}-${{ hashFiles('easychat-java/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: npm ci（mutation_chat_dispatch 跑 npm run test）
+        working-directory: easychat-front
+        run: npm ci
+
+      - name: 变异脚本全量自检
+        run: node scripts/verify/verify_mutation_scripts.mjs
+
   # 2026-10-03 新增。AGENTS §6.4 早已点名「verify_schema_drift.mjs 尚未实现」。
   # 该门禁需要活库，故独立成 job（不能塞进 gates —— 那里没有 DB）。
   #

@@ -33,10 +33,12 @@
 | `verify/verify_frontend_lint.mjs` | git hook `pre-push` / CI | `lint` 不得带 `--fix`、eslint 现代解析目标、已修缺陷复发（`new Promise(async` 等）、error 数不超基线 |
 | `verify/verify_export_chat_core.mjs` | CI | 导出纯逻辑（`exportChatCore.mjs`）`csvCell` 前置单引号防护、TXT/CSV 字段错位 |
 | `verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及判定（`atMentionCore.mjs`）搜索/显示口径一致、`atAll` 叠加角色权限、组件未把判定内联回去 |
+| `verify/verify_mutation_scripts.mjs` | CI **独立 job**（不接 pre-push） | 跑全部 9 个 `mutation_*.{cjs,mjs}`，任一非 0 退出即阻断；区分「脚本判失败」与「脚本起不来」；依赖缺失报 SKIP 并写明原因 |
 | `migrate/preflight-baseline-check.mjs` | 启动前（人工 / 运维执行） | 「声称自己是最新版」却结构不符时拒绝启动（`SPRING_FLYWAY_BASELINE_VERSION` 的人工声明入口） |
 | `setup-git-hooks.mjs` | 一键安装脚本 | 把 hook 类脚本注册到 `.git/hooks/` |
 
-`verify/` 下另有 9 个 `mutation_*.cjs` / `mutation_*.mjs`，**刻意不进 CI**，见文末「变异检验」。
+`verify/` 下另有 9 个 `mutation_*.cjs` / `mutation_*.mjs`（反向验证脚本）——
+2026-10-06 起由 `verify_mutation_scripts.mjs` 在 **CI 独立 job** 中统一驱动，见文末「变异检验」。
 
 ## 安装
 
@@ -101,8 +103,13 @@ node scripts/verify/mutation_schema_drift.cjs           #  5 条变异
 node scripts/verify/mutation_ws_frame_parity.cjs        #  9 条变异，改 3 个源文件
 ```
 
-**为什么它们不进 CI**：每次运行都要起子进程、跑门禁甚至跑 `mvn test`，耗时数十秒到数分钟。
-代价是**会静默腐烂，且腐烂时不会有人知道**——见下面第 4 条。
+**为什么原本不进 CI**：每次运行都要起子进程、跑门禁甚至跑 `mvn test`，耗时数十秒到数分钟。
+代价是**会静默腐烂，且腐烂时不会有人知道**。
+
+> **2026-10-06 已改**：新增 `verify_mutation_scripts.mjs` 作为 **CI 独立 job** 统一驱动这 9 个脚本
+> （闭环遗留 #27）。**刻意不接 `pre-push`** —— 推送前的快速闸门不该等 3~6 分钟。
+> 该门禁区分「脚本判失败」与「脚本起不来」（`exit=null` 是环境问题，不是漏网），
+> 且依赖缺失时报 **SKIP 并写明原因**（`SKIP ≠ 通过`）。
 
 ### 五条纪律
 
