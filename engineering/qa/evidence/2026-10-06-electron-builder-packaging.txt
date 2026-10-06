@@ -1,0 +1,16 @@
+===== 证据：electron-builder 实跑（本机 Windows，2026-10-06）=====
+
+命令：npx electron-builder --win -c.npmRebuild=false -c.win.signAndEditExecutable=false
+退出码：0
+
+----- 原始输出 -----
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=25.9.8 appOutDir=dist\win-unpacked
+  • building        target=nsis file=dist\EasyChatSetup.1.0.0.exe archs=x64 oneClick=false perMachine=false
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z size=1.3 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z duration=5.496s
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z size=731 kB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z duration=2.149s
+  • building block map  blockMapFile=dist\EasyChatSetup.1.0.0.exe.blockmap

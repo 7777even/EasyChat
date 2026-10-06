@@ -205,6 +205,17 @@ jobs:
       - name: 前端测试基线契约
         run: node scripts/verify/verify_frontend_test_base.mjs
 
+      # 2026-10-06 新增。固化「打包配置唯一真源」。
+      # 起因：electron-builder.yml 与 package.json 的 build 字段**并存**，
+      # 而 electron-builder 依赖 read-config-file 的 loadConfig 在 build 字段存在时
+      # 直接返回、**根本不读 yml** —— 即 yml 静默失效，改它毫无效果却无任何警告。
+      # 该 yml 自首个 commit 起从未生效，其两项意图已造成实际问题：
+      #   ① npmRebuild:false 失效 → 每次打包从源码重编原生依赖，本机实跑 1800s 超时；
+      #   ② files 白名单失效 → src/（含 __tests__）、.eslintrc.cjs、.npmrc 全进 app.asar。
+      # 本门禁为纯静态校验，**刻意不接打包 job**（打包耗时且依赖平台工具链，另见设计文档）。
+      - name: Electron 打包配置唯一真源
+        run: node scripts/verify/verify_packaging_config.mjs
+
       # 2026-10-03 新增。csvCell 的「= + - @ 前置单引号」是**安全控制**
       # （聊天内容来自对方，公式注入载荷会在受害者 Excel 中执行）。
       # 原先该逻辑藏在 exportChat.js 的模块私有实现里，而该模块 import electron，

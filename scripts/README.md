@@ -31,6 +31,7 @@
 | `verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件覆盖后端落库白名单、子组件未 import（死组件）、纯文本兜底抢分支 |
 | `verify/verify_frontend_test_base.mjs` | CI | 测试依赖钉死版本、`vite` 仍 4.x、生产依赖不混入测试框架、`vitest.config.mjs` 挂 `@vitejs/plugin-vue`、全局桩含 `ResizeObserver`、`@` 别名两处一致、CI 跑 `npm run test` |
 | `verify/verify_frontend_lint.mjs` | git hook `pre-push` / CI | `lint` 不得带 `--fix`、eslint 现代解析目标、已修缺陷复发（`new Promise(async` 等）、error 数不超基线 |
+| `verify/verify_packaging_config.mjs` | CI | 打包配置唯一真源（yml 与 `package.json.build` 不得并存 —— 后者存在时前者**静默失效**）；`npmRebuild` 必须显式声明；`files` 必须排除开发文件与重复资源，且**不得误排运行期必需文件**。`--selftest` 与 electron-builder 真实 `FileMatcher` 对拍（exit 2 = SKIP，**SKIP ≠ 通过**） |
 | `verify/verify_export_chat_core.mjs` | CI | 导出纯逻辑（`exportChatCore.mjs`）`csvCell` 前置单引号防护、TXT/CSV 字段错位 |
 | `verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及判定（`atMentionCore.mjs`）搜索/显示口径一致、`atAll` 叠加角色权限、组件未把判定内联回去 |
 | `verify/verify_mutation_scripts.mjs` | CI **独立 job**（不接 pre-push） | 跑全部 9 个 `mutation_*.{cjs,mjs}`，任一非 0 退出即阻断；区分「脚本判失败」与「脚本起不来」；依赖缺失报 SKIP 并写明原因 |

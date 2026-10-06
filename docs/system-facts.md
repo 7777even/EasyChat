@@ -63,6 +63,30 @@
 | axios | dep | `^1.6.2` |
 | vue-router | dep | `^4.2.5` |
 | sqlite3 | dep | `5.1.6` |
+
+### 3.1 Electron 打包配置（2026-10-06 确立）
+
+**唯一真源 = `easychat-front/package.json` 的 `build` 字段。** 仓库中**不存在** `electron-builder.yml`。
+
+- 依据：electron-builder 依赖 `read-config-file`，其 `loadConfig` 源码（`main.js:71-72`）为
+  `packageMetadata[packageKey]` 存在即直接返回，**`findAndReadConfig` 永不被调用**，
+  即 yml 只在 `package.json` 没有 `build` 字段时才会被读取。
+  **曾同时存在两份配置，yml 从首个 commit（`a102bd9`）起从未生效过**，
+  且失效时**没有任何警告**（仅一行 `loaded configuration file=package.json ("build" field)`）。
+- 该死配置的两项意图已造成实际问题：
+  ① `npmRebuild: false` 失效 → 每次打包从源码重编 `sqlite3` + `@parcel/watcher`，**实测 1800s 超时**；
+  ② `files` 白名单失效 → `src/`（含 `__tests__/`）、`.eslintrc.cjs`、`vitest.config.mjs`、`.npmrc` 全进 `app.asar`。
+- 现 `build` 中 `npmRebuild: false` 的安全性**已证明**：生产依赖闭包 215 个包中仅 `sqlite3`
+  含原生二进制，且为 `napi-v6`（Node-API，跨 Node/Electron ABI 稳定）；
+  `@parcel/watcher` / `@rollup/*` 为构建期依赖，不进包。
+- 守卫：`node scripts/verify/verify_packaging_config.mjs`
+  （`--selftest` 与 electron-builder 真实 `FileMatcher` 对拍，exit 2 = SKIP）。
+- **已知未接线（2026-10-06 登记，未修）**：`asarmor.js`（asar 压缩/混淆 `afterPack` 钩子）
+  存在但 `build` 中**未配置 `afterPack`**，故从未执行。
+- **本机环境限制**：本机未启用开发者模式（`AllowDevelopmentWithoutDevLicense = 0`、非管理员、
+  `symlinkSync` 返回 `EPERM`），无法解压 `winCodeSign`，故本机完整打包必须叠加
+  `-c.win.signAndEditExecutable=false` 才能通过 —— 该参数**跳过 rcedit**，
+  因此本机实跑**不证明** exe 图标/版本元数据能被正确写入。
 | ws | dep | `^8.16.0` |
 | moment | dep | `^2.30.1` |
 | sass | dep | `^1.69.5` |
@@ -259,6 +283,7 @@
 | 22 | ~~**敏感词替换存在顺序依赖**~~ → **2026-10-05 已解决**（L3，`openspec/archive/2026-10-05-sensitive-word-masking-determinism`）：`reload()` 内预计算「长度降序」列表（`maskingList`），`filter` 第二遍改遍历它，输出成为**在册词条集合的纯函数**。实测 `selectByStatus` 无 `ORDER BY`、顺序确由 DB 决定；活库 9 词互相包含对 = 0，故**修复前并未在发作** —— 修的是「不可复现」这一类，不是止血。已证明输出不可能含**完整**在册词（`String.replace` 只做字面量增删，无法把被打断的词重新拼回），残留仅为片段 | — | 已闭环 |
 | 27 | ~~变异脚本的「防腐」无机控~~ → **2026-10-06 已解决**：新增 `scripts/verify/verify_mutation_scripts.mjs`，CI **独立 job**（**刻意不接 pre-push**，耗时 3~6 分钟），跑全部 9 个 `mutation_*.{cjs,mjs}`，任一非 0 退出即阻断。**关键设计取舍**：曾写静态门禁做「锚点换行安全性」判定，在 9 个脚本上产生 2 类假阳性而**主动否决**（把锚点文本里的 `.includes(` 当成匹配代码；跨脚本变量数据流推断取错赋值）—— **报错 ≠ 断言正确**，不交付自己判不准的断言。既然脚本**本就自带锚点未命中自报**（`[无效]`/`[漏网]` 三态计数 + exit 非 0），缺的只是「有人真跑一遍」，故直接跑，**零改动现有工具**。门禁区分「脚本判失败」与「脚本起不来」（`exit=null` 属环境问题不是漏网）；依赖缺失报 **SKIP 并写明原因**。**残余覆盖缺口**：`mutation_channel_online_status.cjs` 依赖 Windows 专属 `mvn.cmd` 绝对路径，CI(ubuntu) 不可运行 → 其 8 条变异在 CI 中无人校验（已按三字段登记于门禁文件末尾） | — | 已闭环 |
 | 25 | **`verify_frontend_lint.mjs` 偶发 exit 1**：2026-10-06 实跑时观察到 1 次 exit 1（当时另一个 `npm run test` 并发运行），随后**单独连跑 15 次全部 exit 0**，机制**未复现、未确认**。该门禁对 eslint 调用失败是 fail-closed（转成 `[FAIL] 能取得 lint 错误数` 并给出诊断），属正确行为，但意味着「工具起不来」与「lint 真有错」共用同一个退出码 | **2026-10-06 登记。** 未立即修的原因：**根因未证实**——按 AGENTS §2.1 第 12 条，不得凭一次观察下结论（可能是 `execFileSync('cmd', ['/c','npx eslint …'])` 的 `maxBuffer` 32MB 在并发下不够，也可能是 npx 解析竞态，均为**假设**）。**兜底手段**：该门禁在 CI 中与 vitest 分属不同 job、不同进程，不存在本机的并发条件 | 需一次**能复现**的观察（建议在并发下连跑 20 次记录退出码与 `[FAIL]` 行）再定级；复现前不改 |
+| 28 | **sarmor.js 未接线（asar 压缩/混淆钩子从未执行）**：easychat-front/asarmor.js 是一个 fterPack 钩子（打开 pp.asar 并 patch），但 package.json 的 uild 中**未配置 fterPack**，故该文件自项目建立起从未被执行 | **2026-10-06 登记，未修。** 未修原因：① 不属本 Change 范围（6-10-06-electron-packaging-single-config 的主题是消除双份配置，此为独立的第三个问题）；② **修改打包配置属 L4**，需单独人工确认；③ 不清楚当初引入它是为了解决什么问题（减小 asar 体积？混淆代码？），贸然接线可能与 sarUnpack 等其他设置产生未知交互 | 待人工决策：是接线（并说明目标），还是删除（连同其 devDependency），还是继续留存为历史遗留。**决策前不得修改任何打包配置** |
 
 
 

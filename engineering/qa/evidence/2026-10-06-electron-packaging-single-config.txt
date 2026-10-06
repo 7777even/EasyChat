@@ -1,0 +1,37 @@
+===== 证据：Electron 打包配置收敛（L4）=====
+日期: 2026-10-06
+平台: win32 / node v24.0.2
+
+===== ① 改造后打包实跑（exit=0，耗时 223.3s，无任何 CLI 覆盖参数） =====
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=25.9.8 appOutDir=dist\win-unpacked
+  • building        target=nsis file=dist\EasyChatSetup.1.0.0.exe archs=x64 oneClick=false perMachine=false
+  • building block map  blockMapFile=dist\EasyChatSetup.1.0.0.exe.blockmap
+
+
+===== ② 阶段零反例（R1/R2/R3 全部报红，还原后基线 exit=0）=====
+✓ R1  exit=1（预期 1）  electron-builder.yml 与 package.json.build 并存（yml 静默失效）
+      [FAIL ] 1. 存在第二份永不生效的打包配置
+✓ R2  exit=1（预期 1）  删掉 npmRebuild（退回默认 true → 每次重编原生依赖）
+      [FAIL ] 1. build.npmRebuild 未显式声明
+✓ R3  exit=1（预期 1）  files 中去掉 !src/**（源码与测试将进 app.asar）
+      [FAIL ] 1. files 未排除 src/main/index.js
+
+已还原。还原后基线复跑：exit=0（预期 0）
+三条反例全部报红
+
+===== ③ 门禁 --selftest（与 electron-builder 真实 FileMatcher 对拍） =====
+===== 打包配置门禁 · 自检（与 electron-builder 真实语义对拍）=====
+
+   [PASS ] 21/21 探针与 electron-builder 真实语义一致
+
+✓ 门禁的排除判定 == 打包器的实际行为
+
+
+===== ④ 改造前基线（首次实跑，1800s 超时被杀，仅有开头日志） =====
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • rebuilding native dependencies  dependencies=@parcel/watcher@2.5.1, sqlite3@5.1.6 platform=win32 arch=x64
+

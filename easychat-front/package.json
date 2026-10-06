@@ -29,6 +29,25 @@
     "directories": {
       "output": "dist"
     },
+    "npmRebuild": false,
+    "files": [
+      "!**/.vscode/*",
+      "!src/**",
+      "!electron.vite.config.{js,ts,mjs,cjs}",
+      "!.editorconfig",
+      "!.eslintignore",
+      "!.eslintrc.cjs",
+      "!.prettierignore",
+      "!.prettierrc.yaml",
+      "!.npmrc",
+      "!vitest.config.mjs",
+      "!asarmor.js",
+      "!AGENTS.md",
+      "!assets/**",
+      "!resources/**",
+      "!.env",
+      "!.env.*"
+    ],
     "nsis": {
       "oneClick": false,
       "allowElevation": true,
