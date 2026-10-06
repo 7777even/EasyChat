@@ -93,10 +93,35 @@
 
 #### Scenario: 误排除运行期必需文件
 
-- **WHEN** `build.files` 排除了 `out/main/index.js`、`out/preload/index.js`、
-      `out/renderer/index.html` 中任一项
+- **WHEN** `build.files` 排除了任何**必须在 `app.asar` 内**的文件
 - **THEN** **判定为打包失败**，该配置不得合入
 - **AND** 该检查必须由**活体打包产物的存在性断言**兜底，**不接受静态推断**
+
+#### Scenario: 运行期必需文件清单必须从源码推导
+
+- **WHEN** 门禁检查「哪些文件必须在 asar 内」
+- **THEN** 该清单必须**从源码推导**，依据至少包括：
+  ① 主进程 / preload 源码中的 `import x from '<相对路径>?asset'`；
+  ② 源码中写死的 `join(__dirname, '<相对路径>')`
+- **AND** 解析基准目录由 `package.json` 的 `main` 字段推导（如 `./out/main/index.js` → `out/main`）
+- **AND** **禁止手写该清单** —— 手写清单的覆盖率取决于「写清单的人当时想到了什么」，
+  而运行期引用是代码的事实
+- **AND** 若推导结果为空（源目录结构变化、解析器失配等）必须报 FAIL，
+      不得因「无违规」而通过（否则该检查静默失效）
+
+> **来源**：2026-10-06 实测。手写清单只列了 `out/` 三项就以为覆盖了运行期依赖，
+> 打包后**实跑**才发现托盘图标加载失败：
+> `Error: Failed to load image from path '...app.asar\resources\icon.png'`。
+> 根因是 `src/main/index.js` / `ipc.js` 的 `?asset` 导入被编译成
+> `path.join(__dirname, '../../resources/icon.png')`，即该文件必须在 asar 内。
+
+#### Scenario: 配置改动后必须实跑启动
+
+- **WHEN** 改动了 `build.files`（哪怕只是增删一条排除项）
+- **THEN** 必须**打包后实跑启动应用**并确认无运行期错误，
+      而**不得**以「产物断言全通过」替代
+- **AND** 需明确说明该实跑覆盖了什么、未覆盖什么
+  （如托盘图标、SQLite 初始化、WS 连接这类**只有运行期才暴露**的路径）
 
 ---
 

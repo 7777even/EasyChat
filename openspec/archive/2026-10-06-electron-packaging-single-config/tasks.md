@@ -73,6 +73,24 @@
 - [x] spec-delta 回写 `openspec/specs/desktop-packaging/spec.md`（新建 capability） — ≤10min
 - [x] `git mv openspec/changes/2026-10-06-electron-packaging-single-config openspec/archive/2026-10-06-electron-packaging-single-config` — ≤5min
 
+## 阶段三补做：实跑启动验证（归档后追加）
+
+> 首轮交付时只验证了「文件能组装成产物」，**未验证「打包后的应用能启动」**。
+> 补做后发现**首轮引入了一个真实回归**（详见 QA §2.5）。
+
+- [x] **[TDD]** R4 反例：为「实跑启动发现托盘图标回归」造门禁反例 —— 把 `!resources/**` 加回去，
+      断言门禁报红并**精确点名** `resources/icon.png` — ≤20min
+- [x] 修复 `files`：移除 `!resources/**`（`resources/icon.png` 由 `?asset` 导入编译而来，
+      必须在 asar 内；两图标合计 < 21 KB，无排除价值） — ≤10min
+- [x] 门禁改为**从源码推导**「必须在 asar 内」的集合
+      （扫 `src/main`/`src/preload` 的 `?asset` 导入与 `join(__dirname,…)` 字面量，
+      基准目录由 `package.json.main` 推导；**禁止手写清单**；推导为空即 FAIL） — ≤40min
+- [x] 门禁断言数 15 → 18，`--selftest` 探针 21 → 23 — ≤10min
+- [x] 重打包 `exit=0`（100.2s）并**实跑启动 25s**：stderr **0 行**、SQLite 建表正常 — ≤10min
+- [x] 复跑产物断言 **23/23 通过** — ≤10min
+- [x] 规格 `openspec/specs/desktop-packaging/spec.md` 补两个 Scenario
+      （「运行期必需文件清单必须从源码推导」「配置改动后必须实跑启动」） — ≤10min
+
 ## DoD 自检（完成后逐项确认）
 
 - [x] `openspec/changes/2026-10-06-electron-packaging-single-config/tasks.md` 全部勾选

@@ -33,7 +33,7 @@
  * 退出码（常规）：0 通过 / 1 有违规
  * 退出码（--selftest）：0 全部一致 / 1 语义漂移 / 2 依赖缺失而 SKIP（**SKIP 不等于通过**）
  */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join, sep } from 'node:path'
 
@@ -162,7 +162,8 @@ if (process.argv.includes('--selftest')) {
   const PROBES = [
     'src/main/index.js', 'src/main/db/ADB.js', 'src/renderer/src/__tests__/setup.js',
     'out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html',
-    'assets/ffmpeg.exe', 'assets/404.png', 'resources/icon.ico',
+    'resources/icon.png', 'resources/icon.ico',
+    'assets/ffmpeg.exe', 'assets/404.png',
     '.eslintrc.cjs', '.npmrc', 'vitest.config.mjs', 'electron.vite.config.js',
     '.editorconfig', '.prettierrc.yaml', 'asarmor.js', 'AGENTS.md',
     'package.json', 'package-lock.json', '.env', '.env.production'
@@ -189,6 +190,106 @@ if (process.argv.includes('--selftest')) {
   console.log(`   [PASS ] ${total}/${total} 探针与 electron-builder 真实语义一致`)
   console.log('\n✓ 门禁的排除判定 == 打包器的实际行为')
   process.exit(0)
+}
+
+/**
+ * 从源码推导「必须存在于 app.asar 内」的文件集合。
+ *
+ * 为什么必须推导而不能手写清单：2026-10-06 实测中手写清单漏掉了托盘图标
+ * `resources/icon.png`，打包后实跑才发现托盘图标加载失败 —— 见调用处注释。
+ * 手写清单的覆盖率取决于「写清单的人当时想到了什么」，而运行期引用是代码的事实。
+ *
+ * 推导依据（两处，均可在 CI 无构建条件下静态得出）：
+ *   ① `import x from '<相对路径>?asset'` —— electron-vite 主进程构建会把这类导入
+ *      编译成 `path.join(__dirname, '<相对路径>')`，故按**产物所在目录**解析即为 asar 内路径。
+ *      产物目录由 `package.json` 的 `main` 字段推导（如 `./out/main/index.js` → `out/main`）。
+ *   ② 源码中 `join(__dirname, '<相对路径>')` 的字面量（主进程入口直接写死的运行时引用）。
+ *
+ * 返回 [[相对路径, 原因说明], ...]
+ */
+function collectRuntimeRequiredPaths (pkg) {
+  const out = []
+  const seen = new Set()
+  const add = (rel, why) => {
+    const norm = posixNormalize(rel)
+    if (!norm || seen.has(norm)) return
+    seen.add(norm)
+    out.push([norm, why])
+  }
+
+  // 产物目录：main 字段形如 ./out/main/index.js → 取其所在目录 out/main
+  const mainField = String(pkg.main || './out/main/index.js')
+  const mainDir = posixNormalize(mainField).replace(/\/[^/]*$/, '') || 'out/main'
+  const preloadDir = posixNormalize(mainField).replace(/\/[^/]*\/[^/]*$/, '') || 'out'
+
+  // 需要扫描的源码目录（主进程与 preload —— 渲染进程的静态资源由 Vite 打进 out/renderer，
+  // 不经 __dirname 直接读项目目录，故不在此列）
+  const srcDirs = [
+    { dir: join(FRONT, 'src', 'main'), base: mainDir },
+    { dir: join(FRONT, 'src', 'preload'), base: preloadDir }
+  ]
+
+  let scanned = 0
+  for (const { dir, base } of srcDirs) {
+    let entries = []
+    try {
+      entries = readdirSync(dir).filter((f) => f.endsWith('.js'))
+    } catch {
+      continue
+    }
+    for (const f of entries) {
+      let src = ''
+      try {
+        src = readFileSync(join(dir, f), 'utf8')
+      } catch {
+        continue
+      }
+      scanned++
+
+      // ① ?asset 导入
+      const reAsset = /from\s*["'](\.[^"']+)\?asset["']/g
+      let m
+      while ((m = reAsset.exec(src))) {
+        // 产物中位于 <base>/index.js，故 __dirname = <base>，相对路径据此解析
+        add(posixNormalize(posixJoin(base, m[1])),
+          `由 ${f} 的 import ... '${m[1]}?asset' 编译而来；` +
+          'electron-vite 会把它编成 path.join(__dirname, ...) —— 该文件必须在 asar 内，' +
+          '否则运行期读取失败（如托盘图标加载不了）')
+      }
+      // ② 直接写死的 __dirname 相对路径
+      const reDir = /join\(__dirname,\s*["'](\.[^"']+)["']\)/g
+      while ((m = reDir.exec(src))) {
+        add(posixNormalize(posixJoin(base, m[1])),
+          `由 ${f} 中的 join(__dirname, '${m[1]}') 直接引用，必须在 asar 内`)
+      }
+    }
+  }
+
+  // ③ 主进程必然需要的三项（产物入口本身）
+  add('package.json', 'app.asar 的根 manifest，Electron 读取 main 字段时需要')
+  add(posixNormalize(mainField), 'package.json 的 main 字段指向的主进程入口')
+  add(`${mainDir}/../preload/index.js`, '主进程以 join(__dirname, "../preload/index.js") 加载预加载脚本')
+  add(`${mainDir}/../renderer/index.html`, '主进程以 loadFile(join(__dirname, "../renderer/index.html")) 加载界面')
+
+  if (scanned === 0) {
+    // 一个源文件都没扫到 ⇒ 推导不可信，调用处会把空集合报 FAIL
+    return []
+  }
+  return out
+}
+
+function posixNormalize (p) {
+  const parts = String(p).split('/')
+  const stack = []
+  for (const seg of parts) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') { stack.pop(); continue }
+    stack.push(seg)
+  }
+  return stack.join('/')
+}
+function posixJoin (base, rel) {
+  return posixNormalize(base + '/' + rel)
 }
 
 console.log('===== Electron 打包配置门禁 =====\n')
@@ -275,9 +376,25 @@ if (build) {
 
     // 反向断言：误排除运行期必需文件同样要报红
     // （只报「该排的没排」会让白名单被无脑写成 `!out/**` 而无人察觉）
-    for (const rel of ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html']) {
-      check(!isExcluded(files, rel), `files 误排了运行期必需文件 ${rel}`,
-        '排除它会让应用打出来却起不来。')
+    //
+    // ⚠️ 这里的清单**不能靠手写猜测**。2026-10-06 实测踩中：
+    //   我手写了 3 条 out/* 就以为覆盖了运行期依赖，打包后**实跑**才发现托盘图标挂了 ——
+    //     Error: Failed to load image from path '...app.asar\resources\icon.png'
+    //     at createWindow (...app.asar\out\main\index.js:2260)
+    //   原因是 `src/main/index.js` / `ipc.js` 里的 `import icon from '../../resources/icon.png?asset'`
+    //   在产物中变成 `path.join(__dirname, '../../resources/icon.png')`（见 out/main/index.js:7），
+    //   即**托盘图标必须在 asar 内**。我漏了它，白名单里的 `!resources/**` 直接打断了启动。
+    // 故下方改为**从源码推导**：扫主进程/预加载源码的 `?asset` 导入与 `__dirname` 相对路径，
+    // 自动得出「必须在 asar 内」的文件集合，再逐个断言未被排除。
+    const REQUIRED_IN_ASAR = collectRuntimeRequiredPaths(pkg)
+    check(
+      REQUIRED_IN_ASAR.length > 0,
+      '无法从源码推导出运行期必需文件集合',
+      '推导结果为空 —— 可能是 src/main 目录结构变了、或解析器失配。\n' +
+      '    此时下方「误排」断言全部失效（会静默通过），必须报出来。'
+    )
+    for (const [rel, why] of REQUIRED_IN_ASAR) {
+      check(!isExcluded(files, rel), `files 误排了运行期必需文件 ${rel}`, why)
     }
 
     // 提示：asarUnpack 若存在，确认其目标并非本项目实际依赖的 extraResources 产物

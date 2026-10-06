@@ -35,3 +35,24 @@
   • loaded configuration  file=package.json ("build" field)
   • rebuilding native dependencies  dependencies=@parcel/watcher@2.5.1, sqlite3@5.1.6 platform=win32 arch=x64
 
+
+
+===== ⑤ 修复 !resources/** 后重打包（exit=0，100.2s）=====
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=25.9.8 appOutDir=dist\win-unpacked
+  • building        target=nsis file=dist\EasyChatSetup.1.0.0.exe archs=x64 oneClick=false perMachine=false
+  • building block map  blockMapFile=dist\EasyChatSetup.1.0.0.exe.blockmap
+
+
+===== ⑥ R4 反例：把 !resources/** 加回去，门禁精确点名 resources/icon.png =====
+R4  exit=1（预期 1）
+      [FAIL ] 1. files 误排了运行期必需文件 resources/icon.png
+      ✓ 精确点名 resources/icon.png
+已还原，基线复跑 exit=0
+
+===== ⑦ 实跑启动验证（修复前 vs 修复后）=====
+修复前：stderr 6 行（含 Error: Failed to load image from path ...app.asar\resources\icon.png
+        at createWindow ...out\main\index.js:2260），UnhandledPromiseRejectionWarning ×2
+修复后：stderr 0 行；主进程存活 25s；SQLite 建表已执行；app.asar 内 resources/icon.png 存在
