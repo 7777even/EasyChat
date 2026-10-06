@@ -1,0 +1,57 @@
+==========================================================================
+排序白名单 + SQL 拼接收口 —— 活体注入实测
+目标：把「代码级可达」升级为「实证」（AGENTS §2.1 第 12 条）
+==========================================================================
+
+管理员登录成功：test@qq.com
+
+── 对照实验：修复前 ${query.orderBy} 会把下列载荷拼进 SQL ──
+   （直接交给 MySQL 执行，证明载荷不是「本来就不成立」）
+   ⚠️ 载荷必须选在**目标表上确实成立**的那些。首版选了
+      `(select 1 from information_schema.tables)` 与 `id desc`，
+      前者子查询返回多行（ERROR 1242）、后者 group_info 无 id 列（ERROR 1054），
+      两者都是「载荷不成立」而非「被拦住」—— 对照实验必须自己先站得住。
+   [可执行] ORDER BY (select group_id from group_info limit 1)  → MySQL 正常返回（修复前会被拼进去）
+   [可执行] ORDER BY (select 1)  → MySQL 正常返回（修复前会被拼进去）
+   [可执行] ORDER BY 1  → MySQL 正常返回（修复前会被拼进去）
+   [可执行] ORDER BY create_time desc --   → MySQL 正常返回（修复前会被拼进去）
+   [可执行] ORDER BY (select sleep(3))  → MySQL 正常返回（修复前会被拼进去）
+   [PASS] 对照实验：5 个注入载荷在 SQL 层确实可执行（否则后面的「被拒绝」没有说服力）
+
+── T1~T3 注入载荷作为排序参数 ──
+   [PASS] T1 /admin/loadGroup：10 个 sortField 载荷全部 CODE_1001
+   [PASS] T2 /admin/loadGroup：4 个 sortDirection 载荷全部 CODE_1001
+   [PASS] T1 /admin/loadBeautyAccountList：10 个 sortField 载荷全部 CODE_1001
+   [PASS] T2 /admin/loadBeautyAccountList：4 个 sortDirection 载荷全部 CODE_1001
+   [PASS] T1 /admin/loadUser：10 个 sortField 载荷全部 CODE_1001
+   [PASS] T2 /admin/loadUser：4 个 sortDirection 载荷全部 CODE_1001
+
+── T4 白名单内合法排序生效 ──
+   [PASS] T4 /admin/loadGroup：合法 sortField=createTime 的 asc/desc 均返回 200 | desc=0 asc=0
+      [跳过行序对比] /admin/loadGroup：group_info 表数据不足 2 行（asc=1 desc=1）
+   [PASS] T4 /admin/loadBeautyAccountList：合法 sortField=id 的 asc/desc 均返回 200 | desc=0 asc=0
+      [跳过行序对比] /admin/loadBeautyAccountList：user_info_beauty 表数据不足 2 行（asc=0 desc=0）
+   [PASS] T4 /admin/loadUser：合法 sortField=createTime 的 asc/desc 均返回 200 | desc=0 asc=0
+   [PASS] T4 /admin/loadUser：asc 与 desc 的行序确实不同（证明排序真的生效，非空转） | 前两行 id：desc=['U04259455805', 'U29953535216'] asc=['U07346173613', 'U69630787860']
+
+── T5 未指定排序走默认项，且翻页结果稳定（修掉「分页无 ORDER BY」）──
+   [PASS] T5 /admin/loadGroup：同页重复请求 3 次行序完全一致 | 三次结果不一致 → 分页无稳定序，翻页会重复/漏行
+   [PASS] T5 /admin/loadGroup：不传 sortField 也能正常返回（走默认项而非报错） | code=0
+   [PASS] T5 /admin/loadBeautyAccountList：同页重复请求 3 次行序完全一致 | 三次结果不一致 → 分页无稳定序，翻页会重复/漏行
+   [PASS] T5 /admin/loadBeautyAccountList：不传 sortField 也能正常返回（走默认项而非报错） | code=0
+   [PASS] T5 /admin/loadUser：同页重复请求 3 次行序完全一致 | 三次结果不一致 → 分页无稳定序，翻页会重复/漏行
+   [PASS] T5 /admin/loadUser：不传 sortField 也能正常返回（走默认项而非报错） | code=0
+
+── T6 /admin/loadUser 的 password 查询条件已从 HTTP 面移除（遗留 #24）──
+   [PASS] T6 passwordFuzzy=password：请求不再因该字段失败（字段已删除，被绑定器忽略） | code=0 message=success
+   [PASS] T6 passwordFuzzy=passwordFuzzy：请求不再因该字段失败（字段已删除，被绑定器忽略） | code=0 message=success
+   [PASS] T6 UserInfoMapper.xml 已无 password / passwordFuzzy 查询条件（剥注释后核对）
+
+── T7 负向：非管理员调管理端列表仍被拒 ──
+   [PASS] T7 /admin/loadGroup：普通用户被拒（CODE_1003），鉴权未被本次改动削弱 | code=1003
+   [PASS] T7 /admin/loadBeautyAccountList：普通用户被拒（CODE_1003），鉴权未被本次改动削弱 | code=1003
+   [PASS] T7 /admin/loadUser：普通用户被拒（CODE_1003），鉴权未被本次改动削弱 | code=1003
+
+==========================================================================
+结论：23/23 通过
+==========================================================================

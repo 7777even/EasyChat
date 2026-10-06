@@ -1,0 +1,23 @@
+===== Mapper SQL 拼接守护（禁止 ${}）=====
+
+   [PASS] 自检：解析器能识别 ${}（否则下面全是空转通过）
+   [PASS] Mapper 目录存在
+扫描 28 个 Mapper XML
+
+   [PASS] 至少扫到 10 个 Mapper XML（低于此数说明路径变了，本门禁会形同虚设）
+   [PASS] Mapper XML 中零 ${} 字符串拼接（实扫到 0 处）
+   [PASS] SortOption.java 存在（排序白名单唯一真源）
+   [PASS] 解析出 20 个以上排序白名单项（低于此数说明枚举格式变了，需重新评估本门禁）
+   （共 17 张表：多选 6 张 / 单选 11 张）
+   [PASS] A. 无悬空引用：<when> 里的枚举名都真实存在
+   [PASS] B. 多选表的每个排序项都被 <when> 或 <otherwise> 覆盖
+   [FAIL] C1. 分支 SQL 与枚举声明逐字一致（防文档/实现分家） | GroupInfoMapper.xml: GROUP_INFO_CREATE_TIME_ASC 的分支为「create_time desc」，枚举声明为「create_time asc」
+   [PASS] C2. <otherwise> 的排序必须是某个真实枚举项的 sql
+   [PASS] C3. 裸字面量排序都在 SortOption 白名单内（新增排序须先加枚举）
+   [PASS] D. 分支不串表：<when> 所在 Mapper 属于该枚举项的表
+
+===== 结论：11/12 通过 =====
+失败 1 项
+提示：排序需求应写死为 XML 内字面量（单选表），或走 SortOption 白名单 +
+      <choose> 枚举分支（多选表）；**不要**把调用方输入拼进 SQL。
+      新增排序项的顺序：① SortOption 加枚举 → ② 对应 Mapper 加 <when> 分支。
