@@ -110,6 +110,16 @@ jobs:
       - name: Mapper @Param 与 XML 占位符一致性
         run: node scripts/verify/verify_mapper_params.mjs
 
+      # 2026-10-06 新增。此前「禁止 ${} 拼接」（AGENTS §6.2-3）零机控，
+      # 仓库里有 17 处 order by ${query.orderBy}，其中 2 个管理端端点可由请求参数直达。
+      # 守两件事：
+      #   ① Mapper XML 零 ${} 字符串拼接
+      #   ② 排序白名单 SortOption ↔ XML <when> 分支**双向**对账，
+      #      防「枚举加了但分支没加 → 该排序项静默失效落到 <otherwise>」
+      # 该门禁的 C3 断言首次运行即查出 EmojiMapper.xml 的裸字面量排序从未纳入白名单。
+      - name: Mapper SQL 拼接与排序白名单一致性
+        run: node scripts/verify/verify_sql_concat_guard.mjs
+
       - name: 密码明文交接红线
         run: node scripts/verify/verify_password_handoff.mjs
 

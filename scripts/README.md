@@ -16,7 +16,7 @@
 | `check-ipc-registration.mjs` | git hook `pre-push` / CI | `ipc.js` 导出与 `index.js` 调用不匹配（漏注册即静默失效） |
 | `verify/verify_no_hardcoded_secret.mjs` | git hook `pre-push` / CI | 配置基线含裸凭据、prod profile 含公共 TURN 凭据或 DB 默认可用密码、`.env` 入库 |
 | `verify/verify_mapper_params.mjs` | CI | Mapper XML 占位符与方法签名不匹配（写错运行期才抛 `BindingException`） |
-| `verify/verify_sql_concat_guard.mjs` | 手动（**暂未接入 CI**，待遗留 #24 闭环） | Mapper XML 出现 `${}` 字符串拼接（违反 §6.2-3）；可绑定 Query 的 `orderBy` 未在端点侧硬编码覆盖 |
+| `verify/verify_sql_concat_guard.mjs` | git hook `pre-push` / CI | Mapper XML 出现 `${}` 字符串拼接（违反 §6.2-3）；排序白名单 `SortOption` ↔ XML `<when>` 分支**双向对账**（防「枚举加了分支没加 → 该排序项静默失效落到 `<otherwise>`」）；分支 SQL 与枚举声明须逐字一致；分支不串表；裸字面量排序必须在白名单内 |
 | `verify/verify_ws_frame_parity.mjs` | git hook `pre-push` / CI | WS 帧号两端对账：漂移 / 重复 / 空洞 / 落库帧无 case / 新增帧未声明意图 / `KNOWN_GAP` 过期 |
 | `verify/verify_file_type_content_type.mjs` | git hook `pre-push` / CI | `FILE_TYPE_CONTENT_TYPE` 覆盖前端在用 `fileType`（缺失 → `undefined<ext>`、静默失败）；MIME 前缀须以 `/` 结尾；语音 `fileType=3` 须为 `audio/*` |
 | `verify/verify_password_session.mjs` | git hook `pre-push` / CI | 改密 / 找回密码后未吊销全部端 Token、未推 `FORCE_OFF_LINE`；验证码交给 logger；未登录端点限流存在「token 缺失直接 return」早退；邮件未配置未 fail-closed |
