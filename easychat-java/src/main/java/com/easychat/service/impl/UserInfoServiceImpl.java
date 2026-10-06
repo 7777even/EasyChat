@@ -482,7 +482,11 @@ public class UserInfoServiceImpl implements UserInfoService {
     }
 
     @Override
-    public void resetPasswordByEmail(String email, String code, String newPassword) {        if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
+    public void resetPasswordByEmail(String email, String code, String newPassword) {
+        // 2026-10-06 修复遗留 #26：方法签名与首个 if 曾粘连在一行（HEAD 即有的历史坏编辑痕迹）。
+        //   Java 不依赖换行故不影响编译与行为，但粘连往往是「批量替换事故」的痕迹，
+        //   留着会让后续 diff / 报错定位失真。纯格式修复，**无行为变化**。
+        if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
         EmailVerifyCodeQuery query = new EmailVerifyCodeQuery();
