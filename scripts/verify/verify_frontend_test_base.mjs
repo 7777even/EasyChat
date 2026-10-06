@@ -18,7 +18,7 @@
  * 用法：node scripts/verify/verify_frontend_test_base.mjs
  * 退出码：0 全通过 / 1 有失败项
  */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
@@ -145,6 +145,44 @@ if (has(CI)) {
   const ci = read(CI)
   check('CI 已执行 npm run test', /npm run test/.test(ci))
 }
+
+// ── 8. 挂载能力被真正使用（2026-10-06 新增）──────────────────
+//
+// 为什么需要这一节：前面 1~7 节全部在断言「**具备**挂载能力」
+// （装了 @vue/test-utils / jsdom、挂了 plugin-vue、桩齐全）。
+// 但 2026-10-06 之前的实测是：这些依赖**全部就绪、门禁全绿**，
+// 而全仓 **0 处 `mount(`、0 处 import @vue/test-utils** ——
+// 即「没人挂载」。门禁锁住了工具，却没锁住**使用**。
+// 这正是 2026-10-03「死组件静默不渲染」能长期存活的环境条件：
+// 源码文本断言能发现「分支缺失」，发现不了「分支在、组件却没渲染」。
+console.log('\n=== 8. 挂载能力被真正使用（否则 1~7 节只是在锁工具箱）===')
+const SPEC_DIR = 'easychat-front/src/renderer/src/__tests__'
+const specs = has(SPEC_DIR)
+  ? readdirSync(resolve(ROOT, SPEC_DIR)).filter((f) => f.endsWith('.spec.js'))
+  : []
+console.log(`   （实扫 ${specs.length} 个 spec）`)
+
+let mountSpecs = []
+for (const f of specs) {
+  const src = readFileSync(resolve(ROOT, SPEC_DIR, f), 'utf8')
+  // 剥注释后判定 —— 注释里写「mount」的说明不应算作「有挂载测试」
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  // ⚠️ 判据是 **import 了 @vue/test-utils**，而不是「文本里出现 mount(」——
+  //   我第一版用 `/\bmount\s*\(/g` 计数，结果只匹配到 `function mountMsg(){ return mount(...) }`
+  //   里的那一次，把两个实际调用 20+ 次 mount() 的 spec 误判成「只挂载了 3 处」。
+  //   教训同 AGENTS §2.1 第 14 条：**计数前先确定「应有多少」**，
+  //   靠正则数调用点会被封装形式骗到。
+  const importsTU = /from\s*['"]@vue\/test-utils['"]/.test(code)
+  const importsPinia = /from\s*['"]pinia['"]/.test(code)
+  if (importsTU) mountSpecs.push(`${f}${importsPinia ? '(+pinia)' : ''}`)
+}
+check('至少存在 1 个 import @vue/test-utils 的 spec（真正挂载组件）', mountSpecs.length > 0,
+  mountSpecs.length === 0
+    ? '全仓无 spec import @vue/test-utils —— 依赖已安装并被本门禁锁定，'
+      + '但没有任何测试在挂载组件（「具备能力」≠「有人在用」）'
+    : '')
+check('至少 2 个 spec 挂载组件（单一挂载点无法覆盖不同退化形态）', mountSpecs.length >= 2,
+  `实扫 ${mountSpecs.length} 个：${mountSpecs.join(', ') || '无'}`)
 
 // ── 汇总 ────────────────────────────────────────────────────
 console.log(`\n===== 结论：${pass}/${pass + fail} 通过 =====`)
