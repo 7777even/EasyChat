@@ -95,7 +95,7 @@
 
 | 项 | 登记位置 |
 |---|---|
-| `asarmor.js` 是未接线的 `afterPack` 钩子（从未执行） | `docs/system-facts.md` §14 #28 |
+| `asarmor.js` 未接线的 `afterPack` 钩子 | **已闭环**：经人工拍板，连同 devDep `asarmor` 一并删除 |
 | CI 从不构建安装包 | 本次**刻意未加**（§2.1 第 1 条：先跑通才允许接入）；需人工确认后另开任务 |
 | macOS 打包未验证、无 `.icns` 文件 | QA §4 |
 | 自动更新从未接线（`electron-updater` 0 引用） | QA §4 |

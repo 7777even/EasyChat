@@ -88,6 +88,20 @@ jobs:
         working-directory: easychat-front
         run: npm run test
 
+      # 2026-10-06 新增。此前 CI **从不执行 electron-vite build**，
+      # 即 out/ 产物从未在 CI 里产生过 —— 主进程 / preload / 渲染进程的
+      # 构建能力（含 Sass、@ 别名、资源内联）完全没有 CI 覆盖，
+      # 一次坏掉要等到本地打包才发现。
+      # 与后端 job 的「校验构建产物存在」对齐：光 exit 0 不够，要断言产物真的在。
+      - name: 前端构建（electron-vite）
+        working-directory: easychat-front
+        run: npm run build
+
+      - name: 校验构建产物存在
+        working-directory: easychat-front
+        run: |
+          node -e "const fs=require('fs');const need=['out/main/index.js','out/preload/index.js','out/renderer/index.html'];const miss=need.filter(f=>!fs.existsSync(f));if(miss.length){console.error('缺少产物: '+miss.join(', '));process.exit(1)}console.log('产物齐全: '+need.join(', '))"
+
   gates:
     name: 契约与规范门禁
     runs-on: ubuntu-latest
@@ -281,6 +295,63 @@ jobs:
 
       - name: 变异脚本全量自检
         run: node scripts/verify/verify_mutation_scripts.mjs
+
+  # 2026-10-06 新增（人工拍板：CI 构建覆盖「两者都加」）。
+  #
+  # 补的是一个**真实存在过的空洞**：在此之前 CI 从不产出安装包，
+  # 于是「electron-builder.yml 是死配置」「npmRebuild 默认 true 导致打包 1800s 超时」
+  # 这两个问题**可以无限期存在而无人察觉** —— 前者静默失效（只有一行不起眼的日志），
+  # 后者要等有人手工打包才会撞上。二者都实际存在过（2026-10-06 排查发现）。
+  #
+  # 为何必须 windows-latest：electron-builder 在 win 上要用 winCodeSign 里的
+  # **rcedit** 改写 exe 图标与版本元数据，而解压该压缩包需要创建符号链接 ——
+  # 本机未启用开发者模式（AllowDevelopmentWithoutDevLicense=0、非管理员、
+  # symlinkSync 返回 EPERM）时 7-Zip 直接 exit 2，本地**无法**用默认参数完成打包。
+  # GitHub 的 windows runner 以管理员运行，具备该权限，故只有它能验证完整链路。
+  #   ↑ 这条正是本机验证不到、只能靠 CI 验证的部分，**首次运行可能仍需按实况微调**。
+  desktop-package:
+    name: 桌面端安装包构建（Windows NSIS）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: easychat-front/package-lock.json
+
+      # electron-builder 的二进制缓存（electron 运行时 / nsis / winCodeSign，
+      # 合计约 110 MB）。不打缓存则每次都重新下载，且 GitHub Releases
+      # 偶发超时会成为本 job 的主要不稳定来源。
+      - uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron-builder/Cache
+          key: eb-${{ runner.os }}-${{ hashFiles('easychat-front/package-lock.json') }}
+          restore-keys: eb-${{ runner.os }}-
+
+      - name: npm ci
+        working-directory: easychat-front
+        run: npm ci
+
+      # 刻意**不传** -c.npmRebuild：它必须在 package.json 的 build 里，
+      # 由 verify_packaging_config.mjs 静态断言。传了参数就等于掩盖了配置缺失。
+      - name: 构建安装包（默认参数，验证 npmRebuild:false 已生效）
+        working-directory: easychat-front
+        run: npx electron-builder --win
+
+      # 断言产物，而不是只看 exit 0 —— 与后端 job「校验构建产物存在」同一思路
+      - name: 校验安装包产物
+        working-directory: easychat-front
+        run: |
+          node -e "const fs=require('fs');const f=fs.readdirSync('dist').filter(x=>x.endsWith('.exe'));if(!f.length){console.error('dist 下无 .exe 安装包');process.exit(1)}console.log('安装包: '+f.join(', '))"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easychat-installer
+          path: easychat-front/dist/*.exe
+          retention-days: 7
 
   # 2026-10-03 新增。AGENTS §6.4 早已点名「verify_schema_drift.mjs 尚未实现」。
   # 该门禁需要活库，故独立成 job（不能塞进 gates —— 那里没有 DB）。

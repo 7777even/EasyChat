@@ -165,7 +165,7 @@ if (process.argv.includes('--selftest')) {
     'resources/icon.png', 'resources/icon.ico',
     'assets/ffmpeg.exe', 'assets/404.png',
     '.eslintrc.cjs', '.npmrc', 'vitest.config.mjs', 'electron.vite.config.js',
-    '.editorconfig', '.prettierrc.yaml', 'asarmor.js', 'AGENTS.md',
+    '.editorconfig', '.prettierrc.yaml', 'AGENTS.md',
     'package.json', 'package-lock.json', '.env', '.env.production'
   ]
 
@@ -355,8 +355,13 @@ const MUST_EXCLUDE = [
   ['vitest.config.mjs', '测试配置'],
   ['.npmrc', '包源配置（含私有镜像地址）'],
   ['electron.vite.config.js', '构建配置'],
-  ['assets/ffmpeg.exe', '与 extraResources 重复打包（同一份资源在产物里存了两遍）']
+  ['assets/ffmpeg.exe', '与 extraResources 重复打包（同一份资源在产物中存了两遍）']
 ]
+// ⚠️ 本清单里的每一条都必须是**当前真实存在**的文件。
+//   `asarmor.js` 曾在此列，但 2026-10-06 已连同其 devDependency 一并删除
+//   （afterPack 从未配置 ⇒ 从未执行，见 docs/system-facts.md 变更记录）。
+//   为已删除的文件保留断言 = 断言扫不到任何东西却照样通过，正是 AGENTS §2.1 第 14 条
+//   点名的「断言通过 ≠ 断言在做事」。故此处不再列它。
 
 if (build) {
   const files = build.files

@@ -184,8 +184,8 @@
 
 ---
 
-## 未接线项（登记于 `docs/system-facts.md` §14 #28，不在本规格范围）
+## 未接线项（登记于 `docs/system-facts.md` §14）
 
-- `easychat-front/asarmor.js` 是 `afterPack` 钩子，但 `build` 中未配置 `afterPack`，
-  故**从未执行**。是否接线属独立议题，需人工决策。
-- 自动更新从未接线：源码中 `electron-updater` / `autoUpdater` / `checkForUpdates` 零引用。
+- 自动更新从未接线：源码中 `electron-updater` / `autoUpdater` / `checkForUpdates` 零引用，
+  `build.publish` 亦未配置。
+- macOS 打包未验证，且无 `.icns` 文件（`build.mac.icon` 指向 `icons/icon.icns`）。

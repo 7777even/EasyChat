@@ -11,10 +11,11 @@
 |---|---|
 | 删除 | `easychat-front/electron-builder.yml`（自首个 commit 起从未生效的死配置） |
 | 修改 | `easychat-front/package.json` 的 `build`：新增 `npmRebuild: false` 与 `files` 白名单 |
-| 新增 | `scripts/verify/verify_packaging_config.mjs` |
-| 接入 | `.github/workflows/ci.yml` 的 `gates` job（**仅静态门禁**） |
-| 文档 | `AGENTS.md` §10、`scripts/README.md`、`docs/system-facts.md` §3.1 与 §14 #28 |
-| **未改** | `src/main` / `src/preload` / `src/renderer` **零改动**；`asarmor.js` 仅登记未修 |
+| 新增 | `scripts/verify/verify_packaging_config.mjs`；CI `desktop-package` job |
+| 接入 | `.github/workflows/ci.yml` 的 `gates` job（静态门禁）+ `frontend` job（`npm run build`） |
+| 文档 | `AGENTS.md` §10、`scripts/README.md`、`docs/system-facts.md` §3.1 |
+| 删除 | `electron-builder.yml`（死配置）；`asarmor.js` + devDep `asarmor`（第三份死配置，经人工拍板） |
+| **未改** | `src/main` / `src/preload` / `src/renderer` **零改动** |
 
 ## 2. 验收口径与实测
 
@@ -64,10 +65,12 @@
   `resources/assets/ffmpeg.exe`(62.6MB)、`ffprobe.exe`(125.8MB)、`404.png`、`user.png`
 - `app.asar` 内**已排除**：`src/main/index.js`、`src/renderer/src/__tests__/setup.js`、
   `src/renderer/src/views/chat/Chat.vue`、`.eslintrc.cjs`、`.npmrc`、`vitest.config.mjs`、
-  `electron.vite.config.js`、`.editorconfig`、`.prettierrc.yaml`、`asarmor.js`、`AGENTS.md`、
-  `assets/ffmpeg.exe`、`resources/icon.ico`、`electron-builder.yml`
+  `electron.vite.config.js`、`.editorconfig`、`.prettierrc.yaml`、`AGENTS.md`、
+  `assets/ffmpeg.exe`、`electron-builder.yml`
+  （`asarmor.js` 原在此列，该文件已于拍板后删除，故不再列为断言项 ——
+  **为已删除的文件保留断言 = 断言扫不到东西却照样通过**，即 §2.1 第 14 条所警示的空转）
 - `app.asar` 内**保留**：`package.json`、`out/main/index.js`、`out/preload/index.js`、
-  `out/renderer/index.html`
+  `out/renderer/index.html`、**`resources/icon.png`**（托盘图标，见 §2.5）
 
 > 读的是 `app.asar` 的**头部 JSON 索引**（非目录列表、非字符串匹配），
 > 故「排除」判定不依赖 electron-builder 的日志声称。
@@ -129,12 +132,38 @@ Error: Failed to load image from path 'D:\...\resources\app.asar\resources\icon.
 
 | 项 | 状态 | 原因 |
 |---|---|---|
-| **CI 上的打包 job** | **刻意未加** | 本机无法验证 CI 环境行为；§2.1 第 1 条要求先跑通才允许接入。本 Change 只交付**已在 main 上跑通**的静态门禁 |
+| **CI 打包 job 的可运行性** | **未经本机验证**（人工拍板后接入） | 本机无符号链接权限，无法用默认参数完成打包；`windows-latest` runner 以管理员运行故预期可行，但**首次运行可能需按实况微调** |
 | **exe 图标 / 版本元数据是否正确写入** | **未验证** | 本机 `AllowDevelopmentWithoutDevLicense = 0`、非管理员、`symlinkSync` 返回 `EPERM` ⇒ 7-Zip 无法解压 `winCodeSign`（需创建符号链接），故本机打包必须叠加 `-c.win.signAndEditExecutable=false`，**该参数跳过 rcedit**。基线 1800s 超时同样死于此（但死因不同，见 §5） |
 | **macOS 打包** | **未验证，且未补配置** | 无 mac 环境。yml 中的 `mac.entitlementsInherit` 指向不存在的 `build/entitlements.mac.plist`，但因 yml 从未生效，**该问题在本 Change 之前并不存在**；生效配置里的 `mac.icon: icons/icon.icns` 缺文件，但 electron-builder 对缺 mac 图标通常降级而非报错 —— **无环境，不下结论** |
 | **自动更新** | 不在范围 | 源码中 `electron-updater` / `autoUpdater` / `checkForUpdates` **0 处引用**，从未接线。yml 的 `publish.url` 是死配置里的死配置 |
 | **改动能否启动运行** | **已验证**（见 §2.5）：实跑 25s，stderr 0 行，SQLite 正常 |
 | **运行期文件引用是否有推导覆盖** | 已由门禁断言，且有 R4 反例实证 |
+
+### 4.1 人工拍板后的补充变更
+
+两项经用户明确拍板后执行：
+
+**① 删除第三份死配置 `asarmor.js` + devDependency `asarmor`**
+- 事实：`asarmor@^2.0.0` 已安装、`asarmor.js` 存在，但 `build.afterPack` **未配置**
+  ⇒ 从未执行；源码中 0 处引用它。
+- 删除理由：① 从未运行故从未被验证；② 它会改写 asar 内文件名，
+  而托盘图标靠 `path.join(__dirname, '../../resources/icon.png')` 按路径读取
+  （§2.5 已实证该路径），接线很可能破坏它；③ Electron 防护主要来自代码签名，
+  而 `win.sign: null`（未签名）。
+- 改动范围核对：`package.json` −1 行、`package-lock.json` −25 行，**纯删除，无其他变动**。
+
+**② CI 构建覆盖（`frontend` job + 新增 `desktop-package` job）**
+- `frontend` job 补 `npm run build` + 产物存在性断言
+  （此前 CI **从不执行** `electron-vite build`，`out/` 从未在 CI 产生过）。
+- 新增 `desktop-package`（`windows-latest`，timeout 30min）实跑 `npx electron-builder --win`，
+  并 `upload-artifact` 上传安装包。
+- 刻意**不传** `-c.npmRebuild`：该值必须由 `package.json` 的 `build` 提供并由静态门禁断言，
+  传参数就等于掩盖了配置缺失。
+- 刻意**不传** `-c.win.signAndEditExecutable`：只有以管理员运行的 windows runner
+  才能解压 `winCodeSign` 并真正执行 rcedit。
+- ⚠️ **该 job 的可运行性未经本机验证**（本机不具备符号链接权限）。
+  这是**人工拍板后**才接入的，与 §2.1 第 1 条存在张力，**首次 CI 运行可能仍需按实况微调**
+  （常见原因：GitHub Releases 下载超时）。已在此明确登记，不作「已验证」表述。
 
 ## 5. 一处需要澄清的失败归因
 

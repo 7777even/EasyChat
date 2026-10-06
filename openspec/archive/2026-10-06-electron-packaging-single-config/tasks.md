@@ -65,6 +65,7 @@
 - [x] 同步 `scripts/README.md` — ≤5min
 - [x] 同步 `docs/system-facts.md`：记录「打包配置唯一真源 = `package.json.build`」这一事实，
       并登记 `asarmor.js` 未接线（**本 Change 不修，仅登记**） — ≤15min
+      > **后续**：经人工拍板，该死配置已于归档后删除，见下方「阶段三补做」与 QA §4.1。
 
 ## 阶段五：记录与归档
 
@@ -100,4 +101,19 @@
 - [x] 门禁在接入 CI 前，已在当前 main 上跑通（§2.1 第 1 条）
 - [x] 归档闭环完成（spec-delta 回写 `specs/desktop-packaging/` + `git mv` 到 `archive/`）
 - [x] QA / Retro 记录已落 `engineering/`
-- [x] **未越界**：`src/main` / `preload` / `renderer` 三层源码零改动；`asarmor.js` 未接线一事仅登记未修
+- [x] **未越界**：`src/main` / `preload` / `renderer` 三层源码零改动
+      （`asarmor.js` 原记为「仅登记未修」，后经人工拍板删除，见 QA §4.1）
+
+## 阶段六：人工拍板后的补充变更（归档后追加）
+
+- [x] 删除 `easychat-front/asarmor.js` + devDependency `asarmor`（第三份死配置，
+      `afterPack` 从未配置故从未执行） — ≤20min
+      核对：`package.json` −1 行、`package-lock.json` −25 行，**纯删除无其他变动**
+- [x] 移除 `files` 中已失效的 `!asarmor.js` 排除项（文件已删，
+      为不存在的文件保留排除项同样属于 §2.1 第 14 条所警示的空转） — ≤5min
+- [x] 移除门禁 `MUST_EXCLUDE` 与 `--selftest` 探针中的 `asarmor.js`（同上） — ≤5min
+- [x] CI `frontend` job 补 `npm run build` + 产物存在性断言
+      （此前 CI **从不执行** electron-vite build） — ≤15min
+- [x] CI 新增 `desktop-package` job（`windows-latest`）实跑 `npx electron-builder --win`
+      并上传安装包；**刻意不传** `-c.npmRebuild` / `-c.win.signAndEditExecutable` — ≤20min
+- [x] 复跑门禁 18/18、`--selftest` 21/21、`npm run build` exit=0 — ≤10min
