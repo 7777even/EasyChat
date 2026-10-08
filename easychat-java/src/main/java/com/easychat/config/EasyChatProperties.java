@@ -10,15 +10,11 @@ import org.springframework.stereotype.Component;
  * 不得在 Controller、Service、Component 中分散使用 @Value 注入。
  *
  * 配置示例（application.properties）：
- * easychat.project-folder=c:/easychat/
  * easychat.admin-emails=test@qq.com
  */
 @Component
 @ConfigurationProperties(prefix = "easychat")
 public class EasyChatProperties {
-
-    /** 项目本地存储目录 */
-    private String projectFolder = "c:/easychat/";
 
     /** 超级管理员邮箱（多个用逗号分隔） */
     private String adminEmails = "test@qq.com";
@@ -28,14 +24,6 @@ public class EasyChatProperties {
 
     /** 登录策略配置 */
     private Login login = new Login();
-
-    public String getProjectFolder() {
-        return projectFolder;
-    }
-
-    public void setProjectFolder(String projectFolder) {
-        this.projectFolder = projectFolder;
-    }
 
     public String getAdminEmails() {
         return adminEmails;
