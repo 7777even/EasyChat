@@ -140,6 +140,9 @@ public class AppUpdateServiceImpl implements AppUpdateService {
     @Override
     public Integer deleteAppUpdateById(Integer id) {
         AppUpdate dbInfo = this.getAppUpdateById(id);
+        if (dbInfo == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1003);
+        }
         if (!AppUpdateSatusEnum.INIT.getStatus().equals(dbInfo.getStatus())) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }

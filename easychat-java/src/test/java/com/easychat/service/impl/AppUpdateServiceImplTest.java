@@ -111,6 +111,18 @@ public class AppUpdateServiceImplTest {
         verify(appUpdateMapper).deleteById(5);
     }
 
+    @Test
+    public void deleteAppUpdateById_missing_throws1003() {
+        // 删除不存在的记录 → 1003 资源存在性校验（而非 NPE → HTTP 500）
+        when(appUpdateMapper.selectById(5)).thenReturn(null);
+        try {
+            appUpdateService.deleteAppUpdateById(5);
+            fail("删除不存在的记录应抛 1003");
+        } catch (BusinessException e) {
+            assertEquals(ResponseCodeEnum.CODE_1003.getCode(), e.getCode());
+        }
+    }
+
     // ======================== saveUpdate：校验 ========================
 
     @Test
