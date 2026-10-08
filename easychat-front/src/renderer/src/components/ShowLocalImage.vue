@@ -17,6 +17,8 @@ const { proxy } = getCurrentInstance()
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 const globalInfoStore = useGlobalInfoStore()
 
+const emit = defineEmits(['click'])
+
 const props = defineProps({
   width: {
     type: Number,
@@ -55,6 +57,10 @@ const serverUrl = computed(() => {
     props.partType
   }&fileType=${props.fileType}&showCover=true&forceGet=${ props.fileId == 'Urobot' ||props.forceGet}&${new Date().getTime()}`
 })
+
+const showImageHandler = () => {
+  emit('click')
+}
 </script>
 
 <style lang="scss" scoped>

@@ -4,6 +4,7 @@
       :fileId="data.messageId"
       partType="chat"
       :fileType="data.fileType"
+      @click="$emit('click', $event)"
     ></ShowLocalImage>
   </div>
 </template>
