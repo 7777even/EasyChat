@@ -101,7 +101,13 @@ const showEdit = (data) => {
       id: data.id,
       version: data.version,
       status: data.status,
-      grayscaleUid: data.grayscaleUid ? data.grayscaleUid.split(',') : []
+      // 兼容两种入参：字符串（后端返回，逗号分隔）或数组（调用方已转换）；
+      // 缺失/空值一律空名单。曾因直接 .split 在数组入参时抛错致弹窗打不开
+      grayscaleUid: Array.isArray(data.grayscaleUid)
+        ? data.grayscaleUid
+        : data.grayscaleUid
+          ? String(data.grayscaleUid).split(',')
+          : []
     })
   })
 }
