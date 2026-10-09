@@ -160,12 +160,22 @@ const search = async () => {
   }
 }
 
+// v-html 注入面：messageContent / 关键词先转义再进模板（消息内容可来自对端用户）
+const escapeHtml = (str) => {
+  return (str || '').replace(/[&<>"']/g, (c) => {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  })
+}
+
 const highlightKeyword = (text) => {
+  const safe = escapeHtml(text)
   if (!searchParams.keyword || !text) {
-    return text
+    return safe
   }
-  const regex = new RegExp(`(${searchParams.keyword})`, 'gi')
-  return text.replace(regex, '<span class="highlight">$1</span>')
+  // 关键词须转义 HTML 后再转义正则元字符，否则 "(" 会让 new RegExp 抛 SyntaxError 炸掉渲染
+  const escapedKey = escapeHtml(searchParams.keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedKey})`, 'gi')
+  return safe.replace(regex, '<span class="highlight">$1</span>')
 }
 
 const formatTime = (timestamp) => {
