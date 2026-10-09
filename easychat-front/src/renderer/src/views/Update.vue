@@ -71,6 +71,9 @@ const checkUpdateAuto = async (auto) => {
 
   showUpdate.value = true
   updateInfo.value = result.data
+  // downloadPercent 在 setup 时只能用初始 updateInfo.size（0）初始化，
+  // 版本信息到位后必须回填 total，否则下载提示恒显示「loaded/0B」
+  downloadPercent.value.total = result.data.size
 }
 
 const cancelUpdateHandler = () => {
