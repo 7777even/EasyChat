@@ -8,7 +8,7 @@
         <div class="call-sub">{{ callStore.mediaType === 2 ? '音视频通话' : '语音通话' }}</div>
         <div class="call-actions">
           <el-button type="danger" circle @click="callStore.rejectCall()">拒绝</el-button>
-          <el-button type="warning" circle @click="callStore.bus()">忙线</el-button>
+          <el-button type="warning" circle @click="callStore.busy()">忙线</el-button>
           <el-button type="success" circle @click="callStore.acceptCall()">接听</el-button>
         </div>
       </div>
