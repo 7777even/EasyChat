@@ -39,11 +39,11 @@ const formData = ref({ updateDescList: [] })
 const formDataRef = ref()
 const rules = {
   email: [
-    { required: true, message: '请输入版本号' },
+    { required: true, message: '请输入邮箱' },
     { validator: proxy.Verify.email, message: '请输入正确的邮箱' }
   ],
   userId: [
-    { required: true, message: '请选择更新文件' },
+    { required: true, message: '请输入靓号' },
     { min: 11, max: 11, message: '靓号必须11位' },
     { validator: proxy.Verify.number, message: '靓号只能是数字' }
   ]
