@@ -86,8 +86,7 @@ const rules = {
   ],
   fileType: [{ required: true, message: '请选择文件类型' }],
   fileName: [{ required: true, message: '请选择更新文件' }],
-  outerLink: [{ required: true, message: '请输入外链地址' }],
-  updateType: [{ required: true, message: '请选择更新类型' }]
+  outerLink: [{ required: true, message: '请输入外链地址' }]
 }
 
 const selectFile = (file) => {
@@ -136,7 +135,7 @@ const showEdit = (data) => {
   nextTick(() => {
     formDataRef.value.resetFields()
     if (data) {
-      data.updateDescList = data.updateDescArray.map((item) => {
+      data.updateDescList = (data.updateDescArray || []).map((item) => {
         return { title: item }
       })
       data.fileName = 'EasyChat.' + data.version + '.exe'
