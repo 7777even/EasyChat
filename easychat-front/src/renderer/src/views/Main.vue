@@ -142,9 +142,14 @@ const markMomentRead = async () => {
 
 const currentMenu = ref(menuList.value[0])
 const menuSelect = (path) => {
-  currentMenu.value = menuList.value.find((item) => {
+  // 非菜单路径（如 /login、/logout）找不到匹配项时保持当前选中，
+  // 否则 currentMenu=undefined 会让模板 `item.path == currentMenu.path` 抛错击穿渲染
+  const found = menuList.value.find((item) => {
     return path.includes(item.path)
   })
+  if (found) {
+    currentMenu.value = found
+  }
 }
 
 //获取登录信息
