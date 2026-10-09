@@ -88,12 +88,14 @@
 import {getCurrentInstance, ref, watch, nextTick} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {useContactStateStore} from '@/stores/ContactStateStore'
+import {useUserInfoStore} from '@/stores/UserInfoStore'
 
 const {proxy} = getCurrentInstance()
 const route = useRoute()
 const router = useRouter()
 
 const contactStateStore = useContactStateStore()
+const userInfoStore = useUserInfoStore()
 
 const userInfo = ref({})
 const remark = ref('')
@@ -203,18 +205,6 @@ const delContactData = (contactId) => {
   contactStateStore.delContact(contactId)
 }
 
-//更新会话列表
-watch(
-  () => route.query.contactId,
-  (newVal, oldVal) => {
-    if (newVal) {
-      loadUserDetail(newVal)
-      loadMyStatus()
-    }
-  },
-  {immediate: true, deep: true}
-)
-
 //发送消息
 const sendMessage = () => {
   router.push({
@@ -304,6 +294,19 @@ const clearMyStatus = async () => {
   myStatusContent.value = ''
   proxy.Message.success('状态已清除')
 }
+
+// 更新会话列表（必须置于全部 const 声明之后：immediate 会同步调用 loadUserDetail/loadMyStatus，
+// 而二者是 const —— 放在其声明前会触发 TDZ ReferenceError，进页即崩）
+watch(
+  () => route.query.contactId,
+  (newVal, oldVal) => {
+    if (newVal) {
+      loadUserDetail(newVal)
+      loadMyStatus()
+    }
+  },
+  {immediate: true, deep: true}
+)
 </script>
 
 <style lang="scss" scoped>
