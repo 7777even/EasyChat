@@ -10,7 +10,7 @@ import { selectUserSessionList, updateSessionInfo4Message, readAll, delChatSessi
 import { addUserSetting, selectSettingInfo, updateContactNoReadCount, loadLocalUser, updateSysSetting } from "./db/UserSetting";
 import {
     saveFile2Local, checkFile, createCover, saveAs, changeLocalFolder, openLocalFolder,
-    downloadUpdate, closeLocalServer, saveClipBoardFile
+    downloadUpdate, closeLocalServer, saveClipBoardFile, getFileToken
 } from "./file"
 
 import { saveWindow, getWindow, delWindow, windowManage } from './windowProxy'
@@ -47,7 +47,10 @@ const onSetLocalStore = () => {
 //获取本地存储
 const onGetLocalStore = () => {
     ipcMain.on("getLocalStore", (e, key) => {
-        e.sender.send("getLocalStoreCallback", store.getData(key))
+        // 2026-10-10（遗留 #29）：回带 key。渲染层现需取两个键（localServerPort 与
+        // localFileServerToken），若只回传值，接收侧无法区分两次回调属于哪个键——
+        // 先注册的那个监听器会把两个值都当成端口号写进去（后到的令牌将覆盖端口）。
+        e.sender.send("getLocalStoreCallback", { key, value: store.getData(key) })
     })
 }
 
@@ -382,6 +385,10 @@ const onReloadChatSession = () => {
 const openWindow = ({ windowId, title = "EasyChat", path, width = 960, height = 720, data }) => {
     const localServerPort = store.getUserData("localServerPort");
     data.localServerPort = localServerPort;
+    // 2026-10-10（遗留 #29）：渲染层拼本地文件 URL 需带 fileToken（服务端自 403 起强制校验）。
+    // 与 port 同批下发——渲染层正是以 port 为「本地服务已就绪」的信号，
+    // 两者必须一起到位，否则 URL 会带上 fileToken=undefined 而静默失效为「图片全裂」。
+    data.localFileServerToken = getFileToken();
     let newWindow = getWindow(windowId);
     if (!newWindow) {
         newWindow = new BrowserWindow({

@@ -17,6 +17,7 @@ const expressServer = express();
 
 import { selectByMessageId } from './db/ChatMessageModel'
 import { selectSettingInfo, updateSysSetting } from './db/UserSetting'
+import { isInsideRoot, assertInsideRoot, tokensMatch, generateFileToken } from './localFileGuardCore.mjs'
 
 import { getWindow } from "./windowProxy";
 
@@ -215,7 +216,31 @@ const checkFile = () => {
     });
 }
 let server = null;
+// 2026-10-10（遗留 #29）：本服务此前**无鉴权**且响应固定 ACAO: *，PoC 实测任意网站
+//   可经路径穿越读取用户磁盘任意文件。token 为唯一凭证，进程内持有以便路由比对。
+let currentFileToken = null;
+
+/** 取当前文件令牌（渲染层拼 URL 时经 IPC 透出，见 ipc.js openWindow） */
+const getFileToken = () => currentFileToken;
+
+/**
+ * 取得文件令牌：已持久化则复用，否则生成 32 字节 CSPRNG。
+ * 持久化而非每次启动重生成，是为了让登录后读取端口的渲染层与主进程拿到同一个值
+ * （渲染层靠 port 判断「本地服务已就绪」，token 必须随之一起就绪）。
+ */
+const ensureFileToken = () => {
+    let token = store.getUserData("localFileServerToken");
+    if (typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) {
+        token = generateFileToken();
+        store.setUserData("localFileServerToken", token);
+    }
+    return token;
+};
+
 const startLocalServer = (serverPort) => {
+    // 令牌须在早退分支之前准备：同端口复用时进程内变量也要有值，
+    // 否则复用分支启动的实例会「永不鉴权」
+    currentFileToken = ensureFileToken();
     //渲染层重载后再次登录会重复调用：同端口服务仍在监听则直接复用，避免 EADDRINUSE 打崩主进程
     if (server) {
         if (server.listening && server.address() && server.address().port === serverPort) {
@@ -227,7 +252,10 @@ const startLocalServer = (serverPort) => {
         }
         server = null;
     }
-    server = expressServer.listen(serverPort, () => {
+    // ⚠ 2026-10-10：此前 `listen(serverPort, cb)` **未传 host**，Node 默认绑 0.0.0.0
+    //   —— 即同网段任意主机可直接直连读取（连 CORS 都不用绕）。
+    //   这是本机服务，必须只绑回环。日志里那句 http://127.0.0.1: 只是打印字符串，与绑定无关。
+    server = expressServer.listen(serverPort, '127.0.0.1', () => {
         console.log('本地服务在 http://127.0.0.1:' + serverPort + "开启");
     })
     //端口被外部占用等异常仅告警，不再抛出未捕获异常
@@ -296,11 +324,24 @@ const getLocalFilePath = async (partType, showCover, fileId) => {
     if (showCover) {
         localPath = localPath + cover_image_suffix;
     }
-    return localPath;
-}
+    // 2026-10-10（遗留 #29）：**所有**分支在此统一收口，含 avatar/chat/moment/tmp/group。
+    // 此前只补 else 兜底是不够的 —— 五个已知分支同样把 fileId 拼进路径
+    // （如 moment 分支 fileId 自带扩展名、chat 分支的 fileSuffix 取自库中 file_name），
+    // 任何一条被构造出 ../ 即重新打开穿越口，故必须在这里一次性拦住。
+    // ⚠ 断言放在 mkdirs 之后是安全的：mkdirs 建的都是分支目录（avatar/chat/moment…），
+    //   不含 fileId，故越界的 fileId 不会在断言前就建出越界目录。
+    return assertInsideRoot(localFolder, localPath);
+};
 
 expressServer.get('/file', async (req, res) => {
     let { partType, fileType, fileId, showCover, forceGet } = req.query;
+    // 2026-10-10（遗留 #29）：**令牌校验必须在最前**，早于任何参数解析与读盘。
+    // 放在后面等于「先看有没有文件、再问有没有权限」，且会给未授权方泄露
+    // 「该 fileId 是否存在」的探测能力。
+    if (!tokensMatch(currentFileToken, req.query.fileToken)) {
+        res.status(403).send('forbidden');
+        return;
+    }
     //console.log("getFile", partType, fileType, fileId, showCover, forceGet);
     if (!partType || !fileId) {
         res.send("请求参数错误");
@@ -308,7 +349,15 @@ expressServer.get('/file', async (req, res) => {
     }
     // 正确处理字符串 "false" 和 "true"
     showCover = showCover === 'true' || showCover === true;
-    const localPath = await getLocalFilePath(partType, showCover, fileId);
+    let localPath;
+    try {
+        localPath = await getLocalFilePath(partType, showCover, fileId);
+    } catch (e) {
+        // getLocalFilePath 内含越界断言；越界即 400，绝不落到「下载兜底图片」分支
+        console.warn('非法文件路径请求:', e.message);
+        res.status(400).send("非法文件路径");
+        return;
+    }
     //头像缓存命中前校验有效性：本地文件损坏时强制回源重新下载，避免坏图/旧图被永久命中
     const avatarCacheBroken = partType == "avatar" && fs.existsSync(localPath) && !isValidImageCache(localPath);
     if (!fs.existsSync(localPath) || forceGet == "true" || avatarCacheBroken) {
@@ -326,6 +375,10 @@ expressServer.get('/file', async (req, res) => {
     const fileSuffix = localPath.substring(localPath.lastIndexOf(".") + 1);
     //图片直接返回
     let contentType = FILE_TYPE_CONTENT_TYPE[fileType] + fileSuffix;
+    // 2026-10-10（遗留 #29）：此处原为固定 `*`。现在**保留** —— 因为令牌已构成唯一凭证
+    // （无令牌一律 403），任意站点即便能发请求也拿不到任何文件；而渲染层生产环境以
+    // file:// 加载、origin 为 null，开发环境端口又是随机的，逐个枚举 origin 得不偿失。
+    // 若日后改用其它取文件方式（如 main 进程代读），此处应改为回显受控 origin。
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader('Content-Type', contentType);
     //头像，缩略图，文件
@@ -564,6 +617,7 @@ export {
     saveFile2Local,
     startLocalServer,
     closeLocalServer,
+    getFileToken,
     checkFile,
     createCover,
     saveAs,
