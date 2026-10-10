@@ -10,7 +10,7 @@
             <el-radio :label="1">加我时需验证</el-radio>
           </el-radio-group>
           <div class="tips">「直接加入」表示任何人可直接成为你的好友；「加我时需验证」表示需你同意后才成为好友。</div>
-          <div v-if="origin.joinType == null" class="tips">
+          <div v-if="joinTypeFromHistory" class="tips">
             当前账号未设置过（历史数据为 null），已按更保守的「加我时需验证」显示。
           </div>
         </div>
@@ -32,8 +32,8 @@
           <div v-if="momentVisibility === 3" class="list-row">
             <div class="list-label">谁可以看（白名单）</div>
             <div class="list-values">
-              <span v-if="whiteNames.length === 0" class="empty-hint">未指定</span>
-              <el-tag v-for="n in whiteNames" :key="n" size="small" class="mr4">{{ n }}</el-tag>
+              <span v-if="whiteList.length === 0" class="empty-hint">未指定</span>
+              <el-tag v-for="n in whiteNames()" :key="n" size="small" class="mr4">{{ n }}</el-tag>
             </div>
             <el-button size="small" @click="openPicker('white')">选择</el-button>
           </div>
@@ -44,8 +44,8 @@
           <div v-if="momentVisibility === 4" class="list-row">
             <div class="list-label">不让谁看（黑名单）</div>
             <div class="list-values">
-              <span v-if="blackNames.length === 0" class="empty-hint">未指定</span>
-              <el-tag v-for="n in blackNames" :key="n" size="small" type="info" class="mr4">{{ n }}</el-tag>
+              <span v-if="blackList.length === 0" class="empty-hint">未指定</span>
+              <el-tag v-for="n in blackNames()" :key="n" size="small" type="info" class="mr4">{{ n }}</el-tag>
             </div>
             <el-button size="small" @click="openPicker('black')">选择</el-button>
           </div>
@@ -130,6 +130,10 @@ const origin = reactive({ joinType: 1, momentVisibility: 0, onlineStatusVisible:
 
 const joinType = ref(1)
 const joinTypeSaving = ref(false)
+// 历史数据 joinType 为 null 时置位（模板据此显示「未设置过」提示）。
+// 不能复用 origin.joinType 判 null —— loadUserInfo 里 origin.joinType = joinType.value
+// 已被写成兜底值 1，判 null 恒 false（2026-10-10 挂载测试抓出的死代码）。
+const joinTypeFromHistory = ref(false)
 const momentVisibility = ref(0)
 const momentSaving = ref(false)
 const onlineStatusVisible = ref(true)
@@ -169,6 +173,7 @@ const loadUserInfo = async () => {
     let result = await proxy.Request({ url: proxy.Api.getUserInfo })
     if (!result) return
     const info = result.data || {}
+    joinTypeFromHistory.value = info.joinType == null
     joinType.value = info.joinType == null ? 1 : info.joinType
     origin.joinType = joinType.value
     momentVisibility.value = info.momentVisibility == null ? 0 : info.momentVisibility
