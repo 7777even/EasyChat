@@ -107,10 +107,14 @@ const showType = ref(0)
 const notifySwitch = ref(true)
 
 // ===== 外观主题：浅色/深色（本地 user_setting.sysSetting.theme，缺失视为浅色）=====
+// ⚠ themeBeforeSave 只在**保存成功回调**里前移，不能在 @change 里捕获：
+//   Element Plus 的 changeEvent 先同步发 update:modelValue、再 nextTick 发 change
+//   （element-plus/es/components/radio/src/radio-group2.mjs:32-34），
+//   故 @change 执行时 theme.value 已是新值——在 @change 里存"原值"存到的是新值，
+//   保存失败的回弹会静默失效（2026-10-10 由挂载测试抓出）。
 const theme = ref('light')
 const themeBeforeSave = ref('light')
 const themeChange = (value) => {
-  themeBeforeSave.value = theme.value
   theme.value = value
   applyTheme(value)
   window.ipcRenderer.send('updateSysSetting', { theme: value })
@@ -129,11 +133,12 @@ const onlineStatusChange = (value) => {
 }
 
 // ===== 拍一拍后缀设置 =====
+// 同 themeBeforeSave：el-input 的 @change 在 blur 触发，此时 v-model 已是新值，
+// 「原值前移」只能放在保存成功回调里。
 const nudgeSuffix = ref('')
 const nudgeSuffixBeforeSave = ref('')
 
 const saveNudgeSuffix = () => {
-  nudgeSuffixBeforeSave.value = nudgeSuffix.value
   window.ipcRenderer.send('updateSysSetting', { nudgeSuffix: nudgeSuffix.value })
 }
 
@@ -149,11 +154,16 @@ onMounted(() => {
       theme.value = parsed.theme === 'dark' ? 'dark' : 'light'
       applyTheme(theme.value)
       nudgeSuffix.value = parsed.nudgeSuffix || ''
+      // 回读到的持久化值即「已确认值」基线（否则首次保存失败会回弹到错误的初始值）
+      themeBeforeSave.value = theme.value
+      nudgeSuffixBeforeSave.value = nudgeSuffix.value
     } catch (error) {
       notifySwitch.value = true
       theme.value = 'light'
       applyTheme('light')
       nudgeSuffix.value = ''
+      themeBeforeSave.value = 'light'
+      nudgeSuffixBeforeSave.value = ''
     }
   })
   //保存失败回弹原值
@@ -164,6 +174,10 @@ onMounted(() => {
       applyTheme(theme.value)
       nudgeSuffix.value = nudgeSuffixBeforeSave.value
       proxy.$message ? proxy.$message.error('设置保存失败') : null
+    } else {
+      // 保存成功 → 「已确认值」前移到当前值（下次失败才回弹到本次结果）
+      themeBeforeSave.value = theme.value
+      nudgeSuffixBeforeSave.value = nudgeSuffix.value
     }
   })
 })
