@@ -36,6 +36,12 @@ import java.util.stream.Collectors;
  * | 主键冲突               | 409         | 2102      |
  * | 资源不存在              | 404         | 1003      |
  * | 未捕获异常             | 500         | 1002      |
+ *
+ * <p>⚠ 上表不是愿望清单而是**契约**，由 {@code GlobalExceptionHandlerHttpStatusTest} 逐条断言。
+ * 2026-10-10 发现表与实现长期不一致：1003 与 2102 都落到了兜底 400
+ * （DuplicateKeyException 那条 409/2102 是独立 handler 路径，故 2102 表现「时对时错」）。
+ * 修复时须注意：{@code inferHttpStatus} 中的<b>单码判断必须排在区间判断之前</b>，
+ * 否则 2003 会被 [2000,2100) 抢先命中（历史缺陷，见该方法内注释）。
  */
 @RestControllerAdvice
 public class AGlobalExceptionHandlerController {
@@ -190,11 +196,19 @@ public class AGlobalExceptionHandlerController {
         if (code == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
-        // ⚠ 2003 必须**先于**下面的区间判断：2003 落在 [2000,2100) 内，
-        //   若按区间先命中就会返回 401，客户端会把「无权限」误当成「登录过期」而跳登录
-        //   （AGENTS §3.2 要求无权限为 403）。2026-10-10 由 GlobalExceptionHandlerHttpStatusTest 抓出。
+        // ⚠ 以下三类必须**先于**区间判断，否则会落进兜底 400：
+        //   2003 落在 [2000,2100) 内 → 会被判成 401（客户端误当「登录过期」而跳登录）；
+        //   1003「资源不存在」与 2102「信息已存在」在 AGENTS §3.2 中分别对应 404 / 409。
+        //   2026-10-10 由 GlobalExceptionHandlerHttpStatusTest 逐条实证（红阶段 2 例转红）。
         if (code == ResponseCodeEnum.CODE_2003.getCode()) {
             return HttpStatus.FORBIDDEN;        // 无权限
+        }
+        if (code == ResponseCodeEnum.CODE_1003.getCode()) {
+            // 抛出点含「非管理员访问管理端」，用 404 同时满足「不泄露资源存在性」
+            return HttpStatus.NOT_FOUND;
+        }
+        if (code == ResponseCodeEnum.CODE_2102.getCode()) {
+            return HttpStatus.CONFLICT;         // 信息已存在（用户已存在 / 唯一键冲突）
         }
         if (code >= 2000 && code < 2100) {
             return HttpStatus.UNAUTHORIZED;      // 鉴权域

@@ -2,6 +2,7 @@ package com.easychat.controller;
 
 import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.SysSettingDto;
+import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.vo.Result;
 import com.easychat.entity.vo.UserInfoVO;
 import com.easychat.exception.BusinessException;
@@ -268,6 +269,24 @@ class AccountControllerMockMvcTest {
                 .andExpect(jsonPath("$.code").value(1001));
 
         verify(userInfoService, never()).register(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("注册已存在的邮箱 → 409 冲突 + 2102（走真实 HTTP 链路验证错误码到状态码的映射）")
+    void registerDuplicateEmailMapsToConflict() throws Exception {
+        // 单点断言只验 inferHttpStatus 本身；此处确保该映射在真实请求链路上确实生效
+        givenCachedCode("ab12");
+        doThrow(new BusinessException(ResponseCodeEnum.CODE_2102))
+                .when(userInfoService).register(anyString(), anyString(), anyString());
+
+        mockMvc.perform(post("/account/register")
+                        .param("checkCodeKey", CODE_KEY)
+                        .param("email", "dup@b.com")
+                        .param("password", "pwd12345")
+                        .param("nickName", "重复")
+                        .param("checkCode", "ab12"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(2102));
     }
 
     // ==================== 邮箱验证码 / 找回密码 ====================

@@ -58,18 +58,32 @@ class GlobalExceptionHandlerHttpStatusTest {
     }
 
     @Test
-    @DisplayName("业务域 2100-2699 → 400")
+    @DisplayName("业务域 2100-2699 → 400（除已单列的 2102 冲突外）")
     void businessDomainMapsTo400() {
-        assertEquals(HttpStatus.BAD_REQUEST, statusOf(ResponseCodeEnum.CODE_2102.getCode()));
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(ResponseCodeEnum.CODE_2101.getCode()));
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(ResponseCodeEnum.CODE_2301.getCode()));
     }
 
     @Test
-    @DisplayName("通用域 1001/1003 → 400 兜底")
+    @DisplayName("1003 资源不存在 → 404（AGENTS §3.2 明确要求；此前落兜底 400）")
+    void notFoundMapsTo404() {
+        // 抛出点实证：非管理员访问管理端（GlobalOperationAspect）、
+        // 群不存在（AdminGroupController）、版本不存在（AppUpdateServiceImpl）、
+        // 会话用户不存在（ChatSessionUserServiceImpl）——均为「资源不存在」语义
+        assertEquals(HttpStatus.NOT_FOUND, statusOf(ResponseCodeEnum.CODE_1003.getCode()));
+    }
+
+    @Test
+    @DisplayName("2102 信息已存在 → 409 冲突（AGENTS §3.2 的「冲突 409」；此前落兜底 400）")
+    void conflictMapsTo409() {
+        // 抛出点实证：用户已存在（UserInfoServiceImpl）、JSON 冲突（JsonUtils）
+        assertEquals(HttpStatus.CONFLICT, statusOf(ResponseCodeEnum.CODE_2102.getCode()));
+    }
+
+    @Test
+    @DisplayName("通用域 1001 → 400 兜底（1003 已单列为 404，不在此断言）")
     void commonDomainMapsTo400() {
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(ResponseCodeEnum.CODE_1001.getCode()));
-        assertEquals(HttpStatus.BAD_REQUEST, statusOf(ResponseCodeEnum.CODE_1003.getCode()));
     }
 
     @Test

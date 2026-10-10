@@ -98,16 +98,15 @@ class AdminGroupSettingUpdateControllersMockMvcTest {
     // ==================== 管理端解散群 ====================
 
     @Test
-    @DisplayName("解散不存在的群 → 资源不存在语义（code 1003），不得回 code=0 成功码")
+    @DisplayName("解散不存在的群 → 资源不存在 404 + code 1003（不得回 code=0 成功码，也不得落 400 兜底）")
     void dissolveNonExistingGroupIsNotSuccess() throws Exception {
         when(groupInfoService.getGroupInfoByGroupId("G404")).thenReturn(null);
 
         groupMvc.perform(post("/admin/dissolutionGroup").param("groupId", "G404"))
-                // ⚠ 当前 HTTP 为 400：inferHttpStatus 未把 1003 映射成 404，
-                // 与 AGENTS §3.2「资源不存在 404」及本类 javadoc 的映射表不一致。
-                // 但 1003 同时兼作「非管理员访问管理端」，改映射会影响所有管理端端点的状态码，
-                // 属需人工确认的契约变更，故此处锁定现状、单独登记，不夹带修改。
-                .andExpect(status().isBadRequest())
+                // 2026-10-10 已按 AGENTS §3.2「资源不存在 404」修正 inferHttpStatus：
+                // 此前 1003 落兜底 400，与本类 javadoc 映射表不一致。
+                // 1003 兼作「非管理员访问管理端」，404 同时满足「不泄露资源存在性」。
+                .andExpect(status().isNotFound())
                 // 关键：body.code 必须是 1003、绝不能是 0，否则前端会当成成功
                 .andExpect(jsonPath("$.code").value(1003))
                 .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.not(0)));

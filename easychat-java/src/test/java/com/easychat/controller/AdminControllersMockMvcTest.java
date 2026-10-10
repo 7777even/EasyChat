@@ -153,14 +153,14 @@ class AdminControllersMockMvcTest {
     }
 
     @Test
-    @DisplayName("删除不存在的版本 → 1003 透传（Service 已补判空，不得变成 500）")
+    @DisplayName("删除不存在的版本 → 1003 透传为 404（不得变成 500，也不得落 400 兜底）")
     void delUpdateNotFoundPropagates() throws Exception {
         when(appUpdateService.getAppUpdateById(999)).thenReturn(null);
         org.mockito.Mockito.doThrow(new BusinessException(ResponseCodeEnum.CODE_1003))
                 .when(appUpdateService).deleteAppUpdateById(999);
 
         updateMvc.perform(post("/admin/delUpdate").param("id", "999"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(1003));
     }
 
