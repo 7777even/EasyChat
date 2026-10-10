@@ -100,7 +100,7 @@ const submit = () => {
       return
     }
     avatarUploadRef.value.clear()
-    if (params.groupId) {
+    if (formData.value.groupId) {
       proxy.Message.success('群组修改成功')
       //修改后回调处理弹窗
       emit('eidtBack')
@@ -111,8 +111,8 @@ const submit = () => {
     //重新加载列表
     contactStateStore.setContactReload('MY')
     //重新加载头像
-    if (params.groupId) {
-      avatarInfoStore.setFoceReload(params.groupId, true)
+    if (formData.value.groupId) {
+      avatarInfoStore.setFoceReload(formData.value.groupId, true)
     }
   })
 }
