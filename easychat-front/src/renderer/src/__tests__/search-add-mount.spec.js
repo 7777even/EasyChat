@@ -133,7 +133,7 @@ describe('SearchAdd.vue 真实挂载（DOM 级）', () => {
   })
 
   it('直接加入成功（data=0）→ 提示「加入成功」+ setContactReload(contactType)', async () => {
-    const { wrapper, request, pinia } = await makeMount(() => ({ code: 0, data: 0 }))
+    const { wrapper, pinia } = await makeMount(() => ({ code: 0, data: 0 }))
     wrapper.vm.show({ contactId: 'G001', contactType: 'GROUP' })
     await flush()
     await wrapper.find('.d-btn').trigger('click')

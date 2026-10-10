@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { provide, inject, h } from 'vue'
-import { createPinia, setActivePinia } from 'pinia'
 import UserInfo from '@/views/setting/UserInfo.vue'
 
 /**

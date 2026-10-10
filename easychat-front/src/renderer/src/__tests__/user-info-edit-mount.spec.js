@@ -65,15 +65,11 @@ const ElSwitchStub = {
   emits: ['update:modelValue', 'change'],
   template: '<button class="switch-stub" @click="$emit(\'update:modelValue\', modelValue ? inactiveValue : activeValue); $emit(\'change\', modelValue ? inactiveValue : activeValue)" />'
 }
-// 单选组：真实 el-radio 经 group 间接更新 v-model，桩须 provide/inject 传递
-const RadioGroupProvide = Symbol('radioGroup')
+// 单选组：本 spec 不验性别切换，纯结构占位即可（勿写 setup 返回渲染函数——会覆盖 template）
 const ElRadioGroupStub = {
   name: 'ElRadioGroup',
   props: ['modelValue'],
   emits: ['update:modelValue', 'change'],
-  setup (props, { emit, slots }) {
-    return () => null
-  },
   template: '<div class="radio-group-stub"><slot /></div>'
 }
 

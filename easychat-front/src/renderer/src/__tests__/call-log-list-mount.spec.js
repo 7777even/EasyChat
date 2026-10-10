@@ -110,11 +110,6 @@ function row(over = {}) {
   }
 }
 
-function setList(wrapper, rows) {
-  // 直接触发一次带 list 的响应：覆写 request 后手动调用拉取
-  return wrapper
-}
-
 describe('CallLogList.vue 真实挂载（DOM 级）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -147,7 +142,8 @@ describe('CallLogList.vue 真实挂载（DOM 级）', () => {
   })
 
   it('挂载即拉取（Table initFetch）且参数含全部筛选项', () => {
-    const wrapper = mountPage()
+    // 挂载本身即触发拉取，断言全走 request 记录，无需持有 wrapper
+    mountPage()
     expect(request.__calls__).toHaveLength(1)
     expect(request.__calls__[0].url).toBe('/admin/loadCallLog')
     expect(request.__calls__[0].params).toMatchObject({

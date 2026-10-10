@@ -42,7 +42,6 @@ let pinia
 let router
 let request
 let listeners
-let currentWrapper
 
 function makeRequest(handler) {
   const calls = []
@@ -96,7 +95,6 @@ function mountMain(handler) {
       plugins: [pinia, router]
     }
   })
-  currentWrapper = wrapper
   return wrapper
 }
 
@@ -257,7 +255,7 @@ describe('Main.vue 真实挂载（DOM 级）', () => {
   })
 
   it('reLogin → router.push(/login)', async () => {
-    const wrapper = mountMain()
+    mountMain()
     listeners.reLogin(null, {})
     await new Promise((r) => setTimeout(r, 0))
     expect(router.push).toHaveBeenCalledWith('/login')

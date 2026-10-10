@@ -208,7 +208,7 @@ describe('DataBackup.vue 真实挂载（DOM 级）', () => {
   })
 
   it('落盘失败 → warning(result.error)', async () => {
-    const { wrapper } = await mountBackup()
+    await mountBackup()
     ipcCallback('exportChatBackupCallback')(null, { success: false, error: '磁盘已满' })
     expect(MessageStub.warning).toHaveBeenCalledWith('磁盘已满')
   })

@@ -78,8 +78,6 @@ const RouterViewStub = {
   template: '<div class="router-view-stub" />'
 }
 
-const ME = 'U001'
-
 const FRIENDS = [
   { contactId: 'U010', contactName: '阿强', contactType: 0 },
   { contactId: 'U011', contactName: '阿伟', contactType: 0 }
@@ -292,7 +290,7 @@ describe('Contact.vue 真实挂载（DOM 级）', () => {
   })
 
   it('ContactStateStore USER → 重拉好友列表 + 状态复位', async () => {
-    const { wrapper, request, pinia } = await mountContact(defaultHandler)
+    const { request, pinia } = await mountContact(defaultHandler)
     await flush()
     const before = request.__calls__.filter((c) => c.url === '/contact/load').length
 
