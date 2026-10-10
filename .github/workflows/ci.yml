@@ -203,6 +203,17 @@ jobs:
       - name: 本地 SQLite SQL 构造核心
         run: node scripts/verify/verify_local_db_core.mjs
 
+      # 2026-10-10 新增（docs/system-facts.md §14 遗留 #29）。本地文件服务器
+      # `GET /file` 此前零鉴权 + 路径穿越 + 绑 0.0.0.0，PoC 实测任意网站可经
+      # `fileId=../../…` 读到用户磁盘任意文件明文。自加固后拆两道门禁：
+      #   ① 守卫核心（路径越界判定 + 令牌比对）
+      #   ② 渲染层 URL 用法（7 处拼接必须经 withFileToken，漏一处 = 图片静默全裂）
+      - name: 本地文件服务器守卫核心
+        run: node scripts/verify/verify_local_file_guard_core.mjs
+
+      - name: 渲染层本地文件 URL 鉴权参数用法
+        run: node scripts/verify/verify_local_file_token_usage.mjs
+
       # 2026-10-04 新增。前端消息分发条件与后端类型枚举对账：
       # 2026-10-03 曾发生「Chat.vue 分发条件不含 24/25，而 ChatMessageVoice.vue
       # 是从未被 import 的死组件」——服务端正常、历史漫游也拉到，
