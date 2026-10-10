@@ -6,6 +6,10 @@ out/
 *.jar.original
 easychat-java/target/
 
+# Node.js 依赖（仓库根与各子目录一律不入库；
+# 无前导斜杠 → 对任意层级的 node_modules/ 生效，不只 easychat-front/）
+node_modules/
+
 # 日志文件
 easychat-java/log.path_IS_UNDEFINED/
 easychat-java/logs/
