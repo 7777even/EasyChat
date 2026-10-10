@@ -36,7 +36,12 @@ public class AdminGroupController extends ABaseController {
     public Result<Void> dissolutionGroup(@NotEmpty String groupId) {
         GroupInfo groupInfo = groupInfoService.getGroupInfoByGroupId(groupId);
         if (null == groupInfo) {
-            throw new BusinessException(ResponseCodeEnum.CODE_200);
+            // ⚠ 原为 CODE_200，而该枚举项码值就是 0（成功码），
+            //   会得到 HTTP 400 + body {code:0, message:"success"}：
+            //   前端错误分支直接把 body.message 当文案弹出 → 管理员看到一条写着 "success" 的错误提示，
+            //   且真实原因丢失。资源不存在按 AGENTS §3.1/§3.2 应用 CODE_1003 + 404。
+            //   （2026-10-10 由 AdminGroupSettingUpdateControllersMockMvcTest 实证抓出）
+            throw new BusinessException(ResponseCodeEnum.CODE_1003);
         }
         groupInfoService.dissolutionGroup(groupInfo.getGroupOwnerId(), groupId);
         return success(null);
