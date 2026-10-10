@@ -7,7 +7,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -98,5 +102,47 @@ class GlobalExceptionHandlerHttpStatusTest {
         ResponseEntity<Result<Void>> resp = handler.handleException(new RuntimeException("boom"), request);
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, resp.getStatusCode());
         assertEquals(ResponseCodeEnum.CODE_1002.getCode(), resp.getBody().getCode());
+    }
+
+    // ==================== Spring MVC 标准 4xx 不得被兜底吞成 500 ====================
+
+    @Test
+    @DisplayName("405 请求方法不允许：GET 调 POST 端点不得报成 500 系统错误")
+    void methodNotSupportedMapsTo405() {
+        // 用真实构造的异常对象（getter 走真实实现），避免 mock 的 getter 未被拦截导致 null
+        HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("GET");
+        ResponseEntity<Result<Void>> resp = handler.handleMethodNotSupported(ex);
+        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, resp.getStatusCode());
+        assertEquals(ResponseCodeEnum.CODE_1001.getCode(), resp.getBody().getCode());
+    }
+
+    @Test
+    @DisplayName("415 媒体类型不支持 → 415 且 code=1001")
+    void mediaTypeNotSupportedMapsTo415() {
+        // 构造器收 String（支持的媒体类型列表），而 getContentType() 返回 MediaType
+        HttpMediaTypeNotSupportedException ex = new HttpMediaTypeNotSupportedException("text/plain");
+        ResponseEntity<Result<Void>> resp = handler.handleMediaTypeNotSupported(ex);
+        assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, resp.getStatusCode());
+        assertEquals(ResponseCodeEnum.CODE_1001.getCode(), resp.getBody().getCode());
+    }
+
+    @Test
+    @DisplayName("400 消息体不可读（畸形 JSON）→ 400 而非 500")
+    void messageNotReadableMapsTo400() {
+        ResponseEntity<Result<Void>> resp =
+                handler.handleMessageNotReadable(new HttpMessageNotReadableException("malformed json", (Throwable) null));
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals(ResponseCodeEnum.CODE_1001.getCode(), resp.getBody().getCode());
+    }
+
+    @Test
+    @DisplayName("400 缺少必填参数 → 400 且文案点名参数名")
+    void missingParamMapsTo400() {
+        MissingServletRequestParameterException ex =
+                new MissingServletRequestParameterException("email", "java.lang.String");
+        ResponseEntity<Result<Void>> resp = handler.handleMissingParam(ex);
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals(ResponseCodeEnum.CODE_1001.getCode(), resp.getBody().getCode());
+        assertEquals("缺少必填参数: email", resp.getBody().getMessage());
     }
 }
