@@ -139,11 +139,14 @@ public class AGlobalExceptionHandlerController {
         if (code == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
+        // ⚠ 2003 必须**先于**下面的区间判断：2003 落在 [2000,2100) 内，
+        //   若按区间先命中就会返回 401，客户端会把「无权限」误当成「登录过期」而跳登录
+        //   （AGENTS §3.2 要求无权限为 403）。2026-10-10 由 GlobalExceptionHandlerHttpStatusTest 抓出。
+        if (code == ResponseCodeEnum.CODE_2003.getCode()) {
+            return HttpStatus.FORBIDDEN;        // 无权限
+        }
         if (code >= 2000 && code < 2100) {
             return HttpStatus.UNAUTHORIZED;      // 鉴权域
-        }
-        if (code == 2003) {
-            return HttpStatus.FORBIDDEN;        // 无权限
         }
         if (code >= 2100 && code < 2700) {
             return HttpStatus.BAD_REQUEST;      // 业务域错误统一 400
