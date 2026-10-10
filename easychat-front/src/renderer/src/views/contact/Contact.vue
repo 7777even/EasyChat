@@ -77,7 +77,7 @@
 <script setup>
 import ContactSearchResult from './ContactSearchResult.vue'
 import GroupJoinDialog from '@/components/GroupJoinDialog.vue'
-import {getCurrentInstance, ref, watch} from 'vue'
+import {getCurrentInstance, ref, watch, onMounted, onUnmounted} from 'vue'
 import {useContactStateStore} from '@/stores/ContactStateStore'
 import {useMessageCountStore} from '@/stores/MessageCountStore'
 import {useRoute, useRouter} from 'vue-router'
