@@ -362,8 +362,10 @@ describe('GroupDetail.vue 真实挂载（DOM 级）', () => {
     await flush()
     const btn = wrapper.findAll('.el-button').find((b) => b.text() === '群二维码')
     await btn.trigger('click')
-    await flush()
-    await flush() // renderQrCode 走真 qrcode 库（异步 canvas），需多等一拍
+    // renderQrCode 走真 qrcode 库（异步 canvas 编码），全量并发下两拍不够 → 带超时轮询
+    await vi.waitFor(() => {
+      expect(wrapper.find('.qrcode-token').exists()).toBe(true)
+    }, { timeout: 3000 })
     expect(request.__calls__.find((c) => c.url === '/group/genQr').params).toEqual({ groupId: 'G001' })
     expect(wrapper.findAll('.el-dialog-stub').some((d) => d.find('.ed-title').text() === '群二维码')).toBe(true)
     expect(wrapper.find('.qrcode-token').text()).toBe('tok123')
