@@ -124,6 +124,10 @@ onMounted(() => {
       if (data.localServerPort) {
         globalInfoStore.setInfo('localServerPort', data.localServerPort)
       }
+      // 本地文件服务器令牌（遗留 #29）：管理端也直接渲染本地图片，缺令牌一律 403
+      if (data.localFileServerToken) {
+        globalInfoStore.setInfo('localFileServerToken', data.localFileServerToken)
+      }
     })
   }
 })

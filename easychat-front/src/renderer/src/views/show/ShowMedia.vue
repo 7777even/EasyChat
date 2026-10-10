@@ -39,6 +39,7 @@
 
 <script setup>
 import DPlayer from 'dplayer'
+import { withFileToken } from '@/utils/localFileServer'
 import 'viewerjs/dist/viewer.css'
 import { component as Viewer } from 'v-viewer'
 import { ref, reactive, getCurrentInstance, nextTick, computed, onMounted, onUnmounted } from 'vue'
@@ -108,6 +109,8 @@ const initPlayer = () => {
 }
 
 const localServerPort = ref()
+// 本地文件服务器令牌（遗留 #29）：与 localServerPort 同批由 openWindow 下发（ipc.js）
+const localFileServerToken = ref()
 const currentIndex = ref(0)
 const allFileList = ref([])
 const fileList = ref([{ fileType: 0, status: 0 }])
@@ -118,6 +121,7 @@ onMounted(() => {
 
   window.ipcRenderer.on('pageInitData', (e, data) => {
     localServerPort.value = data.localServerPort
+    localFileServerToken.value = data.localFileServerToken
     allFileList.value = data.fileList
     let index = 0
     if (data.currentFileId) {
@@ -164,9 +168,13 @@ const next = (index) => {
 }
 
 const getUrl = (curFile) => {
-  return `http://localhost:${localServerPort.value}/file?fileId=${curFile.fileId}&partType=${
-    curFile.partType
-  }&fileType=${curFile.fileType}&forceGet=${curFile.forceGet}&${new Date().getTime()}`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）：与 port 同批由 openWindow 下发
+  return withFileToken(
+    `http://localhost:${localServerPort.value}/file?fileId=${curFile.fileId}&partType=${
+      curFile.partType
+    }&fileType=${curFile.fileType}&forceGet=${curFile.forceGet}&${new Date().getTime()}`,
+    localFileServerToken.value
+  )
 }
 
 onUnmounted(() => {

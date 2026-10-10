@@ -63,6 +63,7 @@
 
 <script setup>
 import { ref, reactive, getCurrentInstance } from 'vue'
+import { withFileToken } from '@/utils/localFileServer'
 import Avatar from '@/components/Avatar.vue'
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 
@@ -88,7 +89,11 @@ const previewStartIndex = ref(0)
 const getImageUrl = (filePath) => {
   if (!filePath) return ''
   const serverPort = globalInfoStore.getInfo('localServerPort')
-  return `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）
+  return withFileToken(
+    `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`,
+    globalInfoStore.getInfo('localFileServerToken')
+  )
 }
 
 const show = (userId, name) => {

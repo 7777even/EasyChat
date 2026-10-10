@@ -13,6 +13,7 @@
 
 <script setup>
 import { ref, reactive, getCurrentInstance, nextTick, computed, onMounted } from 'vue'
+import { withFileToken } from '@/utils/localFileServer'
 const { proxy } = getCurrentInstance()
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
 const globalInfoStore = useGlobalInfoStore()
@@ -53,9 +54,13 @@ const serverUrl = computed(() => {
     return
   }
   const serverPort = globalInfoStore.getInfo('localServerPort')
-  return `http://localhost:${serverPort}/file?fileId=${props.fileId}&partType=${
-    props.partType
-  }&fileType=${props.fileType}&showCover=true&forceGet=${ props.fileId == 'Urobot' ||props.forceGet}&${new Date().getTime()}`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）：缺失时服务端一律 403
+  return withFileToken(
+    `http://localhost:${serverPort}/file?fileId=${props.fileId}&partType=${
+      props.partType
+    }&fileType=${props.fileType}&showCover=true&forceGet=${ props.fileId == 'Urobot' ||props.forceGet}&${new Date().getTime()}`,
+    globalInfoStore.getInfo('localFileServerToken')
+  )
 })
 
 const showImageHandler = () => {

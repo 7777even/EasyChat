@@ -164,6 +164,8 @@ const getLoginInfo = async () => {
   //登录后强制回源本人头像一次，修复重新登录后展示本地旧缓存/兜底图的问题
   avatarInfoStore.setFoceReload(result.data.userId, true)
   window.ipcRenderer.send('getLocalStore', result.data.userId + 'localServerPort')
+  // 本地文件服务器令牌（遗留 #29）：与 port 同批取，渲染层拼 /file URL 时必须带上
+  window.ipcRenderer.send('getLocalStore', result.data.userId + 'localFileServerToken')
 }
 
 //获取系统设置信息
@@ -178,8 +180,16 @@ const getSysSetting = async () => {
   sysSettingStore.setSetting(result.data)
 }
 onMounted(() => {
-  window.ipcRenderer.on('getLocalStoreCallback', (e, serverPort) => {
-    globalInfoStore.setInfo('localServerPort', serverPort)
+  window.ipcRenderer.on('getLocalStoreCallback', (e, res) => {
+    // 主进程回带 key（ipc.js getLocalStore）：不靠「两次 send 的先后顺序」区分两个键，
+    // 那种写法会让先注册的监听器把令牌也当端口写进去
+    if (!res || typeof res.key !== 'string') return
+    if (res.key.endsWith('localServerPort')) {
+      globalInfoStore.setInfo('localServerPort', res.value)
+    } else if (res.key.endsWith('localFileServerToken')) {
+      // 本地文件服务器令牌（遗留 #29）
+      globalInfoStore.setInfo('localFileServerToken', res.value)
+    }
   })
 
   getLoginInfo()

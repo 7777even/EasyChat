@@ -19,6 +19,9 @@ import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
  */
 
 const requestMock = vi.fn()
+
+// 形如主进程 ensureFileToken 生成的 64 位十六进制令牌（遗留 #29）
+const TOKEN = 'a'.repeat(64)
 vi.mock('@/utils/Request', () => ({
   default: (...args) => requestMock(...args)
 }))
@@ -72,6 +75,8 @@ function mountPanel () {
     }
   })
   useGlobalInfoStore().setInfo('localServerPort', 9999)
+  // 本地文件服务器令牌（遗留 #29）：服务端自 403 起强制校验，URL 必须带 fileToken
+  useGlobalInfoStore().setInfo('localFileServerToken', TOKEN)
   return wrapper
 }
 
@@ -164,14 +169,15 @@ describe('GroupFile.vue 真实挂载（DOM 级）', () => {
     expect(thumbs[2].find('.icon-file').exists()).toBe(true)
   })
 
-  it('downloadUrl：localServerPort + fileId 编码 + partType=group', async () => {
+  it('downloadUrl：localServerPort + fileId 编码 + partType=group + fileToken 鉴权参数', async () => {
     requestMock.mockResolvedValue(FILE_LIST)
     const wrapper = mountPanel()
     wrapper.vm.show('G1')
     await flush()
     const href = wrapper.find('.action-link').attributes('href')
     expect(href).toBe(
-      'http://localhost:9999/file?fileId=' + encodeURIComponent('g/a.png') + '&partType=group&showCover=false'
+      'http://localhost:9999/file?fileId=' + encodeURIComponent('g/a.png') +
+      '&partType=group&showCover=false&fileToken=' + TOKEN
     )
     expect(wrapper.find('.action-link').attributes('download')).toBe('a.png')
   })

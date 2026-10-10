@@ -19,6 +19,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { withFileToken } from '@/utils/localFileServer'
 import { getCurrentInstance } from 'vue'
 const { proxy } = getCurrentInstance()
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
@@ -63,7 +64,11 @@ const audioSrc = computed(() => {
   // 直接打 5050 的 /chat/downloadFile 是错的——那是后端 HTTP 接口而非
   // 本地文件服务器，且 require POST，不能直接作 <audio src>。
   const localFileServerPort = globalInfoStore.getInfo('localServerPort')
-  return `http://localhost:${localFileServerPort}/file?fileId=${props.data.messageId}&partType=chat&fileType=3&showCover=false&${new Date().getTime()}`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）：缺失时服务端一律 403，表现为「语音播不出」
+  return withFileToken(
+    `http://localhost:${localFileServerPort}/file?fileId=${props.data.messageId}&partType=chat&fileType=3&showCover=false&${new Date().getTime()}`,
+    globalInfoStore.getInfo('localFileServerToken')
+  )
 })
 
 const togglePlay = () => {

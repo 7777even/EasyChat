@@ -127,6 +127,7 @@
 
 <script setup>
 import { ref, getCurrentInstance } from 'vue'
+import { withFileToken } from '@/utils/localFileServer'
 import Dialog from '@/components/Dialog.vue'
 import Avatar from '@/components/Avatar.vue'
 import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
@@ -150,7 +151,11 @@ const getImageUrl = (filePath) => {
   if (!filePath) return ''
   const serverPort = globalInfoStore.getInfo('localServerPort')
   // 朋友圈图片不需要封面，设置 showCover=false
-  return `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）
+  return withFileToken(
+    `http://localhost:${serverPort}/file?fileId=${filePath}&partType=moment&fileType=0&showCover=false&forceGet=false&${new Date().getTime()}`,
+    globalInfoStore.getInfo('localFileServerToken')
+  )
 }
 
 const formatTime = (time) => {

@@ -66,6 +66,7 @@
 
 <script setup>
 import { ref, reactive, getCurrentInstance } from 'vue'
+import { withFileToken } from '@/utils/localFileServer'
 import Request from '@/utils/Request'
 import Api from '@/utils/Api'
 import groupFileChunkUploadApi from '@/utils/GroupFileChunkUploadApi'
@@ -132,7 +133,11 @@ const fileTypeOf = (fileName) => {
 
 const downloadUrl = (file) => {
   const serverPort = globalInfoStore.getInfo('localServerPort')
-  return `http://localhost:${serverPort}/file?fileId=${encodeURIComponent(file.filePath)}&partType=group&showCover=false`
+  // fileToken 供本地文件服务器鉴权（遗留 #29）
+  return withFileToken(
+    `http://localhost:${serverPort}/file?fileId=${encodeURIComponent(file.filePath)}&partType=group&showCover=false`,
+    globalInfoStore.getInfo('localFileServerToken')
+  )
 }
 
 const triggerUpload = () => {
