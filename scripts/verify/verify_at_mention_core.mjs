@@ -237,9 +237,82 @@ check('B4 ★ 组件内不得内联成员过滤（缺陷 1 会原地复活）', 
   return true
 })
 
+// ============ C 组：ID 形态精确化（遗留 #19，2026-10-12）============
+// 收紧前的 `@(U[A-Za-z0-9]+)` 把普通英文单词误判为提及。
+// 收紧后形态必须**精确等于真实 userId 集合**：`U`+数字 ∪ 系统账号 `Urobot`。
+// （Constants.ROBOT_UID = "U" + "robot"，有头像文件、有以它为 contactId 的会话。）
+
+check('C1 ★ 真实 userId（U + 11 位数字）必须被提取', () => {
+  const ids = core.extractAtUserIds('@U01234567890 在吗')
+  if (ids.length !== 1 || ids[0] !== 'U01234567890') {
+    return `应提取 U01234567890，实际 ${JSON.stringify(ids)}`
+  }
+  return true
+})
+
+check('C2 ★ 系统账号 Urobot 必须仍可被提取（ADR-001 守护）', () => {
+  // 若收紧成纯 \d+ 会把 @ 机器人挡在提及之外；将来有人基于 atUserIds 实现提醒时会静默失效
+  const ids = core.extractAtUserIds('@Urobot 和 @U01234567890')
+  if (ids.length !== 2 || ids[0] !== 'Urobot' || ids[1] !== 'U01234567890') {
+    return `应同时提取 Urobot 与真实 ID，实际 ${JSON.stringify(ids)}`
+  }
+  return true
+})
+
+check('C3 ★ 普通英文单词不得被误判为提及（收紧的核心目标）', () => {
+  // 反例清单：每一个都必须提取为空
+  const falsePositives = ['@Ubuntu', '@User', '@Usernames', '@US', '@UI', '@Url']
+  for (const text of falsePositives) {
+    const ids = core.extractAtUserIds(text + ' 尾巴')
+    if (ids.length !== 0) return `${text} 不应提取，实际 ${JSON.stringify(ids)}`
+  }
+  // ⚠ 订正：收紧前 `@Ubuntu` 提取出的是 **`Ubuntu`**（不是早期台账记的 `buntu`）——
+  //   .match() 带捕获组时返回**完整匹配**，substring(1) 去掉的是 @ 而不是 U。
+  return true
+})
+
+check('C4 ★ ID 后紧跟单词字符不算完整 ID（(?!\\w) 边界生效）', () => {
+  for (const text of ['@U01234567890abc', '@U01234567890_x', '@UrobotFoo']) {
+    const ids = core.extractAtUserIds(text)
+    if (ids.length !== 0) return `${text} 不应提取，实际 ${JSON.stringify(ids)}`
+  }
+  // 正例边界：非 \w 字符（中文、连字符、空格）是合法终止
+  const ok = ['@U01234567890 尾巴', '@U01234567890-尾巴', '请看 @U01234567890 的发言']
+  for (const text of ok) {
+    if (core.extractAtUserIds(text).length !== 1) return `${text} 应提取 1 个 ID`
+  }
+  return true
+})
+
+check('C5 ★ 不加左词边界的取舍：选中文本后接 @ 不得漏掉（ADR-002 守护）', () => {
+  // 用户选中「你好」再点 @ 面板 → 「你好@U01234567890 」，是**正常**路径
+  const ids = core.extractAtUserIds('你好@U01234567890 ')
+  if (ids.length !== 1 || ids[0] !== 'U01234567890') {
+    return `选中文本后拼接的提及被漏掉，实际 ${JSON.stringify(ids)}`
+  }
+  // ⚠ 已知残留：邮箱形态 a@U123.com 仍会提取出 U123。
+  //   这是刻意接受的代价（加左边界会漏掉上面那条正常路径），且该字段只写不读、无可观测后果。
+  //   若将来基于 atUserIds 实现「@ 我」红点，必须改为**按真实群成员白名单过滤**，而非加左边界。
+  return true
+})
+
+check('C6 收紧后端到端口径一致：单词不产出 atUserIds，Urobot 仍产出', () => {
+  const bad = core.buildExtraData({ contactType: 1, messageContent: '@Ubuntu 这个系统' })
+  if (bad !== null) return `@Ubuntu 不应产出 extraData，实际 ${bad}`
+  if (core.buildAtUserIdsField('@Ubuntu 这个系统') !== null) return '@Ubuntu 不应产出 atUserIds 字段'
+  const good = core.buildExtraData({ contactType: 1, messageContent: '@Urobot 帮个忙' })
+  const extra = JSON.parse(good)
+  if (!Array.isArray(extra.atUserIds) || extra.atUserIds[0] !== 'Urobot') {
+    return `@Urobot 应产出 atUserIds，实际 ${good}`
+  }
+  return true
+})
+
 check('B5 ★ 正则在核心中只出现一处', () => {
-  const n = (coreCode.match(/@\(U\[A-Za-z0-9\]/g) || []).length
-  if (n !== 1) return `核心中该正则出现 ${n} 次，应恰好 1 次`
+  // 2026-10-12 遗留 #19：形态由 `@(U[A-Za-z0-9]+)` 收紧为 `@(U\d+|Urobot)(?![\w])`。
+  // 这里只锁「唯一性」（防止再次分叉成两份），具体形态由 C 组断言负责。
+  const n = (coreCode.match(/@\(U\\d\+\|Urobot\)\(\?!\[\\w\]\)/g) || []).length
+  if (n !== 1) return `核心中该正则出现 ${n} 次，应恰好 1 次（形态应为 @(U\\d+|Urobot)(?![\\w])）`
   return true
 })
 
