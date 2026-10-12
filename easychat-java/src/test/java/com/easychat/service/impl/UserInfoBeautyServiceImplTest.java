@@ -184,4 +184,75 @@ public class UserInfoBeautyServiceImplTest {
         assertEquals(EMAIL, captor.getValue().getEmail());
         verify(userInfoBeautyMapper, never()).insert(any(UserInfoBeauty.class));
     }
+
+    // ==================== 靓号字符集约束（遗留 #19，2026-10-12）====================
+    // 背景：靓号是**唯一**能把任意字符写进 user_info.user_id 的入口，且此前**零格式校验**。
+    //   字符集无上界 → 客户端 @ 提及正则无法收紧（收紧成 \d+ 会把字母靓号用户彻底挡在 @ 之外）。
+    // 约束须与 StringTools.getUserId()（"U" + 随机数(11)，即纯数字）严格对齐。
+    // 活库已实测：靓号表 0 行、非「U+数字」的 user_id 0 条 → 收紧对存量零影响。
+
+    /** 断言：给定靓号入参被拒（CODE_1001），且**不落库**。 */
+    private void assertRejectedAndNotPersisted(String bareUserId, String why) {
+        UserInfoBeauty beauty = beautyOf(null, EMAIL, bareUserId);
+        try {
+            userInfoBeautyService.saveAccount(beauty);
+            fail("靓号字符集非法时应当拒绝：" + why + "（实际入参=" + bareUserId + "）");
+        } catch (BusinessException e) {
+            assertEquals(ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        // 关键：校验必须发生在任何写库动作之前
+        verify(userInfoBeautyMapper, never()).insert(any(UserInfoBeauty.class));
+        verify(userInfoBeautyMapper, never())
+                .updateById(any(UserInfoBeauty.class), any(Integer.class));
+    }
+
+    @Test
+    public void saveAccount_lettersRejected_throws1001() {
+        // 含字母的靓号会产出 userId="UABC"，超出 @ 提及正则可表达的集合
+        assertRejectedAndNotPersisted("ABC", "含大写字母");
+        assertRejectedAndNotPersisted("abc", "含小写字母");
+        assertRejectedAndNotPersisted("888a88", "数字中夹字母");
+    }
+
+    @Test
+    public void saveAccount_specialCharsRejected_throws1001() {
+        assertRejectedAndNotPersisted("88-88", "含连字符");
+        assertRejectedAndNotPersisted("88_88", "含下划线");
+        assertRejectedAndNotPersisted("88 88", "含空格");
+        assertRejectedAndNotPersisted("８８８", "含全角数字");
+        assertRejectedAndNotPersisted("88.88", "含小数点");
+    }
+
+    @Test
+    public void saveAccount_emptyOrNullRejected_throws1001() {
+        assertRejectedAndNotPersisted("", "空串");
+        assertRejectedAndNotPersisted(null, "null");
+    }
+
+    @Test
+    public void saveAccount_validDigits_accepted() {
+        // 正例：形态合法时仍走原有流程并落库（防止校验把正常路径一起拦掉）
+        UserInfoBeauty beauty = beautyOf(null, EMAIL, BARE_USER_ID);
+        when(userInfoBeautyMapper.selectByEmail(EMAIL)).thenReturn(null);
+        when(userInfoBeautyMapper.selectByUserId(PREFIXED_USER_ID)).thenReturn(null);
+        when(userInfoMapper.selectByEmail(EMAIL)).thenReturn(null);
+        when(userInfoMapper.selectByUserId(PREFIXED_USER_ID)).thenReturn(null);
+
+        userInfoBeautyService.saveAccount(beauty);
+
+        verify(userInfoBeautyMapper).insert(beauty);
+    }
+
+    @Test
+    public void saveAccount_editWithIllegalUserId_alsoRejected() {
+        // 编辑路径同样受约束（否则可先建合法号、再改成 UABC 绕过）
+        UserInfoBeauty beauty = beautyOf(BEAUTY_ID, EMAIL, "ABC");
+        try {
+            userInfoBeautyService.saveAccount(beauty);
+            fail("编辑路径也必须校验靓号字符集");
+        } catch (BusinessException e) {
+            assertEquals(ResponseCodeEnum.CODE_1001.getCode(), e.getCode());
+        }
+        verify(userInfoBeautyMapper, never()).updateById(any(UserInfoBeauty.class), any(Integer.class));
+    }
 }
