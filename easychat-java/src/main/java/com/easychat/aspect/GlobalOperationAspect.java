@@ -61,7 +61,7 @@ public class GlobalOperationAspect {
              * API 限流
              */
             if (interceptor.checkRateLimit()) {
-                checkRateLimit();
+                checkRateLimit(interceptor.rateLimitByParam());
             }
         } catch (BusinessException e) {
             logger.error("全局拦截器异常", e);
@@ -109,15 +109,32 @@ public class GlobalOperationAspect {
      *
      * @see openspec/changes/2026-10-03-password-session-and-mail/design.md ADR-003
      */
-    private void checkRateLimit() {
+    private void checkRateLimit(String rateLimitByParam) {
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
-        String token = request.getHeader("token");
         String key = "rate_limit:";
+        // 2026-10-12（遗留 #1）：优先按「需要保护的客体」计数（当前是目标邮箱）。
+        // 取不到值时**退回 IP 维度**而非空键 —— 空键等于全体匿名用户共用一个配额，
+        // 那会把限流变成 DoS 放大器（见下方既有注释）。
+        if (!StringTools.isEmpty(rateLimitByParam)) {
+            String target = request.getParameter(rateLimitByParam);
+            if (!StringTools.isEmpty(target)) {
+                String normalized = target.trim().toLowerCase();
+                key = key + "email:" + normalized;
+                applyRateLimit(key);
+                return;
+            }
+        }
+        String token = request.getHeader("token");
         if (!StringTools.isEmpty(token)) {
             key = key + token;
         } else {
             key = key + "ip:" + IpTools.getClientIp();
         }
+        applyRateLimit(key);
+    }
+
+    /** 阈值判定与窗口设置，供上面两条维度分支共用（改动后只有一处逻辑，不会走偏） */
+    private void applyRateLimit(String key) {
         Long count = redisUtils.incr(key);
         if (count != null && count == 1) {
             // 第一次请求，设置过期时间 60 秒

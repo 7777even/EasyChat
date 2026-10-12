@@ -263,4 +263,138 @@ public class GlobalOperationAspectTest {
         BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
         expectCode(e, 1001);
     }
+
+    // ============ 2026-10-12 遗留 #1：限流改按目标 email 计数 ============
+    // 起因：原实现的 IP 维度取 `X-Forwarded-For` 首段，该头**客户端可伪造**
+    //   （IpTools 自身 javadoc 已写明），而 EasyChat 恰是直连部署（本机 127.0.0.1:5050）。
+    //   → 攻击者伪造该头即可获取多个独立限流配额，验证码 6 位码的暴力破解实际上不受约束。
+    // 处置（人工决策 2026-10-12）：对「以某个 email 为目标」的端点，限流维度改为**目标 email**，
+    //   直接命中需要保护的客体，伪造 IP 不再有用。
+    // 注：这不是新的 DoS 面 —— sendEmailCode 本就有**按 email** 的 60 秒防重发，
+    //   即「针对某邮箱限流」的语义早已存在，本次只是把它推广到 resetPassword 与限流层。
+
+    private JoinPoint sendEmailCodeEndpoint() throws Exception {
+        return joinPointOf(AccountController.class.getMethod("sendEmailCode", String.class, Integer.class));
+    }
+
+    @Test
+    public void rateLimit_resetPassword_keysByTargetEmail_notIp() throws Exception {
+        // 核心断言：resetPassword 的限流键必须是目标 email，不得含 IP
+        request.setRemoteAddr("10.0.0.7");
+        request.addHeader("X-Forwarded-For", "1.2.3.4");
+        request.setParameter("email", "victim@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:email:victim@qq.com");
+    }
+
+    @Test
+    public void rateLimit_sendEmailCode_keysByTargetEmail_notIp() throws Exception {
+        request.setRemoteAddr("10.0.0.7");
+        request.addHeader("X-Forwarded-For", "1.2.3.4");
+        request.setParameter("email", "victim@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(sendEmailCodeEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:email:victim@qq.com");
+    }
+
+    @Test
+    public void rateLimit_emailDimension_independentOfRemoteAddr() throws Exception {
+        // 同一 email、两个不同来源 IP（模拟伪造 XFF 轮换）→ 必须落到**同一个**键
+        request.setRemoteAddr("10.0.0.7");
+        request.addHeader("X-Forwarded-For", "1.2.3.4");
+        request.setParameter("email", "victim@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        // 换 IP 与 XFF，但 email 不变
+        request.removeHeader("X-Forwarded-For");
+        request.addHeader("X-Forwarded-For", "9.9.9.9");
+        request.setRemoteAddr("10.0.0.8");
+        request.setParameter("email", "victim@qq.com");
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(2)).incr("rate_limit:email:victim@qq.com");
+    }
+
+    @Test
+    public void rateLimit_differentEmails_useSeparateKeys() throws Exception {
+        // 不同目标邮箱互不牵连（否则可用他人邮箱耗尽他人配额形成定向 DoS）
+        request.setRemoteAddr("10.0.0.7");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        request.setParameter("email", "a@qq.com");
+        aspect.interceptorDo(resetPasswordEndpoint());
+        request.setParameter("email", "b@qq.com");
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:email:a@qq.com");
+        verify(redisUtils, times(1)).incr("rate_limit:email:b@qq.com");
+    }
+
+    @Test
+    public void rateLimit_emailDimension_overThreshold_throws1001() throws Exception {
+        // 键换了，阈值判定不能跟着失效
+        request.setRemoteAddr("10.0.0.7");
+        request.setParameter("email", "victim@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn((long) RATE_LIMIT + 1);
+
+        // 端点解析必须在 lambda 外：Class#getMethod 抛受检异常，Runnable 不允许
+        JoinPoint point = resetPasswordEndpoint();
+        BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
+        expectCode(e, 1001);
+    }
+
+    @Test
+    public void rateLimit_emailDimension_setsWindowOnFirstRequest() throws Exception {
+        request.setRemoteAddr("10.0.0.7");
+        request.setParameter("email", "victim@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(1)).expire(eq("rate_limit:email:victim@qq.com"), eq(60L));
+    }
+
+    @Test
+    public void rateLimit_missingEmailParam_fallsBackToIp_notToBlankSharedKey() throws Exception {
+        // ⚠ 绝不能退化成「全体匿名用户共用一个空前缀键」——那等于把限流变成 DoS 放大器
+        //   （见 GlobalOperationAspect 既有注释）。email 缺失时必须退回 IP 维度。
+        request.setRemoteAddr("10.0.0.7");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:ip:10.0.0.7");
+        verify(redisUtils, never()).incr(eq("rate_limit:email:"));
+    }
+
+    @Test
+    public void rateLimit_blankEmailParam_fallsBackToIp() throws Exception {
+        // 空串与全空白同样视为「取不到」
+        request.setRemoteAddr("10.0.0.7");
+        request.setParameter("email", "   ");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(resetPasswordEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:ip:10.0.0.7");
+    }
+
+    @Test
+    public void rateLimit_loginEndpoint_staysOnIpDimension() throws Exception {
+        // login/register **不**改维度：它们防的是密码暴力而非验证码暴力，
+        // 且已有图形验证码把关；本项只针对「以 email 为目标的验证码类端点」。
+        request.setRemoteAddr("10.0.0.7");
+        request.setParameter("email", "someone@qq.com");
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+
+        aspect.interceptorDo(loginEndpoint());
+
+        verify(redisUtils, times(1)).incr("rate_limit:ip:10.0.0.7");
+    }
 }

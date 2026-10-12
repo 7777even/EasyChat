@@ -107,7 +107,7 @@ public class AccountController extends ABaseController {
      * 发送邮箱验证码（type：0注册 1找回密码）
      */
     @PostMapping(value = "/sendEmailCode")
-    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true, rateLimitByParam = "email")
     public Result<Void> sendEmailCode(@NotEmpty String email, Integer type) {
         userInfoService.sendEmailCode(email, type == null ? 0 : type);
         return success();
@@ -117,7 +117,7 @@ public class AccountController extends ABaseController {
      * 忘记密码：通过邮箱验证码重置密码
      */
     @PostMapping(value = "/resetPassword")
-    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
+    @GlobalInterceptor(checkLogin = false, checkRateLimit = true, rateLimitByParam = "email")
     public Result<Void> resetPassword(@NotEmpty String email,
                                       @NotEmpty String code,
                                       @NotEmpty(message = "新密码不能为空")
