@@ -5,6 +5,7 @@ import com.easychat.entity.dto.SysSettingDto;
 import com.easychat.annotation.GlobalInterceptor;
 import com.easychat.entity.dto.UserLoginDTO;
 import com.easychat.entity.dto.UserRegisterDTO;
+import com.easychat.entity.dto.UserResetPasswordDTO;
 import com.easychat.entity.enums.ResponseCodeEnum;
 import com.easychat.entity.vo.Result;
 import com.easychat.entity.vo.SysSettingVO;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
+import javax.validation.Valid;
 import javax.validation.constraints.NotEmpty;
 import java.util.HashMap;
 import java.util.Map;
@@ -78,7 +80,7 @@ public class AccountController extends ABaseController {
      */
     @PostMapping(value = "/register")
     @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
-    public Result<Void> register(UserRegisterDTO dto) {
+    public Result<Void> register(@Valid UserRegisterDTO dto) {
         try {
             validateCheckCode(dto.getCheckCodeKey(), dto.getCheckCode());
             userInfoService.register(dto.getEmail(), dto.getNickName(), dto.getPassword());
@@ -93,7 +95,7 @@ public class AccountController extends ABaseController {
      */
     @PostMapping(value = "/login")
     @GlobalInterceptor(checkLogin = false, checkRateLimit = true)
-    public Result<UserInfoVO> login(UserLoginDTO dto) {
+    public Result<UserInfoVO> login(@Valid UserLoginDTO dto) {
         try {
             validateCheckCode(dto.getCheckCodeKey(), dto.getCheckCode());
             UserInfoVO userInfoVO = userInfoService.login(dto.getEmail(), dto.getPassword());
@@ -118,12 +120,8 @@ public class AccountController extends ABaseController {
      */
     @PostMapping(value = "/resetPassword")
     @GlobalInterceptor(checkLogin = false, checkRateLimit = true, rateLimitByParam = "email")
-    public Result<Void> resetPassword(@NotEmpty String email,
-                                      @NotEmpty String code,
-                                      @NotEmpty(message = "新密码不能为空")
-                                      @javax.validation.constraints.Pattern(regexp = Constants.REGEX_PASSWORD, message = "密码格式不正确")
-                                      String newPassword) {
-        userInfoService.resetPasswordByEmail(email, code, newPassword);
+    public Result<Void> resetPassword(@Valid UserResetPasswordDTO dto) {
+        userInfoService.resetPasswordByEmail(dto.getEmail(), dto.getCode(), dto.getNewPassword());
         return success();
     }
 
