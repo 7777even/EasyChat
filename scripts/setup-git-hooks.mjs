@@ -56,6 +56,7 @@ node "$ROOT/scripts/verify/verify_audit_and_at_all.mjs"
 node "$ROOT/scripts/verify/verify_migration_flyway.mjs"
 node "$ROOT/scripts/verify/verify_sql_concat_guard.mjs"
 node "$ROOT/scripts/verify/verify_local_file_guard_core.mjs"
+node "$ROOT/scripts/verify/verify_preflight_baseline_core.mjs"
 node "$ROOT/scripts/verify/verify_local_file_token_usage.mjs"
 node "$ROOT/scripts/verify/verify_frontend_lint.mjs"
 node "$ROOT/scripts/verify/verify_schema_drift.mjs"
@@ -88,6 +89,7 @@ for (const [name, def] of Object.entries(hooks)) {
         'node "%ROOT%\\scripts\\verify\\verify_migration_flyway.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_sql_concat_guard.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_local_file_guard_core.mjs" || exit /b 1',
+        'node "%ROOT%\\scripts\\verify\\verify_preflight_baseline_core.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_local_file_token_usage.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_frontend_lint.mjs" || exit /b 1',
         // 需要活库；本仓后端强依赖 MySQL，推送前必须能连上。

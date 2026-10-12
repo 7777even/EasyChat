@@ -211,6 +211,14 @@ jobs:
       - name: 本地文件服务器守卫核心
         run: node scripts/verify/verify_local_file_guard_core.mjs
 
+      # 2026-10-12 新增（docs/system-facts.md §14 遗留 #11）。存量库纳管前置闸门
+      # preflight-baseline-check.mjs 的判定此前与 IO 混写，只能被「读源码找字面量」的
+      # 静态断言覆盖 —— 而静态断言看不出**条件分支的方向**：把放行条件
+      # `if (结构一致) 放行` 反写成 `if (结构不一致) 放行`，四条静态断言全部照样通过。
+      # 抽出纯核心 + 行为测试后，方向写反必然转红（实测 7 条）。
+      - name: 存量库纳管前置闸门纯核心
+        run: node scripts/verify/verify_preflight_baseline_core.mjs
+
       - name: 渲染层本地文件 URL 鉴权参数用法
         run: node scripts/verify/verify_local_file_token_usage.mjs
 

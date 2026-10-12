@@ -22,6 +22,10 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+import {
+  decidePreflight, configuredBaselineVersion, maxMigrationVersion,
+  parseBaseline, parseLiveColumns, computeDiff, formatMissingReport
+} from './preflightBaselineCore.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -34,30 +38,21 @@ const CFG = {
 }
 
 /**
- * 本次要校验的 baseline-version。
+ * 本次要校验的 baseline-version（IO 接线：读文件；判定在纯核心里）。
  *
- * ⚠ 必须**优先读环境变量**：运维声明存量库真实版本号的唯一途径就是
- * `SPRING_FLYWAY_BASELINE_VERSION=N`（application.properties 里写的是
- * `${SPRING_FLYWAY_BASELINE_VERSION:12}` 形式，默认值 12）。
- * 若只读文件默认值，一个「实际只到 011」的存量库用 env 声明 9 之后，
- * 本脚本仍会按 12 判定它「声称自己是最新版」并**拒绝启动**——
- * 恰好堵死自己在报错里建议的那条处置路径 a。2026-10-04 自查发现。
+ * ⚠ 2026-10-12（遗留 #11）：判定逻辑已抽到 `preflightBaselineCore.mjs`，
+ *   由 `verify_preflight_baseline_core.mjs` 做**行为**测试覆盖。
+ *   「env 优先于 properties 默认值」这条方向性判断此前**无法**被静态断言看出来，
+ *   现由行为测试锁定。
  */
-function configuredBaselineVersion() {
-  const env = process.env.SPRING_FLYWAY_BASELINE_VERSION
-  if (env !== undefined && /^\d+$/.test(env.trim())) {
-    return { version: Number(env.trim()), source: '环境变量 SPRING_FLYWAY_BASELINE_VERSION' }
-  }
+function configuredBaselineVersionIO() {
   const props = readFileSync(
     resolve(ROOT, 'easychat-java/src/main/resources/application.properties'), 'utf8')
-  const m = props.match(/SPRING_FLYWAY_BASELINE_VERSION:(\d+)/)
-  return { version: m ? Number(m[1]) : 12, source: 'application.properties 默认值' }
+  return configuredBaselineVersion(process.env.SPRING_FLYWAY_BASELINE_VERSION, props)
 }
 
-function maxMigrationVersion() {
-  const files = readdirSync(ROOT).filter((f) => /^easychat-migration-\d{3}-.*\.sql$/.test(f))
-  const nums = files.map((f) => Number(f.match(/^easychat-migration-(\d{3})-/)[1]))
-  return nums.length ? Math.max(...nums) : 0
+function maxMigrationVersionIO() {
+  return maxMigrationVersion(readdirSync(ROOT))
 }
 
 function mysqlAvailable() {
@@ -86,33 +81,17 @@ function query(bin, sql) {
 }
 
 /**
- * 解析 easychat.sql 基线 → Map<表, Set<列>>
- * 与 verify_schema_drift.mjs 同款解析思路（只取表/列，不比对索引与注释）。
+ * 解析 easychat.sql 基线（IO 接线：读文件；解析在纯核心里）
  */
-function parseBaseline() {
-  const sql = readFileSync(resolve(ROOT, 'easychat.sql'), 'utf8')
-  const tables = new Map()
-  const re = /CREATE\s+TABLE\s+`([^`]+)`\s*\(([\s\S]*?)\n\)\s*ENGINE/gi
-  let m
-  while ((m = re.exec(sql)) !== null) {
-    const cols = new Set()
-    for (const raw of m[2].split(/\r?\n/)) {
-      const line = raw.trim()
-      if (!line) continue
-      if (/^(PRIMARY\s+KEY|UNIQUE|KEY|INDEX|CONSTRAINT|FULLTEXT)\b/i.test(line)) continue
-      const cm = line.match(/^`([^`]+)`\s+[a-z]/i)
-      if (cm) cols.add(cm[1])
-    }
-    tables.set(m[1], cols)
-  }
-  return tables
+function parseBaselineIO() {
+  return parseBaseline(readFileSync(resolve(ROOT, 'easychat.sql'), 'utf8'))
 }
 
 function main() {
   console.log('[preflight] 存量库纳管前置校验 —— 「声称最新」时结构必须真的最新\n')
 
-  const configured = configuredBaselineVersion()
-  const maxVer = maxMigrationVersion()
+  const configured = configuredBaselineVersionIO()
+  const maxVer = maxMigrationVersionIO()
   console.log(`  baseline-version 配置 = ${configured.version}（来源：${configured.source}）`)
   console.log(`  仓库内最大迁移编号 = ${maxVer}`)
 
@@ -138,58 +117,35 @@ function main() {
     process.exit(1)
   }
 
-  if (tableCount === 0) {
-    console.log('  库为空 → 无需纳管校验，放行。')
-    process.exit(0)
-  }
-  if (hasHistory > 0) {
-    console.log('  已有 Flyway 历史表 → 由版本表负责记账，跳过结构比对。')
-    process.exit(0)
-  }
-  if (configured.version !== maxVer) {
-    console.log(`  baseline-version(${configured.version}) != 最大迁移号(${maxVer}) → ` +
-      '这是「合法的存量库待升级」：由人声明的版本号决定要跑哪些迁移，不做结构比对、不阻断。')
-    process.exit(0)
+  // 「声称自己是最新版」时才需要比对结构
+  const claimsLatest = configured.version === maxVer
+  let diff = { missingTables: [], missingCols: [] }
+  if (claimsLatest) {
+    console.log('  该库声称自己是最新版（baseline-version == 最大迁移号），比对结构…\n')
+    const baseline = parseBaselineIO()
+    const out = query(bin,
+      "SELECT table_name, column_name FROM information_schema.columns " +
+      "WHERE table_schema='" + CFG.db + "' ORDER BY table_name, ordinal_position;")
+    diff = computeDiff(baseline, parseLiveColumns(out))
   }
 
-  // 声称自己是最新版 → 结构必须真的与基线一致
-  console.log('  该库声称自己是最新版（baseline-version == 最大迁移号），比对结构…\n')
+  // ⚠ 判定在纯核心里（`decidePreflight`）。此前判定与 IO 混写在 main()，
+  //   导致 `verify_migration_flyway.mjs` 只能做读源码字面量的静态断言 ——
+  //   那看不出**分支方向**，把「结构一致才放行」反写成「结构不一致才放行」照样全绿。
+  //   现由 `verify_preflight_baseline_core.mjs` 的行为测试锁定。
+  const verdict = decidePreflight({
+    tableCount, hasHistory,
+    configuredVersion: configured.version, maxVersion: maxVer,
+    missingTables: diff.missingTables, missingCols: diff.missingCols
+  })
 
-  const baseline = parseBaseline()
-  const live = new Map()
-  const out = query(bin,
-    "SELECT table_name, column_name FROM information_schema.columns " +
-    "WHERE table_schema='" + CFG.db + "' ORDER BY table_name, ordinal_position;")
-  for (const line of out.split(/\r?\n/)) {
-    const t = line.split('\t')
-    if (t.length < 2) continue
-    if (!live.has(t[0])) live.set(t[0], new Set())
-    live.get(t[0]).add(t[1])
-  }
-
-  const missingTables = []
-  const missingCols = []
-  for (const [t, cols] of baseline) {
-    const lc = live.get(t)
-    if (!lc) { missingTables.push(t); continue }
-    for (const c of cols) if (!lc.has(c)) missingCols.push(t + '.' + c)
-  }
-
-  if (!missingTables.length && !missingCols.length) {
-    console.log(`  ✅ 结构与基线一致（${baseline.size} 张表全对齐）→ 放行。`)
+  if (verdict.exitCode === 0) {
+    console.log('  ' + verdict.reason)
     process.exit(0)
   }
 
-  console.error('  ❌ 该库声称自己是最新版，但结构与 easychat.sql 不一致。')
-  console.error('     若此时让 Flyway baseline，它会把未执行的迁移**静默跳过**——正是本项目吃过两次的坑。')
-  if (missingTables.length) {
-    console.error(`\n  缺失的表（${missingTables.length}）：`)
-    missingTables.forEach((t) => console.error('    - ' + t))
-  }
-  if (missingCols.length) {
-    console.error(`\n  缺失的列（${missingCols.length}）：`)
-    missingCols.forEach((c) => console.error('    - ' + c))
-  }
+  console.error('  ❌ ' + verdict.reason)
+  formatMissingReport(diff.missingTables, diff.missingCols).forEach((l) => console.error('    ' + l))
   console.error('\n  处置（二选一）：')
   console.error('   a) 若该库其实只到某个旧版本：把 SPRING_FLYWAY_BASELINE_VERSION 设为它的真实版本号，')
   console.error('      Flyway 会据此执行其后的迁移；')
