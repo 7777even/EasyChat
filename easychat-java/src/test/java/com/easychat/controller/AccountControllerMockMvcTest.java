@@ -19,6 +19,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import javax.validation.Validation;
@@ -364,6 +366,8 @@ class AccountControllerMockMvcTest {
     @Test
     @DisplayName("UserLoginDTO 自身的 Bean Validation 约束生效（空邮箱 / 非法邮箱被拒）")
     void loginDtoConstraintsAreEffective() {
+        // ⚠ 这条只证明「注解作用在对象上」，**不**证明端点会校验它。
+        //   端点级证据见下方「@Valid 接线」分组 —— 两者缺一不可。
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
         com.easychat.entity.dto.UserLoginDTO bad = new com.easychat.entity.dto.UserLoginDTO();
@@ -382,6 +386,151 @@ class AccountControllerMockMvcTest {
         good.setPassword("pwd12345");
         good.setCheckCode("1234");
         assertTrue(validator.validate(good).isEmpty(), "合法值应校验通过");
+    }
+
+    // ==================== @Valid 接线（openspec 2026-10-12-account-dto-validation）====================
+    // 缺陷：@Valid 在全仓控制器中使用 0 次，而 login/register 的 DTO 上有 11 条约束
+    //   → 全部不生效。2026-10-12 实证：空邮箱 / 非法邮箱 / 空昵称 均直达 Service 层。
+    // 本组是**端点级**证据：断言 HTTP 响应与「Service 未被调用」。
+
+    private void expectFieldLevelRejection(MockHttpServletRequestBuilder req, String expectedMessage)
+            throws Exception {
+        // ⚠ 文案格式是 AGlobalExceptionHandlerController#handleBindException **既有**的
+        //   `field + ": " + message`（多条以 "; " 连接）。该 handler 早就写好了、注释即写着
+        //   「参数绑定失败（@Valid @ModelAttribute）」，只是全仓无人用 @Valid 而从未触发。
+        //   本次**刻意不改它**：改格式会影响所有走 BindException 的端点（各类 Query 对象），
+        //   超出本 Change 范围。字段名前缀会暴露给终端用户，属已知的 UX 特性而非缺陷。
+        mockMvc.perform(req)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.message").value(expectedMessage));
+    }
+
+    @Test
+    @DisplayName("@Valid：登录邮箱格式非法 → 1001 + 字段级提示，且不调用 Service")
+    void loginInvalidEmailRejectedBeforeService() throws Exception {
+        givenCachedCode("ab12");
+
+        expectFieldLevelRejection(
+                post("/account/login")
+                        .param("checkCodeKey", CODE_KEY)
+                        .param("email", "not-an-email")
+                        .param("password", "pwd12345")
+                        .param("checkCode", "ab12"),
+                "email: 邮箱格式不正确");
+
+        verify(userInfoService, never()).login(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("@Valid：登录邮箱为空 → 1001 + 字段级提示，且不调用 Service")
+    void loginEmptyEmailRejectedBeforeService() throws Exception {
+        givenCachedCode("ab12");
+
+        expectFieldLevelRejection(
+                post("/account/login")
+                        .param("checkCodeKey", CODE_KEY)
+                        .param("email", "")
+                        .param("password", "pwd12345")
+                        .param("checkCode", "ab12"),
+                "email: 邮箱不能为空");
+
+        verify(userInfoService, never()).login(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("@Valid：注册昵称为空 → 1001 + 字段级提示，且不调用 Service")
+    void registerEmptyNickNameRejectedBeforeService() throws Exception {
+        givenCachedCode("ab12");
+
+        expectFieldLevelRejection(
+                post("/account/register")
+                        .param("checkCodeKey", CODE_KEY)
+                        .param("email", "a@b.com")
+                        .param("password", "pwd12345")
+                        .param("nickName", "")
+                        .param("checkCode", "ab12"),
+                "nickName: 昵称不能为空");
+
+        verify(userInfoService, never()).register(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("@Valid：重置密码新密码强度不足 → 1001 + 字段级提示，且不调用 Service")
+    void resetPasswordWeakPasswordRejectedBeforeService() throws Exception {
+        expectFieldLevelRejection(
+                post("/account/resetPassword")
+                        .param("email", "a@b.com")
+                        .param("code", "123456")
+                        // 只有数字、且不足 8 位 → 不满足 REGEX_PASSWORD
+                        .param("newPassword", "123"),
+                "newPassword: 密码格式不正确");
+
+        verify(userInfoService, never()).resetPasswordByEmail(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("@Valid：重置密码验证码为空 → 1001 + 字段级提示，且不调用 Service")
+    void resetPasswordEmptyCodeRejectedBeforeService() throws Exception {
+        expectFieldLevelRejection(
+                post("/account/resetPassword")
+                        .param("email", "a@b.com")
+                        .param("code", "")
+                        .param("newPassword", "newpwd12"),
+                "code: 验证码不能为空");
+
+        verify(userInfoService, never()).resetPasswordByEmail(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("@Valid：多字段同时非法仍返回 1001 且不调用 Service（不得因取第一条而漏检）")
+    void multipleViolationsStillRejected() throws Exception {
+        mockMvc.perform(post("/account/register")
+                        .param("checkCodeKey", "")
+                        .param("email", "not-an-email")
+                        .param("password", "")
+                        .param("nickName", "")
+                        .param("checkCode", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
+
+        verify(userInfoService, never()).register(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("契约不变：resetPassword 改收 DTO 后，请求参数名仍能正确绑定（前端零改动）")
+    void resetPasswordParameterNamesUnchanged() throws Exception {
+        mockMvc.perform(post("/account/resetPassword")
+                        .param("email", "a@b.com")
+                        .param("code", "123456")
+                        .param("newPassword", "newpwd12"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        verify(userInfoService).resetPasswordByEmail("a@b.com", "123456", "newpwd12");
+    }
+
+    @Test
+    @DisplayName("类级 @Validated 与 sendEmailCode 的 @NotEmpty 均未被本次改动动过（结构断言）")
+    void classLevelValidatedIntact() throws Exception {
+        // ⚠ **不能用 MockMvc 端到端验这条**：`standaloneSetup` 不注册
+        //   MethodValidationPostProcessor，故「类级 @Validated + 方法参数注解」这条路
+        //   在本测试环境下**根本不生效**，写端到端断言必然恒红 —— 那是环境缺失，不是缺陷。
+        //   （与 AGENTS §2.1 第 3 条同源：断言必须能真正区分对错，否则不要假装覆盖。）
+        //   改为结构断言：本次 Change 只收敛 resetPassword，未触碰这两处，故必须仍在。
+        assertTrue(AccountController.class.isAnnotationPresent(Validated.class),
+                "类级 @Validated 被移除了 —— 会连带废掉 sendEmailCode 的 @NotEmpty 参数校验");
+
+        java.lang.reflect.Method sendEmailCode = AccountController.class
+                .getMethod("sendEmailCode", String.class, Integer.class);
+        java.lang.annotation.Annotation[][] paramAnns = sendEmailCode.getParameterAnnotations();
+        boolean hasNotEmpty = false;
+        for (java.lang.annotation.Annotation ann : paramAnns[0]) {
+            if (ann instanceof javax.validation.constraints.NotEmpty) {
+                hasNotEmpty = true;
+            }
+        }
+        assertTrue(hasNotEmpty, "sendEmailCode 的 email 参数 @NotEmpty 被移除了");
     }
 
     private void givenCachedCode(String code) {

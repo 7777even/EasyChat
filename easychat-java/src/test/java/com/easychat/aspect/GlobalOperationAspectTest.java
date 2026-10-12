@@ -5,6 +5,7 @@ import com.easychat.controller.AccountController;
 import com.easychat.controller.AdminUserInfoController;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.dto.UserLoginDTO;
+import com.easychat.entity.dto.UserResetPasswordDTO;
 import com.easychat.entity.query.UserInfoQuery;
 import com.easychat.exception.BusinessException;
 import com.easychat.redis.RedisUtils;
@@ -95,8 +96,11 @@ public class GlobalOperationAspectTest {
     }
 
     private JoinPoint resetPasswordEndpoint() throws Exception {
-        return joinPointOf(
-                AccountController.class.getMethod("resetPassword", String.class, String.class, String.class));
+        // 2026-10-12（openspec 2026-10-12-account-dto-validation）：签名由「3 个 String」
+        // 改为「单个 UserResetPasswordDTO」。此处随之更新 —— 这正是**删签名而非改名**的
+        // 用意：反射定位点会编译期报错（NoSuchMethodException），把隐藏调用点全部暴露出来，
+        // 而不会「改了签名但某处仍按老签名调用且静默失效」。
+        return joinPointOf(AccountController.class.getMethod("resetPassword", UserResetPasswordDTO.class));
     }
 
     private JoinPoint getSysSettingEndpoint() throws Exception {
