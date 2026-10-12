@@ -28,15 +28,26 @@ export const GROUP_CONTACT_TYPE = 1
 /**
  * @ 正文中匹配用户 ID 的正则。
  *
- * ⚠️ **本轮刻意不动**：格式 `@U<字母数字>` 是**跨端契约** ——
- *   服务端 `ExtraDataTools.isAtAll` 与 `MessageSendDto.atUserIds` 消费同一形态，
- *   收紧需前后端协同 + 存量数据评估。
- *   已知误命中：`@Ubuntu` 会被提取为 `buntu`。已登记为独立 Change，**不做假覆盖**。
+ * 形态必须**精确等于真实 userId 的取值集合**，而不是「看起来像 id」：
+ *   ① `U` + 11 位数字 —— `StringTools.getUserId()` = USER前缀 + `getRandomNumber(11)`；
+ *   ② `Urobot` —— `Constants.ROBOT_UID`，**真实系统账号**（有头像文件，
+ *      `ChatMessageServiceImpl` 以 `contactId == Urobot` 判会话）。
+ * 因此收紧为 `@(U\d+|Urobot)(?![\w])`：收紧前的 `[A-Za-z0-9]+` 会把
+ * `@Ubuntu` / `@User` 这类**普通英文单词**误判为提及（2026-10-12 立项修复）。
  *
- *   抽离前该正则被**复制了两份**（`buildExtraData` 与 `buildAtUserIds`），
- *   且两者去重口径已分叉。现只此一份。
+ * 抽离前该正则被**复制了两份**（`buildExtraData` 与 `buildAtUserIds`），
+ * 且两者去重口径已分叉。现只此一份。
+ *
+ * ── 为什么**不加左词边界**（ADR-002）────────────────────────────
+ *   用户在输入框里**选中一段文本再点 @ 面板**时，`spliceAtText` 会产出
+ *   `你好@U01234567890 `。若要求 `@` 前不得紧邻单词字符，这条**合法提及会被漏掉**。
+ *   故刻意不加。代价是 `价格5@U01234567890 美元` 仍会命中 —— 这个假阳性
+ *   **无可观测后果**：`atUserIds` 落库到 `chat_message.at_user_ids` 后
+ *   仅作搜索过滤 `like %id%`，服务端不解析正文、无任何通知逻辑，
+ *   前端也不读收到的消息（该字段**只写不读**）。
+ *   取舍原则：宁可留一个无后果的假阳性，也不引入会漏掉真实提及的假阴性。
  */
-const AT_USER_ID_PATTERN = /@(U[A-Za-z0-9]+)/g
+const AT_USER_ID_PATTERN = /@(U\d+|Urobot)(?![\w])/g
 
 /**
  * 本人群角色是否允许 @所有人。

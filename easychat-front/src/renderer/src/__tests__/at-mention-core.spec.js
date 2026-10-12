@@ -361,3 +361,101 @@ describe('T3 目标行为 — atUserIds 口径统一且去重（缺陷 3）', ()
     expect(Array.isArray(extra.atUserIds)).toBe(true)
   })
 })
+
+// ── 遗留 #19：ID 形态精确化 ────────────────────────────────────────
+// 收紧前的正则 `@(U[A-Za-z0-9]+)` 把**任意英文单词**误判为提及。
+// 2026-10-12 取证推翻了原登记的两条理由（服务端不解析正文、该字段只写不读），
+// 严重性下调为「低」；但形态本身仍应收紧到真实 userId 集合。
+describe('T4 遗留 #19 — ID 形态精确化', () => {
+  // 真实 userId = "U" + 11 位数字（StringTools.getUserId() = USER前缀 + 随机数(11)）
+  const REAL_ID = 'U01234567890'
+
+  describe('反例：普通英文单词不得被误判为提及', () => {
+    // ⚠ 2026-10-12 实跑订正：收紧前 `@Ubuntu` 提取出的是 **`Ubuntu`** 而非原台账记的 `buntu`
+    //   —— .match() 带捕获组时返回**完整匹配**，substring(1) 去掉的是 `@` 而不是 `U`。
+    const falsePositives = [
+      ['@Ubuntu', '@Ubuntu 这个系统'],
+      ['@User', '@User 手册'],
+      ['@Usernames', '@Usernames 列表'],
+      ['@US', '@US 大选'],
+      ['@UI', '@UI 设计稿']
+    ]
+    for (const [name, content] of falsePositives) {
+      it(`不提取：${name}`, () => {
+        expect(extractAtUserIds(content), content).toEqual([])
+      })
+    }
+  })
+
+  describe('边界：数字后紧跟字母不算完整 ID', () => {
+    it(`@${REAL_ID}abc → 不提取（(?!\\w) 生效）`, () => {
+      expect(extractAtUserIds(`@${REAL_ID}abc`)).toEqual([])
+    })
+
+    it(`@${REAL_ID}_x → 不提取（下划线属 \\w）`, () => {
+      expect(extractAtUserIds(`@${REAL_ID}_x`)).toEqual([])
+    })
+
+    it(`@${REAL_ID}-x → 提取（连字符非 \\w，是合法终止）`, () => {
+      expect(extractAtUserIds(`@${REAL_ID}-x`)).toEqual([REAL_ID])
+    })
+
+    it(`@${REAL_ID} 后面跟中文 → 提取（中文非 \\w）`, () => {
+      expect(extractAtUserIds(`请看 @${REAL_ID} 的发言`)).toEqual([REAL_ID])
+    })
+  })
+
+  describe('守护：系统账号 Urobot 必须仍可被提取（ADR-001）', () => {
+    // Constants.ROBOT_UID = "U" + "robot"，是**真实系统账号**（有头像文件、
+    // 有以它为 contactId 的会话）。纯 \\d+ 会把它挡在 @ 之外，
+    // 那样「@ 机器人」在将来有人基于 atUserIds 实现提醒时会静默失效。
+    it('@Urobot 被提取', () => {
+      expect(extractAtUserIds('@Urobot 帮个忙')).toEqual(['Urobot'])
+    })
+
+    it('@Urobot 与真实 ID 混排时两者都被提取', () => {
+      expect(extractAtUserIds(`@${REAL_ID} 和 @Urobot`)).toEqual([REAL_ID, 'Urobot'])
+    })
+
+    it('@UrobotFoo 不提取（边界生效，不是前缀匹配）', () => {
+      expect(extractAtUserIds('@UrobotFoo')).toEqual([])
+    })
+  })
+
+  describe('守护：已选中文本后接 @ 的合法提及不得漏掉（ADR-002 取舍点）', () => {
+    // 用户在输入框选中「你好」再点 @ 面板，spliceAtText 产出「你好@U01234567890 」。
+    // 若给正则加**左**词边界，这条合法提及会被漏掉 —— 故刻意不加，
+    // 代价是「价格5@U01234」这类仍会命中（该字段只写不读，无可观测后果）。
+    it('选中中文本后拼接的提及仍被提取', () => {
+      expect(extractAtUserIds(`你好@${REAL_ID} `)).toEqual([REAL_ID])
+    })
+
+    it('紧贴数字的 @ 仍被提取（容忍无左边界的取舍）', () => {
+      expect(extractAtUserIds(`价格5@${REAL_ID} 美元`)).toEqual([REAL_ID])
+    })
+
+    it('⚠ 已知残留：邮箱形态 a@U123.com 仍会提取出 U123（ADR-002 明确接受的代价）', () => {
+      // 这条**不是**遗漏，而是 ADR-002 取舍的一部分，在此显式锁定以免被后人误当 bug「顺手修掉」。
+      // 为何接受：`@` 前加左边界会漏掉「选中一段文本再点 @」这条**正常**路径。
+      // 为何无害：`atUserIds` 只写不读（服务端仅作 like %id% 搜索过滤，不解析正文、
+      // 无通知；前端不读收到的消息），故该假阳性**没有任何可观测后果**。
+      // ⚠ 若将来有人基于 atUserIds 实现「@ 我」红点提醒，必须重新评估此取舍：
+      //   那时正确做法不是加左边界（会漏真实提及），而是改为**按真实群成员白名单过滤**。
+      expect(extractAtUserIds('a@U123.com')).toEqual(['U123'])
+    })
+  })
+
+  describe('端到端：extraData 与请求字段口径一致', () => {
+    it('@Ubuntu 不产生 atUserIds，且 extraData 为 null', () => {
+      expect(buildExtraData({ contactType: 1, messageContent: '@Ubuntu 这个系统' })).toBeNull()
+      expect(buildAtUserIdsField('@Ubuntu 这个系统')).toBeNull()
+    })
+
+    it('@Urobot 仍同时写入 extraData 与请求字段', () => {
+      const content = `@Urobot 和 @${REAL_ID}`
+      const extra = JSON.parse(buildExtraData({ contactType: 1, messageContent: content }))
+      expect(extra.atUserIds).toEqual(['Urobot', REAL_ID])
+      expect(buildAtUserIdsField(content)).toBe('Urobot,' + REAL_ID)
+    })
+  })
+})

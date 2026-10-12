@@ -343,8 +343,11 @@ const closeAtPopover = () => {
   atKeyword.value = ''
 }
 
-// 在光标处插入 @ 文本（沿用既有 @Ux 格式，服务端 atUserIds 解析依赖此形态）
-// 字符串拼接在纯核心（spliceAtText）；本函数只保留 DOM 副作用。
+// 在光标处插入 @ 文本（形态为 `@<userId> `，尾随空格）。
+// ⚠ 2026-10-12 订正：原注释称「服务端 atUserIds 解析依赖此形态」——**不成立**。
+//   服务端只做 ExtraDataTools.isAtAll(extraData)（读 atAll 布尔标记，与正文无关）；
+//   atUserIds 落到 chat_message.at_user_ids 后仅作搜索过滤 like %id%，**无任何解析**。
+//   该形态之所以仍须保持稳定，是因为**客户端自己**要用它反查被 @ 的用户（本地即可解析）。
 const insertAtText = (text) => {
   const textarea = inputRef.value && inputRef.value.textarea
   const content = msgContent.value
@@ -477,8 +480,14 @@ const sendMessage = async (e) => {
 
 /**
  * 组装消息扩展数据：引用回复 / 群 @ 提及 / @所有人
- * 均落在 extraData（JSON 字符串），@ 另落 atUserIds（服务端用于红点提醒）。
+ * 均落在 extraData（JSON 字符串），@ 另落 atUserIds 字段与请求字段。
  * 三者可共存，按需合并，避免引用消息丢失 @ 标记。
+ *
+ * ⚠ 2026-10-12 订正：原注释称「atUserIds 服务端用于红点提醒」——**不成立**。
+ *   全仓检索无按 atUserIds 发通知或红点的代码；该字段**只写不读**
+ *   （服务端仅存列并用于 like %id% 搜索过滤，前端也不读收到的消息）。
+ *   若日后要实现「@ 我」红点，届时必须一并复核 atMentionCore 的提取口径
+ *   （当前刻意不加左词边界，见该文件 ADR-002）。
  *
  * 判定在纯核心（@/utils/atMentionCore.mjs）；本函数只负责把响应式状态喂进去。
  */
