@@ -3,6 +3,10 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import Moment from '@/views/moment/Moment.vue'
 import { useUserInfoStore } from '@/stores/UserInfoStore'
+import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
+
+// 本地文件服务器令牌（遗留 #29）：形如主进程 ensureFileToken 的 64 位十六进制
+const FILE_TOKEN = 'a1'.repeat(32)
 
 /**
  * 朋友圈主页的**真实挂载**测试（DOM 级）。
@@ -234,6 +238,9 @@ async function mountMoment (handler) {
   setActivePinia(pinia)
   const userStore = useUserInfoStore()
   userStore.setInfo({ userId: MY_ID, nickName: '我' })
+  // 本地文件服务器端口 + 令牌（遗留 #29：服务端无令牌一律 403）
+  useGlobalInfoStore().setInfo('localServerPort', 10241)
+  useGlobalInfoStore().setInfo('localFileServerToken', FILE_TOKEN)
   const request = makeRequest(makeHandler(handler))
   const wrapper = mount(Moment, {
     global: {
@@ -316,6 +323,18 @@ describe('Moment.vue 真实挂载（DOM 级）', () => {
     expect(items[1].find('.location').exists()).toBe(false)
     expect(items[0].find('.moment-media').classes()).toContain('media-count-3')
     expect(items[1].find('.moment-media').exists()).toBe(false)
+  })
+
+  it('★ 媒体 URL 带 fileToken 鉴权参数（遗留 #29：缺令牌服务端 403 → 朋友圈列表图静默不显示）', async () => {
+    const { wrapper } = await mountMoment()
+    await flush()
+    const media = wrapper.findAll('.moment-item')[0].findAll('.moment-media .media-item')
+    expect(media.length).toBeGreaterThan(0)
+    for (const [i, item] of media.entries()) {
+      const src = item.find('img').attributes('src') || ''
+      expect(src, `media#${i} src=${src}`).toContain(`fileToken=${FILE_TOKEN}`)
+      expect(src).not.toContain('fileToken=undefined')
+    }
   })
 
   it('未读红点：>0 显示数值；点通知中心 → 清零并打开通知组件', async () => {

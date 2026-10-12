@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ChatMessageVoice from '@/views/chat/ChatMessageVoice.vue'
+import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
+
+// 本地文件服务器令牌（docs/system-facts.md §14 遗留 #29）：形如主进程 ensureFileToken 的 64 位十六进制
+const FILE_TOKEN = 'c'.repeat(64)
 
 /**
  * 语音消息组件的**真实挂载**测试（DOM 级）。
@@ -83,6 +87,9 @@ describe('ChatMessageVoice.vue 真实挂载（DOM 级）', () => {
   beforeEach(() => {
     pinia = createPinia()
     setActivePinia(pinia)
+    // 本地文件服务器端口 + 令牌（docs/system-facts.md §14 遗留 #29：服务端无令牌一律 403）
+    useGlobalInfoStore().setInfo('localServerPort', 10241)
+    useGlobalInfoStore().setInfo('localFileServerToken', FILE_TOKEN)
     MessageStub.error.mockClear()
     // jsdom 不实现 HTMLMediaElement.play/pause，未 stub 时挂载或点击即抛
     // "Not implemented" —— 这正是「不真正跑过」的证据，故此处必须补。
@@ -107,6 +114,13 @@ describe('ChatMessageVoice.vue 真实挂载（DOM 级）', () => {
     //   这里断言 URL 侧的 fileType=3，与 verify_file_type_content_type.mjs 呼应。
     expect(src).toContain('fileType=3')
     expect(src).toContain('fileId=1001')
+  })
+
+  it('★ <audio> 的 src 带 fileToken 鉴权参数（遗留 #29：缺令牌服务端 403 → 语音静默播不出）', () => {
+    const { wrapper } = mountVoice(voiceData(), pinia)
+    const src = wrapper.find('audio').attributes('src') || ''
+    expect(src).toContain(`fileToken=${FILE_TOKEN}`)
+    expect(src).not.toContain('fileToken=undefined')
   })
 
   it('无 messageId 时 src 为空字符串（不生成坏 URL）', () => {

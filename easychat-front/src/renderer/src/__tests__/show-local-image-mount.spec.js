@@ -1,10 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
-// ShowLocalImage 依赖 GlobalInfoStore 取 localServerPort，mock 掉避免 pinia 依赖
+// ShowLocalImage 依赖 GlobalInfoStore 取 localServerPort 与文件令牌，mock 掉避免 pinia 依赖
+// 令牌形如主进程 ensureFileToken 生成的 64 位十六进制（docs/system-facts.md §14 遗留 #29）
+// 用 vi.hoisted 造可变状态：否则「令牌缺失」这条路径无法被覆盖
+// （mock 恒返回令牌时，断言 fileToken= 会**恒真**，等于假覆盖）
+const storeState = vi.hoisted(() => ({ token: 'b'.repeat(64) }))
 vi.mock('@/stores/GlobalInfoStore', () => ({
   useGlobalInfoStore: () => ({
-    getInfo: (key) => (key === 'localServerPort' ? 5050 : undefined)
+    getInfo: (key) => {
+      if (key === 'localServerPort') return 5050
+      if (key === 'localFileServerToken') return storeState.token
+      return undefined
+    }
   })
 }))
 
@@ -72,6 +80,23 @@ describe('ShowLocalImage.vue 真实挂载（DOM 级）', () => {
     await wrapper.find('.image-panel').trigger('click')
     console.log('EMITTED:', JSON.stringify(wrapper.emitted()))
     expect(wrapper.emitted('click')).toBeTruthy()
+  })
+
+  it('★ URL 带 fileToken 鉴权参数（遗留 #29：服务端无令牌一律 403，缺失即图片静默全裂）', () => {
+    const src = mountImage().find('img').attributes('src') || ''
+    expect(src).toContain(`fileToken=${storeState.token}`)
+  })
+
+  it('令牌缺失时仍带 fileToken 参数（值为空），由服务端判 403 而非拼出坏 URL', () => {
+    storeState.token = undefined
+    try {
+      const src = mountImage().find('img').attributes('src') || ''
+      expect(src).toContain('fileToken=')
+      // 关键：不得出现 undefined 字面量（那会让服务端拿到字符串 "undefined" 当令牌）
+      expect(src).not.toContain('fileToken=undefined')
+    } finally {
+      storeState.token = 'b'.repeat(64)
+    }
   })
 
   it('showPlay 为 true 时渲染播放按钮', () => {

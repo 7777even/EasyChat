@@ -4,6 +4,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import ShowMedia from '@/views/show/ShowMedia.vue'
 
+// 本地文件服务器令牌（遗留 #29）：形如主进程 ensureFileToken 的 64 位十六进制
+const FILE_TOKEN = 'f'.repeat(64)
+
 /**
  * 媒体预览独立窗口的**真实挂载**测试（DOM 级）。
  *
@@ -138,6 +141,30 @@ describe('ShowMedia.vue 真实挂载（DOM 级）', () => {
     expect(img.attributes('src')).toContain('fileType=0')
     expect(img.attributes('src')).toContain('forceGet=false')
     expect(wrapper.find('.loading').exists()).toBe(false)
+  })
+
+  it('★ URL 带 fileToken 鉴权参数（遗留 #29：pageInitData 下发的令牌缺失 → 服务端 403 → 媒体窗口全裂）', async () => {
+    const { wrapper } = await mountMedia()
+    ipcCallback('pageInitData')(null, {
+      localServerPort: 7788,
+      localFileServerToken: FILE_TOKEN,
+      fileList: FILE_LIST,
+      currentFileId: 'F001'
+    })
+    await flush()
+    const src = wrapper.find('.viewer-stub img').attributes('src') || ''
+    expect(src).toContain(`fileToken=${FILE_TOKEN}`)
+    expect(src).not.toContain('fileToken=undefined')
+  })
+
+  it('pageInitData 未带令牌时 URL 仍含 fileToken 参数（空值），由服务端判 403', async () => {
+    // 对照上条：证明令牌**真的**来自 pageInitData，而非某处硬编码的默认值
+    const { wrapper } = await mountMedia()
+    ipcCallback('pageInitData')(null, { localServerPort: 7788, fileList: FILE_LIST, currentFileId: 'F001' })
+    await flush()
+    const src = wrapper.find('.viewer-stub img').attributes('src') || ''
+    expect(src).toContain('fileToken=')
+    expect(src).not.toContain(FILE_TOKEN)
   })
 
   it('currentFileId 不在列表 → 回落第 0 项', async () => {

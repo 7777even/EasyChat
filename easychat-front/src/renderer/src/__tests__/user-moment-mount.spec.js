@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import UserMoment from '@/views/moment/UserMoment.vue'
+import { useGlobalInfoStore } from '@/stores/GlobalInfoStore'
+
+// 本地文件服务器令牌（遗留 #29）：形如主进程 ensureFileToken 的 64 位十六进制
+const FILE_TOKEN = 'e'.repeat(64)
 
 /**
  * 个人朋友圈主页弹窗的**真实挂载**测试（DOM 级）。
@@ -78,6 +82,9 @@ const LIST = [
 async function mountUserMoment (handler) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  // 本地文件服务器端口 + 令牌（遗留 #29：服务端无令牌一律 403）
+  useGlobalInfoStore().setInfo('localServerPort', 10241)
+  useGlobalInfoStore().setInfo('localFileServerToken', FILE_TOKEN)
   const request = makeRequest(handler)
   const wrapper = mount(UserMoment, {
     global: {
@@ -159,6 +166,18 @@ describe('UserMoment.vue 真实挂载（DOM 级）', () => {
     expect(media[1].find('video').attributes('src')).toContain('fileId=F002')
     expect(media[1].find('.video-icon').exists()).toBe(true)
     expect(media[2].find('img').attributes('src')).toContain('showCover=false')
+  })
+
+  it('★ 媒体 URL 带 fileToken 鉴权参数（遗留 #29：缺令牌服务端 403 → 主页动态图静默不显示）', async () => {
+    const { wrapper } = await mountUserMoment(() => ({ code: 0, data: freshList() }))
+    wrapper.vm.show('U010', '阿强')
+    await flush()
+    const media = wrapper.findAll('.moment-media .media-item')
+    for (const [i, item] of media.entries()) {
+      const src = item.find(i === 1 ? 'video' : 'img').attributes('src') || ''
+      expect(src, `item#${i} src=${src}`).toContain(`fileToken=${FILE_TOKEN}`)
+      expect(src).not.toContain('fileToken=undefined')
+    }
   })
 
   it('点图片 → 内置查看器：只含图片、起始索引按图片序（跳过视频）', async () => {
