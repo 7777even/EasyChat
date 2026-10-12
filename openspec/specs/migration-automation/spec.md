@@ -255,3 +255,43 @@
 
 - **WHEN** DDL 使用不带反引号的标识符（`ADD COLUMN seq`、`ADD INDEX idx_session_seq`）
 - **THEN** 门禁 SHALL 识别为结构性 DDL 并纳入判定（识别不到即等于断言空转）
+
+---
+
+### Requirement: 闸门判定可被行为测试验证
+
+「放行 / 拒绝」的判定必须抽为纯函数，其**条件分支方向**由行为测试锁定——
+把「结构一致才放行」反写成「结构不一致才放行」必须导致测试转红。
+
+> 2026-10-12 补记（openspec/archive/2026-10-12-preflight-baseline-machine-check）：
+> 此前判定与 IO 混写在 main() 中，erify_migration_flyway.mjs 只能做「读源码找字面量」的
+> 静态断言——那看不出分支方向。抽出纯核心后，行为测试接住了该盲区。
+
+#### Scenario: 声称最新版但结构有缺失 → 拒绝（方向敏感）
+
+- **WHEN** aseline-version == 最大迁移号，且差异计算得出 1 张缺表
+- **THEN** decidePreflight 返回 exitCode = 1，kind 为「结构与基线不一致」
+- **AND** **不**返回 exitCode = 0（实测反写方向后 **7 条用例转红**）
+
+#### Scenario: 声称最新版且结构完全一致 → 放行（方向敏感）
+
+- **WHEN** aseline-version == 最大迁移号，且差异为空
+- **THEN** 返回 exitCode = 0，kind 为「结构一致」
+
+#### Scenario: 其余三个放行分支
+
+- **WHEN** 分别为「库为空」/「已有 Flyway 历史表」/「版本号 != 最大迁移号」
+- **THEN** 均返回 exitCode = 0，且各自命中已登记的 kind\n
+#### Scenario: 判定种类穷举自检
+
+- **WHEN** 收集全部用例命中的 kind\n- **THEN** 每个已登记的 kind **至少被一条用例命中**（防分支被加了却没测）
+- **AND** 用例不产生未登记的 kind\n
+#### Scenario: 核心保持纯粹
+
+- **WHEN** 静态检查 preflightBaselineCore.mjs\n- **THEN** 不含 process.exit / s / child_process / execFileSync\n- **AND** 该断言**先剥注释再匹配**（核心注释里解释「不 exit」，否则会自伤）
+
+#### Scenario: 静态断言的职责边界
+
+- **WHEN** 阅读 erify_migration_flyway.mjs 第 6 节
+- **THEN** 注释明确：静态断言只证明「拒绝分支**存在**」，方向由行为测试负责
+- **AND** 真机验证仍作为最终兜底保留
