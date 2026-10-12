@@ -296,3 +296,82 @@ BCrypt 登录 / 注册 / 改密路径必须有自动化回归用例覆盖。
 **移除原因**: 应用日志（容器 stdout、日志聚合平台、CI 构建归档）的读权限通常远宽于普通用户——「谁能看到日志谁就能重置任意账号（含管理员）的密码」，是真实的凭据泄露通道。同时前端已向用户暴露完整找回密码流程，把验证码只写日志意味着该功能对真实用户永远不可用。
 
 **替代方案**: 新增 `MailService` 通过 SMTP 真实投递；未配置邮件服务时 fail-closed 返回 `CODE_1002`（见上方「邮箱验证码真实投递」）。本地开发如需联调，在 `application-dev.properties` 或仓库根 `.env` 配真实 SMTP。
+
+---
+
+### Requirement: 认证入口字段级校验真正生效
+
+login / register / resetPassword 三个端点必须在**进入 Service 之前**校验请求字段，
+非法输入返回 `code=1001` 与**字段级**中文提示。
+
+> 2026-10-12 补记（`openspec/archive/2026-10-12-account-dto-validation`）：
+> 本仓库此前 `@Valid` **全仓使用 0 次**，而 `UserLoginDTO` / `UserRegisterDTO` 上共 11 条
+> `@NotEmpty` / `@Email` 约束——参数以 `@ModelAttribute` 绑定时必须显式标注 `@Valid` 才触发，
+> 故那 11 条约束**一条都没生效**。实测：空邮箱 / 非法邮箱 / 空昵称均 `HTTP 200` 直达 Service 层。
+
+#### Scenario: 登录邮箱格式非法
+
+- **WHEN** `POST /account/login`，`email=not-an-email`，其余字段合法
+- **THEN** 返回 `HTTP 400` + `code=1001`
+- **AND** `message` 为 `email: 邮箱格式不正确`
+- **AND** **不调用** `userInfoService.login`
+
+#### Scenario: 登录邮箱为空
+
+- **WHEN** `POST /account/login`，`email=`（空）
+- **THEN** 返回 `code=1001` + `email: 邮箱不能为空`
+- **AND** 不调用 Service
+
+#### Scenario: 注册昵称为空
+
+- **WHEN** `POST /account/register`，`nickName=`（空），其余合法
+- **THEN** 返回 `code=1001` + `nickName: 昵称不能为空`
+- **AND** 不调用 Service
+
+#### Scenario: 重置密码新密码强度不足
+
+- **WHEN** `POST /account/resetPassword`，`newPassword=123`（不含字母、不足 8 位）
+- **THEN** 返回 `code=1001` + `newPassword: 密码格式不正确`
+- **AND** 不调用 `userInfoService.resetPasswordByEmail`
+
+#### Scenario: 多个字段同时非法
+
+- **WHEN** `POST /account/register`，`email` 与 `nickName` 均为空
+- **THEN** 返回 `code=1001`，`message` 含各违规字段的提示（以 `"; "` 连接）
+- **AND** 不调用 Service
+
+> **文案格式说明**：`字段名: 提示` 是 `AGlobalExceptionHandlerController#handleBindException`
+> **既有**的实现（`field + ": " + message`），本次**刻意未改**——改格式会影响所有走
+> `BindException` 的端点（各类 Query 对象）。字段名前缀会暴露给终端用户，
+> 属**已知的 UX 特性而非缺陷**；若要更友好的文案须单独立项。
+
+---
+
+### Requirement: 认证入口校验口径统一
+
+三个端点一律「DTO + `@Valid`」，不再存在「DTO 靠注解、散参数靠 `@NotNull`」的双轨。
+
+#### Scenario: resetPassword 接收 DTO
+
+- **WHEN** 检查 `AccountController#resetPassword` 的签名
+- **THEN** 形参为**单个** `UserResetPasswordDTO`（`email` / `code` / `newPassword`），
+      不再是三个 `String`
+- **AND** 该参数标注 `@Valid`
+
+#### Scenario: 请求参数名保持不变（前端零改动）
+
+- **WHEN** 以表单参数 `email` / `code` / `newPassword` 调用 `/account/resetPassword`
+- **THEN** 参数正确绑定到 DTO 对应字段，校验通过时正常调用 Service
+- **AND** **前端无需任何改动**（`check-api-contract.mjs` 实测 exit 0）
+
+#### Scenario: 类级 @Validated 仍为现存机制
+
+- **WHEN** `AccountController#sendEmailCode` 仍用 `@NotEmpty String email`
+- **THEN** 类级 `@Validated` 仍存在并对其生效
+- **AND** 该方法**本轮刻意未改**（本次只收敛 `resetPassword`）
+
+> ⚠ **已知测试盲区**：`MockMvcBuilders.standaloneSetup` **不注册**
+> `MethodValidationPostProcessor`，故「类级 `@Validated` + 方法参数注解」这条路
+> 在单测环境下**根本不触发**，端到端断言必然恒红——那是**环境缺失**而非缺陷。
+> `AccountControllerMockMvcTest#classLevelValidatedIntact` 因此改用**结构断言**
+> （反射检查注解仍在），并按 §2.1 第 3 条登记为不可单测检测项（`docs/system-facts.md` §14 #32）。
