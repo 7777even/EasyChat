@@ -11,7 +11,7 @@
  *
  * 退出码：0 = 全部通过；1 = 有失败项
  */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
 
@@ -204,6 +204,39 @@ if (existsSync(join(ROOT, '.env'))) {
   fail('.env 未被提交', '工作区存在 .env，若已入库即为凭据泄露')
 } else {
   pass('.env 未被提交')
+}
+
+// ── 5. 测试资源（2026-10-13 新增）────────────────────────────────
+// ⚠ 起因（openspec/changes/2026-10-13-backend-integration-test-layer T13 实测）：
+//   本门禁的 RES_DIR 指向 src/main/resources，**src/test/resources 完全不在扫描范围**。
+//   实测往 application-test.properties 写入 `spring.datasource.password=RealSecret123`
+//   后本门禁仍 exit 0 —— 缺口属实，不是「以为」。
+//   风险不是抽象的：集成测试常有人为了连本机真库而临时在 test properties 写真实口令，
+//   而该文件是入库的。
+//   判定复用上方同一套 parseProps / isPlaceholder / SECRET_KEY_RE，避免出现两套「什么算敏感」。
+const TEST_RES_DIR = join(ROOT, 'easychat-java', 'src', 'test', 'resources')
+if (existsSync(TEST_RES_DIR)) {
+  const testProps = readdirSync(TEST_RES_DIR).filter((f) => f.endsWith('.properties'))
+  if (testProps.length === 0) {
+    // 防「空转通过」：目录存在却一个 properties 都没有，说明扫描口径写错了
+    fail('测试资源目录可扫到 .properties 文件', `目录存在但扫到 ${testProps.length} 个 —— 扫描口径可能已失效`)
+  } else {
+    for (const f of testProps) {
+      const props = parseProps(join(TEST_RES_DIR, f))
+      let bad = 0
+      for (const [k, v] of props) {
+        if (SECRET_KEY_RE.test(k) && !isPlaceholder(v) && v !== '') {
+          fail(`测试资源敏感键为占位符形式：${f} → ${k}`, `实际为 ${v}`)
+          bad++
+        }
+      }
+      if (bad === 0) {
+        pass(`测试资源无裸凭据：${f}（已扫 ${props.size} 个键）`)
+      }
+    }
+  }
+} else {
+  pass('测试资源目录不存在（无测试配置需检查）')
 }
 
 // ── 输出 ──────────────────────────────────────────────────────
