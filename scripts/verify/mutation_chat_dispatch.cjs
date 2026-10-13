@@ -46,9 +46,17 @@ function restore () {
 
 function runTests () {
   try {
-    const out = execFileSync('cmd', ['/c', 'npm run test'], {
+    // ⚠ 不可硬编码 `cmd`：那是 Windows 专有，ubuntu runner 上 execFileSync 抛 ENOENT
+    //   → e.status 为 undefined → code 变成 null → 本脚本一条 [捕获]/[漏网] 标记都不输出，
+    //   而 driver 只能报「脚本未输出失败态标记行，请手动运行」——
+    //   **看不出是平台问题**（2026-10-13 CI 实测：mutation-scripts job 因此恒红）。
+    //   与 mutation_channel_online_status#runMvn 保持同一口径。
+    const opts = {
       cwd: FRONT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 32 * 1024 * 1024
-    })
+    }
+    const out = process.platform === 'win32'
+      ? execFileSync('cmd', ['/c', 'npm run test'], opts)
+      : execFileSync('sh', ['-c', 'npm run test'], opts)
     return { code: 0, out }
   } catch (e) {
     return {
@@ -220,9 +228,19 @@ try {
       missed++
       allCaught = false
     } else {
-      const failed = (r.out.match(/×/g) || []).length
+      // ⚠ 初版用 `(r.out.match(/×/g) || []).length` 统计转红用例数，
+      //   实测**恒为 0** —— vitest 在非 TTY 下走 basic reporter，输出里没有 `×`。
+      //   于是每行都打「约 0 个用例转红」却又 exit=1，读起来像脚本自相矛盾，
+      //   **恒零的计数比不报更误导**（AGENTS §2.1 第 3 条：不假装覆盖）。
+      //   改为解析 vitest 失败摘要；解析不到就如实说解析不到，而不是显示 0。
+      // ⚠ 计数必须**剥 ANSI 色码**再匹配：vitest 的失败摘要行含 `\x1b[31m[1m[7m` 前缀，
+      //   不剥则连 `Failed Tests` 四个字本身都被色码切开。行内文本实测为 `Failed Tests 2`
+      //   （**不是** `Tests  N failed` —— 那是按印象臆测的写法，实测不命中）。
+      const plain = String(r.out).replace(/\x1b\[[0-9;]*m/g, '')
+      const m = plain.match(/Failed Tests (\d+)/)
       const crash = /Failed to parse|ENOENT|Cannot find module|not recognized/.test(r.out)
-      console.log(`  [捕获] ${c.name}\n          exit=${r.code}，约 ${failed} 个用例转红`
+      console.log(`  [捕获] ${c.name}\n          exit=${r.code}，`
+        + (m ? `${m[1]} 个用例转红` : '未能从 vitest 输出解析出失败用例数（exit 非 0 即已判失败）')
         + (crash ? '（⚠ 疑似解析/环境错误而非断言失败）' : ''))
       if (crash) allCaught = false
     }
