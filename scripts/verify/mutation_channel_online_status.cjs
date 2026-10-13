@@ -7,6 +7,8 @@
 // ⚠ 三条纪律（本脚本自身的踩坑记录，勿删）：
 //   1. Windows 上 mvn 是 mvn.cmd，execFileSync 不能直接执行 —— 必须走 cmd /c，
 //      否则 ENOENT 使 e.status 为 null，被 `!== 0` 误判成「捕获成功」。
+//      ⚠ 2026-10-13 补：非 win32 的 mvn 是可执行脚本，可**直接** execFileSync ——
+//      两者不可混用，故启动方式按 process.platform 分支（见 runMvn）。
 //   2. `exit === null` 与 `[SKIP]`（锚点未命中）必须一律判失败。
 //   3. 源文件是 CRLF，锚点字符串必须写 \r\n，否则正则/字符串匹配不中。
 //
@@ -24,9 +26,11 @@ const original = fs.readFileSync(TARGET, 'utf8')
 // 归一化副本：锚点一律在 LF 形态下匹配（见下方 for 循环内的说明）
 const originalLf = original.replace(/\r\n/g, '\n')
 
-// Windows 上 Maven 是 mvn.cmd，execFileSync 不经 shell 无法执行 .cmd
-const MVN = process.env.MVN_BIN ||
-  'D:\\apache-maven-3.9.11\\apache-maven-3.9.11\\bin\\mvn.cmd'
+// ⚠ 跨平台（2026-10-13 改）：此前这里硬编码 Windows 绝对路径，
+//   使本脚本在 CI(ubuntu) 上**恒不可运行**，其 8 条变异在 CI 中无人校验
+//   （verify_mutation_scripts.mjs 的 prerequisites 只能报 SKIP，而 SKIP ≠ 通过）。
+//   现改为「MVN_BIN 环境变量 > PATH 上的 mvn」，不再绑定某台机器的目录。
+const MVN = process.env.MVN_BIN || 'mvn'
 
 // 前置守卫
 try {
@@ -41,14 +45,47 @@ try {
   process.exit(2)
 }
 
+function runMvn (args, timeout) {
+  const opts = { cwd: JAVA_ROOT, encoding: 'utf8', stdio: 'pipe', timeout }
+  // win32: mvn 是 mvn.cmd，不经 shell 无法执行 .cmd，必须 cmd /c（文件头纪律 1）
+  // 非 win32: mvn 是可执行脚本，直接 execFileSync 即可（经 cmd 反而会失败）
+  return process.platform === 'win32'
+    ? execFileSync('cmd', ['/c', MVN, ...args], opts)
+    : execFileSync(MVN, args, opts)
+}
+
+/**
+ * 前置自检（AGENTS §2.1 第 10 条 ① ③）：**先确认 mvn 真的跑得起来**。
+ * 否则「8 条全部 MISSED」只是环境坏了，汇总行会谎报成「测试无判别力」。
+ * exit 2 = 环境问题，与「判别力失效」的 exit 1 严格区分（driver 也据此区分 FAIL 原因）。
+ */
+function probeMvn () {
+  try {
+    runMvn(['-v'], 120000)
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      why: `mvn 不可用（${e.code || e.message}）：确认 PATH 上有 mvn，或用 MVN_BIN 指定完整路径`
+    }
+  }
+}
+
 function runTests () {
   try {
-    const out = execFileSync('cmd', ['/c', MVN, '-B', 'test', '-Dtest=ChannelContextUtilsOnlineStatusTest'],
-      { cwd: JAVA_ROOT, encoding: 'utf8', stdio: 'pipe', timeout: 900000 })
+    const out = runMvn(['-B', 'test', '-Dtest=ChannelContextUtilsOnlineStatusTest'], 900000)
     return { code: 0, out }
   } catch (e) {
     return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }
   }
+}
+
+// 前置自检：mvn 跑不起来就别改源码（否则 8 条变异会「全部 MISSED」，
+// 那不是判别力问题，是环境问题 —— 两者必须能被下游区分）
+const probe = probeMvn()
+if (!probe.ok) {
+  console.error('[mutation] 拒绝执行：' + probe.why)
+  process.exit(2)
 }
 
 const mutations = [

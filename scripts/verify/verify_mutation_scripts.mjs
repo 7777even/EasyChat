@@ -20,8 +20,10 @@
  *   逐个 `execFileSync` 运行变异脚本，按退出码判定；
  *   **能跑的就必须过**（exit 非 0 即阻断），**跑不了的如实报 SKIP 并写明原因**。
  *
- * ⚠️ SKIP 不等于通过：本门禁在 CI（ubuntu）上会跳过依赖 Windows `mvn.cmd` 绝对路径的脚本，
- *   这是**已知覆盖缺口**，不是「它们没问题」。已按三字段登记（见文件末尾）。
+ * ⚠️ SKIP 不等于通过：本门禁**如实报**哪些脚本在当前环境跑不了（缺 Maven 等前提），
+ *   跑不了的一律登记在文件末尾。2026-10-13 已消除 `mutation_channel_online_status.cjs`
+ *   的跨平台缺口（该脚本原先硬编码 Windows `mvn.cmd` 绝对路径，ubuntu 上恒 SKIP，
+ *   其 8 条变异无人校验）—— 现按平台分支启动 `mvn`，CI(ubuntu) 上会真正执行。
  *
  * ⚠️ 耗时：全部 9 个约 3~6 分钟（含 mvn test / npm run test 循环）。
  *   故**只接 CI，不接 pre-push** —— 推送前的快速闸门不该等这么久。
@@ -29,7 +31,7 @@
  * 用法：node scripts/verify/verify_mutation_scripts.mjs [--only=<子串>]
  * 退出码：0 全部可跑者通过 / 1 有可跑者失败
  */
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
@@ -44,24 +46,41 @@ let fail = 0
 let skip = 0
 
 /**
+ * mvn 是否真的可用（2026-10-13 新增）。
+ *
+ * 背景：本门禁此前对 `mutation_channel_online_status.cjs` 在**非 win32 上一律 SKIP**
+ * （理由「它硬编码 Windows 的 mvn.cmd 绝对路径」）。该脚本已于 2026-10-13 改为
+ * 「MVN_BIN > PATH 上的 mvn」+ 按平台分支启动，故 SKIP 的前提已不成立 ——
+ * 继续 SKIP 就等于**把「有判别力」和「没人跑过」混为一谈**。
+ *
+ * 判据用「真的把 mvn 跑起来」而不是「看某个路径存不存在」：
+ * 只看路径会重蹈本仓多次「断言通过 ≠ 断言在做事」的覆辙。
+ */
+function mvnAvailable () {
+  const bin = process.env.MVN_BIN || 'mvn'
+  try {
+    const opts = { encoding: 'utf8', stdio: 'pipe', timeout: 120000 }
+    if (process.platform === 'win32') execFileSync('cmd', ['/c', bin, '-v'], opts)
+    else execFileSync(bin, ['-v'], opts)
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      why: `mvn 不可用（${process.env.MVN_BIN ? `MVN_BIN=${process.env.MVN_BIN} → ` : ''}` +
+        `${e.code || 'spawn failed'}）；装好 Maven 或把 MVN_BIN 指向**可执行**的完整路径后重跑。` +
+        'SKIP 不等于通过'
+    }
+  }
+}
+
+/**
  * 每个脚本的运行前提。缺前提则报 SKIP 而不是 FAIL ——
  * 「本机跑不了」与「校验不通过」是两件事，混为一谈会让人误以为已覆盖。
  */
 function prerequisites (name) {
   if (name === 'mutation_channel_online_status.cjs') {
-    // 脚本内部：process.env.MVN_BIN || 'D:\\apache-maven-3.9.11\\...\\mvn.cmd'
-    // 该绝对路径是 Windows 专属，CI（ubuntu）上必然失败 → 必须跳过而非误报 FAIL
-    const bin = process.env.MVN_BIN
-    if (!bin && process.platform === 'win32') {
-      const guess = 'D:\\apache-maven-3.9.11\\apache-maven-3.9.11\\bin\\mvn.cmd'
-      if (!existsSync(guess)) {
-        return { ok: false, why: `需 Windows 的 mvn.cmd（未设 MVN_BIN，且默认路径 ${guess} 不存在）` }
-      }
-      return { ok: true }
-    }
-    if (!bin && process.platform !== 'win32') {
-      return { ok: false, why: '依赖 Windows 专属的 mvn.cmd 绝对路径，CI(ubuntu) 上不可运行' }
-    }
+    const mvn = mvnAvailable()
+    if (!mvn.ok) return { ok: false, why: mvn.why }
     return { ok: true }
   }
   return { ok: true }
@@ -79,14 +98,18 @@ console.log(`待跑 ${scripts.length} 个变异脚本（耗时约 3~6 分钟）\
 
 // ⚠️ 防「空跑即通过」：变异脚本被误删 / 改名 / 移走时，本门禁会「0 个通过」并 exit 0，
 //   那正是 AGENTS §2.1 第 14 条点名的「断言通过 ≠ 断言在做事」。
-//   故断言目录里的脚本数量下限（2026-10-06 实扫为 9 个）。
+//   故断言目录里的脚本数量下限（2026-10-13 实扫为 16 个：本日新增
+//   mutation_local_file_guard_core.cjs / mutation_local_file_token_usage.cjs /
+//   mutation_export_chat_core.cjs / mutation_db_model_core.cjs /
+//   mutation_call_core.cjs / mutation_virtual_core.cjs / mutation_preflight_baseline_core.cjs
+//   —— 即由 9 增至 16）。
 //   仅在**未指定 --only** 时生效 —— 带 --only 时本来就只跑子集。
 if (!only) {
   const total = readdirSync(DIR).filter((f) => /^mutation_.*\.(cjs|mjs)$/.test(f)).length
-  console.log(`   [CHECK] 目录内变异脚本共 ${total} 个（应 ≥9；少于则说明被误删或改名）`)
-  if (total < 9) {
+  console.log(`   [CHECK] 目录内变异脚本共 ${total} 个（应 ≥16；少于则说明被误删或改名）`)
+  if (total < 16) {
     fail++
-    console.log(`   [FAIL ] 变异脚本数量不足 9 个（实扫 ${total}）—— ` +
+    console.log(`   [FAIL ] 变异脚本数量不足 16 个（实扫 ${total}）—— ` +
       '本门禁在「一个都没跑」的情况下也会 exit 0，属典型的假通过')
   } else {
     pass++
@@ -158,13 +181,11 @@ console.log(`\n===== 结论：${pass} 通过 / ${fail} 失败 / ${skip} 跳过�
 
 if (skip > 0) {
   console.log('')
-  console.log('⚠️ 已登记的覆盖缺口（SKIP ≠ 通过）：')
-  console.log('   盲区：`mutation_channel_online_status.cjs` 依赖 Windows 专属 mvn.cmd 绝对路径，')
-  console.log('        在 CI(ubuntu) 上无法运行 → 其 8 条变异在 CI 中**无人校验**。')
-  console.log('   兜底手段：本机（Windows）手动运行该脚本；或给 CI 增设 `MVN_BIN` 并改脚本用 `mvn`')
-  console.log('        而非绝对路径（属改动该脚本，需另开任务）。')
-  console.log('   兜底实测证据：本门禁在本机（Windows）运行时该脚本为 PASS，')
-  console.log('        且 `engineering/qa/evidence/` 下留有其完整输出。')
+  console.log('⚠️ 本次运行中被跳过的脚本（SKIP ≠ 通过）：')
+  console.log('   上方每个 [SKIP] 行已写明具体原因（多为缺少 Maven 等运行前提）。')
+  console.log('   已消除的历史缺口：`mutation_channel_online_status.cjs` 原依赖 Windows 专属')
+  console.log('   `mvn.cmd` 绝对路径 → ubuntu 上恒跳过；2026-10-13 起改为按平台启动 `mvn`。')
+  console.log('   ⚠ 其「ubuntu 上真的能跑通」需以 CI 首次实跑为准（本地无法运行 GitHub Actions）。')
 }
 
 if (fail > 0) {

@@ -289,9 +289,12 @@ jobs:
   #   既然脚本**本来就自带锚点未命中自报**（[无效]/[漏网] 三态计数 + exit 非 0），
   #   缺的只是「有人真的跑一遍」，那就直接跑。
   #
-  # ⚠️ 已知覆盖缺口（门禁会报 SKIP 并写明，不是静默通过）：
-  #   mutation_channel_online_status.cjs 依赖 Windows 专属的 mvn.cmd 绝对路径，
-  #   在 ubuntu 上不可运行 → 其 8 条变异在 CI 中无人校验。
+  # ⚠️ 覆盖缺口已消除（2026-10-13）：mutation_channel_online_status.cjs 原依赖
+  #   Windows 专属的 mvn.cmd 绝对路径 → ubuntu 上恒 SKIP，其 8 条变异无人校验
+  #   （而下面那步「为它装 JDK」因此是纯无效开销）。该脚本现改为
+  #   「MVN_BIN > PATH 上的 mvn」+ 按平台分支启动，ubuntu 上会真正执行 mvn test，
+  #   故 JDK/Maven 前提就此变成**必需**。ubuntu runner 自带 Maven，无需额外安装。
+  #   ⚠ 本地无法运行 GitHub Actions → 「ubuntu 上真的跑通」以首次 CI 实跑为准。
   mutation-scripts:
     name: 变异脚本防腐（反向验证判别力）
     runs-on: ubuntu-latest
