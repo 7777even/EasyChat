@@ -203,6 +203,17 @@ jobs:
       - name: 本地 SQLite SQL 构造核心
         run: node scripts/verify/verify_local_db_core.mjs
 
+      # 2026-10-12 新增（docs/system-facts.md §14 遗留 #7 剩余缺口）。dbSqlCore 只覆盖
+      # 「通用 SQL 字符串构造」，4 个 Model 各自的「查什么条件 / 传什么参数」此前零覆盖
+      # （ADB.js 在模块加载时 require('sqlite3') 并建表，import 即建库 → 不可测）。
+      # 本门禁覆盖的是**抽出后**的构造核心，三类「写错了也不报错」的形态：
+      #   ① 参数数组顺序颠倒 → update chat_session_user 改到别人的行
+      #   ② WHERE 条件漏项（status / contact_id）→ 命中范围扩大
+      #   ③ 动态 SET 子句被真值过滤 → noReadCount=0 被静默丢弃，同步帧写入不生效
+      # 变异实测 4/4 捕获（调顺序 / 漏 status / 改真值过滤 / Model 层内联 SQL）。
+      - name: 本地 db 层查询构造核心
+        run: node scripts/verify/verify_db_model_core.mjs
+
       # 2026-10-10 新增（docs/system-facts.md §14 遗留 #29）。本地文件服务器
       # `GET /file` 此前零鉴权 + 路径穿越 + 绑 0.0.0.0，PoC 实测任意网站可经
       # `fileId=../../…` 读到用户磁盘任意文件明文。自加固后拆两道门禁：
