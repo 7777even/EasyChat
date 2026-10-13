@@ -82,7 +82,7 @@ EasyChat/
 | 对外接口增删改 | 接口联冒烟 |
 | L3 / L4 | 按 §7.1 `tasks.md` 验收标准全量，不得以 L1 / L2 降级 |
 
-### 2.1 验证的十二条硬纪律
+### 2.1 验证的十三条硬纪律
 
 > **编号说明**：**6 与 9 为历史删除的编号，刻意留空不回收**——因为大量既有记录
 > （`engineering/qa/`、`docs/system-facts.md` §14、脚本注释）按**编号**交叉引用本清单
@@ -153,6 +153,26 @@ EasyChat/
     （AGENTS §2.1 第 8 条的同族陷阱）。
     不可静态检测项（条件**方向**、字面量写对没有）统一登记为三字段：
     **盲区 + 兜底手段 + 兜底手段的实测证据**，缺一不算登记完成。
+
+15. **★ 改 Markdown 表格行：`edit` 的 `newString` 必须回填被替换掉的原文，且写完立刻校验列数。**
+    **（2026-10-13 立，同一原因连犯三次）**。`docs/system-facts.md` §14 与变更日志、
+    `AGENTS.md` §10 都是宽表，一次改动要新插一整行。三种事故形态：
+    ① `oldString` 取的是原行的**前半截**（如 `> | 2026-10-13 | **P0 三条…**`），
+       而 `newString` 只写新行、**没把后半截接回去** → 旧行剩余文字与新行**黏成一行**，
+       该行内容被截断且列数变少；② 新行只写 2 个单元格、**漏掉末列**（`来源` 列）→ 列数少 1；
+    ③ **校验脚本自己错**——用朴素 `line.split('|')` 数列数，把 markdown **合法的转义
+       `\|`**（如 `` `contactName \|\| userId` ``）误算成列分隔符 → **误报**。
+       本会话第一版校验即如此，误报 2 行、其中 1 行实际完全正常 ——
+       **「报错」同样可能是错的（第 14 条同族）**。
+    ① ② 两者都**不报错**，`git diff` 里也只是「一行变两行」，很容易滑过去。
+    **硬要求**：
+    - 用「整行」作 `oldString`，或确认 `newString` 末尾已含被删掉的原文；
+    - **插入后立刻**跑一次列数校验，**不许攒到最后统一验**（本会话三次都是写完几条才发现）；
+    - 校验口径：**按所在表格的表头列数逐行比对**，**禁止**写「非 N 列即错」这种全局定值——
+      本会话第一版校验就误用了固定列数，把 3 列表格全报成错；
+    - 切分必须**跳过已转义管道**（先 `replace(/\\\|/g, 占位符)` 再 `split('|')`）；
+    - 单元格内含 `|` 必须转义为 `\|`，否则列数虚增（台账 `docs/system-facts.md`
+      变更日志现存 8 处既有错位即此类；§14 与 `AGENTS.md` §10 经 2026-10-13 重算为 **0 处**）。
 
 ## 3. 接口契约规则
 
@@ -445,13 +465,16 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_password_handoff.mjs` | CI | 密码明文交接红线：客户端对密码做哈希、MD5 存量双验证被移除、`isBCrypt` 与 `matches` 判定口径分叉（曾致已加密哈希被二次加密、账号永久无法登录） |
 | `scripts/verify/verify_call_store_core.mjs` | CI | 通话 store 编排逻辑（`callStoreCore.mjs`）：结束态重置补丁有遗漏或越界；**1800ms 复位守卫缺通话身份校验**（陈旧定时器会抹掉新通话的结束态）；空 `reason` 时 `endReason` 未清空（显示上一通通话的原因）；出站帧号与 `callFrameCore` 漂移；`callId` 为空时仍发帧；`useCallStore.js` 内联裸守卫或裸写 `messageType`（绕开纯核心 → 缺陷复活） |
 | `scripts/verify/verify_local_db_core.mjs` | CI | 本地 SQLite SQL 构造核心（`dbSqlCore.mjs`）：**where 条件真值过滤**（空串/0 被静默丢弃 → 更新命中范围扩大）、字段不在列映射时被静默丢弃、空 set / 空 where 未短路（前者拼出 `update t  where` 弹原生框、后者退化为全表更新）、`add column` 非幂等仍逐条立即执行、列名可由值注入 |
-| `scripts/verify/mutation_call_store_core.cjs` / `mutation_local_db_core.cjs` | **反向验证**（由 `verify_mutation_scripts.mjs` 在 CI 统一驱动） | 变异未被门禁捕获即 exit=1。**两者都含「变异前基线必须跑通」的自检**——门禁自身崩溃（Windows ESM 路径未转 `file://` URL 等）会被误记成「全部捕获」，该自检把「门禁能跑」从前提变成硬校验 |
-| `scripts/verify/verify_mutation_scripts.mjs` | **CI 独立 job**（**刻意不接 pre-push**，耗时 3~6 分钟） | 跑全部 9 个 `mutation_*.{cjs,mjs}`，任一非 0 退出即阻断 —— 闭环遗留 #27「变异脚本会静默腐烂却无人知」（2026-10-06 实测曾有 2 个空转，而台账仍记「11/11」「12/12」）。区分「脚本判失败」与「脚本起不来」（`exit=null` 属环境问题，不是漏网）；依赖缺失时报 SKIP 并写明原因，**SKIP ≠ 通过**（`mutation_channel_online_status.cjs` 依赖 Windows 专属 `mvn.cmd` 路径，CI ubuntu 上不可运行，已登记为覆盖缺口） |
+| `scripts/verify/verify_db_model_core.mjs` | 推送前（`pre-push` hook）/ CI | 主进程本地 SQLite **查询构造**（`dbModelCore.mjs`）：三类「写错了也不报错」的形态 —— ① 参数数组顺序颠倒（→ 改到别人的行）② WHERE 条件漏项（→ 命中范围扩大）③ 动态 SET 子句列名映射（驼峰直接当列名，SQLite 不报错甚至凭空建列）。**2026-10-13 由 `mutation_db_model_core.cjs` 逼出 3 个此前零覆盖的函数并补齐 33 条断言**（`buildMessagePage` 分页游标/offset/limit 顺序、墓碑帧 `buildSessionPreviewOnly` 不得刷时间与未读、`buildUpdateSessionInfo` 三处易错分支、跨端属性同步 `buildSessionAttrUpdate`）—— 门禁全绿**不等于**核心被覆盖 |
+| `scripts/verify/verify_local_file_guard_core.mjs` | 推送前（`pre-push` hook）/ CI | 本地文件服务器**加固后的守卫核心**（`localFileGuardCore.mjs`，遗留 #29 的回归护栏）：路径穿越拦截、绑定地址不得回退全网卡、fileToken 校验，含**三道防空转措施**（恒真/恒假自检、逐条打印不靠汇总判读、正反例数都必须 > 0） |
+| `scripts/verify/verify_local_file_token_usage.mjs` | 推送前（`pre-push` hook）/ CI | 渲染层 7 处本地文件 URL 拼接必须经 `withFileToken` 封装（**漏加一处不抛异常**，只表现为图片/语音/视频静默全裂，易误判为缓存或样式问题）；含该拼接的文件须 import 之；封装实现不得被就地内联成「总是追加空 token」的假封装；**空转自检：命中点 < 7 即报扫描器可能失效** |
+| `scripts/verify/mutation_call_store_core.cjs` / `mutation_local_db_core.cjs` / `mutation_local_file_guard_core.cjs` / `mutation_local_file_token_usage.cjs` / `mutation_export_chat_core.cjs` / `mutation_db_model_core.cjs` / `mutation_call_core.cjs` / `mutation_virtual_core.cjs` / `mutation_preflight_baseline_core.cjs` | **反向验证**（由 `verify_mutation_scripts.mjs` 在 CI 统一驱动） | 变异未被门禁捕获即 exit=1。都含「变异前基线必须跑通」的自检——门禁自身崩溃（Windows ESM 路径未转 `file://` URL 等）会被误记成「全部捕获」，该自检把「门禁能跑」从前提变成硬校验；**汇总行必须同时计入 `[无效]` 与 `[漏网]`**（「8/8 全部捕获」与「捕获 6 + 漏网 2」在汇总上不可区分，本仓已因此交过没跑过的检验）。等价变异（如单删一处冗余守卫）**从清单撤除并写明理由**，不做假覆盖。**漏网不一定是等价变异** —— `mutation_db_model_core.cjs` 首轮 3 条漏网查出的是「门禁压根没测该函数」，据此补了 33 条断言。**同一语义的正则分散在两处时，变异须同步改两处** —— 否则制造的是「内部不一致的崩溃」而非可判定的行为变化（`mutation_preflight_baseline_core.cjs` 实踩） |
+| `scripts/verify/verify_mutation_scripts.mjs` | **CI 独立 job**（**刻意不接 pre-push**，耗时 3~6 分钟） | 跑全部 16 个 `mutation_*.{cjs,mjs}`，任一非 0 退出即阻断 —— 闭环遗留 #27「变异脚本会静默腐烂却无人知」（2026-10-06 实测曾有 2 个空转，而台账仍记「11/11」「12/12」）。区分「脚本判失败」与「脚本起不来」（`exit=null` 属环境问题，不是漏网）；依赖缺失时报 SKIP 并写明原因，**SKIP ≠ 通过**（`mutation_channel_online_status.cjs` 的「ubuntu 上不可运行」缺口已于 2026-10-13 消除：该脚本改为 `MVN_BIN` > PATH 上 `mvn` + 按平台分支启动，driver 也改为**真跑一次 `mvn -v`** 判定前提，坏 `MVN_BIN` 不再被当作可跑） |
 | `scripts/verify/verify_chat_message_dispatch.mjs` | CI | `Chat.vue` 分发条件未覆盖后端**落库白名单**中的消息类型（→ 历史漫游能拉到、界面什么都不显示、不抛异常不报错）；`ChatMessage.vue` 未 import 语音/位置子组件（**死组件**，2026-10-03 实际事故）；纯文本兜底分支排在 24/25 分支之前（会抢走它们） |
 | `scripts/verify/verify_frontend_test_base.mjs` | CI | 测试依赖未钉死版本（`^` 会某天自动升到 vitest 2/3/5，连带要求 vite 5+ 从而拖坏 `electron-vite@1`）；`vite` 被顺带升级出 4.x；生产依赖混入测试框架；`vitest.config.mjs` 缺 jsdom / 缺 `@vitejs/plugin-vue`（`.vue` 解析不了）；`@` 别名与 `electron.vite.config.js` 两处不一致；全局桩缺 `ResizeObserver`（组件挂载即崩）；CI 未跑 `npm run test`；**第 8 节：无人 import `@vue/test-utils`**（依赖已装、桩已齐、门禁全绿，却没有任何测试在挂载组件 —— 「具备能力」≠「有人在用」） |
 | `scripts/verify/verify_packaging_config.mjs` | CI | **打包配置唯一真源**：`electron-builder.yml` 与 `package.json.build` 并存即 exit 1（electron-builder 依赖 read-config-file 的 `loadConfig` 在 build 字段存在时直接返回，**根本不读 yml**，即 yml 静默失效、改它毫无效果却无任何警告 —— 该文件在本仓曾自首个 commit 起从未生效）；`build.npmRebuild` 必须**显式声明**（默认 `true` = 每次从源码重编原生依赖，实测 1800s 超时）；`files` 必须排除 `src/**` / `.eslintrc.cjs` / `vitest.config.mjs` / `.npmrc` / `electron.vite.config.js` / 与 `extraResources` 重复的 `assets/**`；**反向断言**：`files` 误排 `out/main/index.js` 等运行期必需文件同样报红。`--selftest` 与 electron-builder 真实 `FileMatcher` 对拍（退出码 2 = SKIP，**SKIP ≠ 通过**）—— 本门禁自建了一套 glob 判定，2026-10-06 曾两次写反（返回值取反、跳过条件用相等而非不等），**均由该对拍暴露，读代码看不出来** |
 | `scripts/verify/verify_frontend_lint.mjs` | 推送前（`pre-push` hook）/ CI | **`lint` 脚本被塞回 `--fix`**（检查与修复必须分两条命令：实测一次「看一眼有没有问题」就重排 50 个文件 +4458/−3524 行，第二次在改脚本本身时执行它、又重排 45 个）；`lint:fix` 缺失或不带 `--fix`；eslint 缺 `ecmaVersion` / `sourceType: module` / `env.es2020`（顶层 `await` 与 `globalThis` 会被误报）；**已修复缺陷复发**：真实代码中再现 `new Promise(async`（统计**跳过注释**，否则注释里的反模式说明会被误判为未修）、`no-async-promise-executor` 被改回 `off`、`forEach(async …)` 复活；**当前 error 数超过基线 20** |
-| **（纪律类，非脚本）** §2.1 第 12 条「禁止用局部证据推断系统行为」、第 13 条「先定基数再看实扫」、第 14 条「新增断言须先造反例验证 + 判定边界显式定义」 | 人工自查，无机控 |
+| **（纪律类，非脚本）** §2.1 第 12 条「禁止用局部证据推断系统行为」、第 13 条「先定基数再看实扫」、第 14 条「新增断言须先造反例验证 + 判定边界显式定义」、第 15 条「改表格行必须回填原文并立刻校验列数」 | 人工自查，无机控 | |
 | `scripts/verify/verify_at_mention_core.mjs` | CI | 群聊 @ 提及三处缺陷复发：① `filterMembers` 只匹配 `contactName`（面板**显示**却是 `contactName \|\| userId` → 未设昵称者**看得见却搜不到**）② `extraData.atAll` 未叠加角色权限（**手工键入** `@所有人` 绕过面板守卫 → 服务端 `CODE_2305` → **整条消息发不出去**）③ `extraData.atUserIds` 与 `atUserIds` 字段口径分叉；④ **组件把判定内联回 `MessageSend.vue`**（抽离白做、缺陷原地复活）⑤ 组件复制第二份 @ 正则 ⑥ `myGroupRole` 未传入核心导致 `atAll` 恒判无权限。变异 `scripts/verify/mutation_at_mention_core.mjs`（**9/9 捕获**） |
 
 > `verify_schema_drift.mjs` 是**唯一需要活库**的门禁，故 CI 中独立成 job 而非塞进 `gates`。
