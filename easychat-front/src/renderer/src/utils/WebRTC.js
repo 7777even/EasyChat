@@ -6,10 +6,13 @@
 let localStream = null
 const peers = new Map() // peerId -> RTCPeerConnection
 
-const defaultIce = [{ urls: 'stun:stun.l.google.com:19302' }]
-
+// ⚠ 刻意**不再内置**公共 STUN 兜底（ADR-003，2026-10-13）。
+//   原先这里与后端 CallService 各硬编码一份 stun.l.google.com:19302 ——
+//   两处各持一份必然漂移，且依赖境外公共服务（可达性不可控）。
+//   现 iceServers 一律由服务端随 call_invite / call_accept 引导帧下发；
+//   未下发时用空数组，让浏览器只走 host/srflx 候选（不尝试连任何外部 STUN）。
 const buildConfig = (iceServers) => ({
-  iceServers: iceServers && iceServers.length ? iceServers : defaultIce
+  iceServers: Array.isArray(iceServers) ? iceServers : []
 })
 
 // 获取本地音视频流（单例缓存，重复调用不重复请求设备）

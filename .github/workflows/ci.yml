@@ -183,6 +183,15 @@ jobs:
       - name: 通话核心逻辑
         run: node scripts/verify/verify_call_core.mjs
 
+      # 2026-10-13 新增（openspec/changes/2026-10-13-turn-deploy-and-key-mgmt，ADR-003/004）。
+      #   此前 STUN 地址在**前后端各硬编码一份** stun.l.google.com:19302 —— 两处必然漂移，
+      #   且依赖境外公共服务；TURN 缺失时降级为纯 STUN，对称 NAT 下「接通后无声」，
+      #   而服务端**完全无日志**。本门禁把「配置外置 + 降级留痕」锁住。
+      #   ⚠ 扫描范围刻意排除 scripts/：verify_call_core.mjs 自身含 STUN 夹具，
+      #   扫进去会永久自匹配误报（同 AGENTS §2.1 第 7 条那类坑）。
+      - name: TURN/STUN 配置外置
+        run: node scripts/verify/verify_turn_config.mjs
+
       # 2026-10-04 新增。verify_call_core 只覆盖 callFrameCore（帧 → 状态转移），
       # 「store 拿到转移后怎么落地」这段（结束态重置、1800ms 复位守卫、出站报文）
       # 此前是黑箱——它与 Pinia/WebRTC/window 混在 useCallStore.js，node 中无法 import。
