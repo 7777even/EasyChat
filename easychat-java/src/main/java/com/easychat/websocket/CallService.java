@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,8 +60,45 @@ public class CallService {
     private String turnUsername;
     @Value("${easychat.turn.credential:}")
     private String turnCredential;
+    /**
+     * STUN 地址（ADR-003）。**刻意无默认值**：原先前后端各硬编码一份
+     * {@code stun.l.google.com:19302}，双份维护必然漂移，且依赖境外公共服务。
+     * 留空即不下发 STUN 条目，由服务端统一决定。
+     */
+    @Value("${easychat.turn.stun-url:}")
+    private String turnStunUrl;
+    /**
+     * 共享密钥（coturn 的 {@code static-auth-secret}，ADR-001）。
+     * 非空即启用**时效凭据**；留空则回落上面的静态 username/credential（并告警）。
+     * 支持**逗号分隔的多密钥**，用于轮换期新旧并存、无需停机。
+     */
+    @Value("${easychat.turn.static-secret:}")
+    private String turnStaticSecret;
+    /** 时效凭据有效期（秒）。<=0 表示不签发时效凭据，回落静态模式。 */
+    @Value("${easychat.turn.ttl-seconds:3600}")
+    private int turnTtlSeconds;
     @Value("${easychat.call.max-participants:6}")
     private int maxParticipants;
+
+    /**
+     * 启动期自检：把「TURN/STUN 不可用」这一事实**显式打到日志**。
+     *
+     * <p>为何必要：三者（双空 / 配置不全 / 用静态凭据）的表现**都是用户侧静默失败** ——
+     * 对称 NAT 下「接通后无声」，不报错、不提示。此前这些配置缺失在服务端**完全无痕**，
+     * 运维无从知晓（2026-10-13 实测确认）。判定逻辑在 {@link TurnCredentialCore}，
+     * 本方法只做 IO 接线。
+     */
+    @PostConstruct
+    public void logTurnConfigStatus() {
+        TurnCredentialCore.Shape shape = TurnCredentialCore.assess(
+                TurnCredentialCore.Config.of(turnStunUrl, turnUrl, turnUsername,
+                        turnCredential, turnStaticSecret, turnTtlSeconds));
+        if ("warn".equals(shape.level())) {
+            logger.warn("[TURN 配置自检] {}", shape.message());
+        } else {
+            logger.info("[TURN 配置自检] {}", shape.message());
+        }
+    }
 
     /** callId -> 通话房间（仅用于信令路由与 call_log 落库） */
     private final ConcurrentMap<String, CallRoom> rooms = new ConcurrentHashMap<>();
@@ -397,19 +435,46 @@ public class CallService {
         sendTo(toUserId, frame);
     }
 
+    /**
+     * 构造随引导帧下发的 {@code iceServers}。
+     *
+     * <p>STUN 条目由 {@link TurnCredentialCore#stunUrls} 决定（ADR-003：留空不下发，
+     * 不再回落任何公共地址）；TURN 条目的凭据形态由 {@link TurnCredentialCore} 的
+     * 时效凭据 / 静态凭据判定决定（ADR-001 / ADR-002）。
+     *
+     * <p>⚠ 多密钥轮换：{@code static-auth-secret} 支持逗号分隔多密钥，此时按
+     * <b>第一个</b> 密钥签发 —— 因为 coturn 侧新旧密钥**都**会被接受，
+     * 用哪个签都有效；只有在「只剩旧密钥」或「只剩新密钥」时签发结果才会不同。
+     */
     private JSONArray buildIceServers() {
         JSONArray arr = new JSONArray();
-        JSONObject stun = new JSONObject();
-        stun.put("urls", "stun:stun.l.google.com:19302");
-        arr.add(stun);
-        if (turnUrl != null && !turnUrl.trim().isEmpty()) {
+        for (String stunUrl : TurnCredentialCore.stunUrls(turnStunUrl)) {
+            JSONObject stun = new JSONObject();
+            stun.put("urls", stunUrl);
+            arr.add(stun);
+        }
+
+        for (String url : TurnCredentialCore.turnUrls(turnUrl)) {
             JSONObject turn = new JSONObject();
-            turn.put("urls", turnUrl.trim());
-            if (turnUsername != null && !turnUsername.trim().isEmpty()) {
-                turn.put("username", turnUsername.trim());
-            }
-            if (turnCredential != null && !turnCredential.trim().isEmpty()) {
-                turn.put("credential", turnCredential.trim());
+            turn.put("urls", url);
+
+            List<String> secrets = TurnCredentialCore.parseSecrets(turnStaticSecret);
+            boolean ephemeral = turnTtlSeconds > 0 && !secrets.isEmpty();
+            if (ephemeral) {
+                // 时效凭据：username 形如 <时间戳>:<userId>，credential 为 HMAC 签名。
+                // timestamp 必须在 ttl 之前发出，故用「当前时间」而非房间创建时间。
+                String username = TurnCredentialCore.buildEphemeralUsername(
+                        System.currentTimeMillis() / 1000L, "easychat");
+                turn.put("username", username);
+                turn.put("credential", TurnCredentialCore.sign(secrets.get(0), username));
+            } else {
+                // 静态降级（已在 logTurnConfigStatus 打过 WARN）
+                if (turnUsername != null && !turnUsername.trim().isEmpty()) {
+                    turn.put("username", turnUsername.trim());
+                }
+                if (turnCredential != null && !turnCredential.trim().isEmpty()) {
+                    turn.put("credential", turnCredential.trim());
+                }
             }
             arr.add(turn);
         }
