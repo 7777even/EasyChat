@@ -368,6 +368,14 @@ jobs:
         working-directory: easychat-front
         run: npm ci
 
+      # ⚠ 必须先跑 electron-vite：electron-builder **不会**自动执行 `npm run build`，
+      #   它只负责把已存在的 `out/` 打进 asar。2026-10-13 实测本 job 恒红于此：
+      #   Application entry file "out\main\index.js" ... does not exist
+      #   —— 当时 `npm ci` 之后**直接**跳到了 electron-builder。
+      - name: 构建渲染/主进程产物（electron-vite）
+        working-directory: easychat-front
+        run: npm run build
+
       # 刻意**不传** -c.npmRebuild：它必须在 package.json 的 build 里，
       # 由 verify_packaging_config.mjs 静态断言。传了参数就等于掩盖了配置缺失。
       - name: 构建安装包（默认参数，验证 npmRebuild:false 已生效）
