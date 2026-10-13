@@ -17,7 +17,7 @@ const expressServer = express();
 
 import { selectByMessageId } from './db/ChatMessageModel'
 import { selectSettingInfo, updateSysSetting } from './db/UserSetting'
-import { isInsideRoot, assertInsideRoot, tokensMatch, generateFileToken } from './localFileGuardCore.mjs'
+import { assertInsideRoot, tokensMatch, generateFileToken } from './localFileGuardCore.mjs'
 
 import { getWindow } from "./windowProxy";
 
