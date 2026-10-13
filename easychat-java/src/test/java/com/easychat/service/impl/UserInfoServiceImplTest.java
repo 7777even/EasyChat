@@ -1,6 +1,7 @@
 package com.easychat.service.impl;
 
 import com.easychat.entity.config.AppConfig;
+import com.easychat.entity.constants.Constants;
 import com.easychat.entity.dto.TokenUserInfoDto;
 import com.easychat.entity.enums.BeautyAccountStatusEnum;
 import com.easychat.entity.enums.ResponseCodeEnum;
@@ -19,6 +20,7 @@ import com.easychat.mappers.UserContactMapper;
 import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
+import com.easychat.redis.RedisUtils;
 import com.easychat.service.ChatSessionUserService;
 import com.easychat.service.MailService;
 import com.easychat.service.OperationLogService;
@@ -90,6 +92,17 @@ public class UserInfoServiceImplTest {
 
     @Mock
     private OperationLogService operationLogService;
+
+    /**
+     * 2026-10-13 新增（openspec {@code 2026-10-13-email-code-failure-limit}）：
+     * 邮箱验证码的**失败次数**计数走 Redis。这是**既有** Bean，非新依赖。
+     *
+     * <p>背景见 §14 遗留 #1 的残余风险：端点限流把单邮箱的尝试压到 60 次/分、
+     * 码活 10 分钟 ⇒ 单邮箱 600 次尝试，6 位码空间 10⁶ ⇒ 命中 0.06%。
+     * 命中即等于账号被接管，且无任何告警。
+     */
+    @Mock
+    private RedisUtils redisUtils;
 
     @Before
     public void setUp() {
@@ -524,6 +537,224 @@ public class UserInfoServiceImplTest {
                 .thenReturn(Collections.singletonList(verifyCode));
 
         userInfoService.resetPasswordByEmail(email, code, "newpassword");
+    }
+
+    // ==================== 验证码失败次数限制（2026-10-13，遗留 #1 根治） ====================
+    //
+    // 端点限流 60 次/分 × 码活 10 分钟 = 单邮箱 600 次尝试，6 位码空间 10⁶ ⇒ 命中 0.06%。
+    // 本组用例锁定「猜测次数有独立上界，且上界跨验证码累计」。
+
+    /** 构造一个已注册用户（让流程能走到校验通过那一步） */
+    private UserInfo registeredUser(String email) {
+        UserInfo u = new UserInfo();
+        u.setUserId("U12345678901");
+        u.setEmail(email);
+        return u;
+    }
+
+    /** 构造一个有效未使用的 type=1 验证码 */
+    private EmailVerifyCode liveCode(String email, String code) {
+        EmailVerifyCode v = new EmailVerifyCode();
+        v.setEmail(email);
+        v.setCode(code);
+        v.setType(1);
+        v.setStatus(0);
+        v.setExpireTime(System.currentTimeMillis() + 10 * 60 * 1000L);
+        return v;
+    }
+
+    /**
+     * 值锚定：阈值与窗口必须是 <b>5</b> 与 <b>600</b>，不是任意值。
+     *
+     * <p>⚠ <b>为什么必须写死字面量</b>：本组其它用例都引用 {@code Constants} 里的同一常量，
+     *   所以「把阈值从 5 改成 50」这个变异对它们是<b>等价变异</b>（两边一起动，照常通过）。
+     *   实测确认过：改常量后本文件 <b>0 条转红</b>。
+     *   而阈值调大是**静默的安全降级**——没人会注意到 0.06% 悄悄变成 5%。
+     *
+     * <p>故用字面量把值钉死：将来若真要调阈值，这条会先红，
+     * 迫使改动者<b>有意识地</b>更新它并重新评估安全口径，而不是无声改掉。
+     * 数值取自用户 2026-10-13 的明确决策。
+     */
+    @Test
+    public void emailCodeFailureLimit_thresholdIsPinnedToAgreedValue() {
+        assertEquals("失败次数阈值被改动 —— 须重新评估安全口径后再改", 5,
+                Constants.EMAIL_CODE_FAIL_MAX.intValue());
+        assertEquals("失败计数窗口被改动 —— 须与验证码寿命保持一致", 600,
+                Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS.intValue());
+        assertEquals("失败计数窗口应与验证码寿命一致（10 分钟）", 10 * 60,
+                Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS.intValue());
+    }
+
+    @Test
+    public void resetPasswordByEmail_wrongCode_incrementsFailureCounter() {
+        String email = "test@example.com";
+
+        // 未锁定（计数为 null / 0）→ 放行到查库
+        when(redisUtils.get(anyString())).thenReturn(null);
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(new ArrayList<>());
+
+        try {
+            userInfoService.resetPasswordByEmail(email, "wrongcode", "newpassword");
+            fail("应当抛 BusinessException");
+        } catch (BusinessException expected) {
+            // 既有文案，本次不改
+            assertEquals("验证码错误", expected.getMessage());
+        }
+
+        // 失败计数 +1，且键带约定前缀
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+        verify(redisUtils).incr(key.capture());
+        assertTrue("键应以约定前缀开头，实际: " + key.getValue(),
+                key.getValue().startsWith(Constants.REDIS_KEY_EMAIL_CODE_FAIL));
+        assertTrue("键应含邮箱（小写归一）", key.getValue().endsWith(email));
+    }
+
+    @Test
+    public void resetPasswordByEmail_firstFailure_setsWindowTtl() {
+        String email = "test@example.com";
+
+        when(redisUtils.get(anyString())).thenReturn(null);
+        when(redisUtils.incr(anyString())).thenReturn(1L);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(new ArrayList<>());
+
+        try {
+            userInfoService.resetPasswordByEmail(email, "wrongcode", "newpassword");
+        } catch (BusinessException ignored) {
+        }
+
+        // 首次计数时设置窗口（与 applyRateLimit 同款：count == 1 才设）
+        verify(redisUtils).expire(anyString(), eq((long) Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS));
+    }
+
+    @Test
+    public void resetPasswordByEmail_overLimit_rejectedBeforeDbQuery() {
+        String email = "test@example.com";
+
+        // 计数已达阈值 → 锁定
+        when(redisUtils.get(anyString()))
+                .thenReturn(Long.valueOf(Constants.EMAIL_CODE_FAIL_MAX));
+
+        try {
+            userInfoService.resetPasswordByEmail(email, "anycode", "newpassword");
+            fail("应当抛 BusinessException");
+        } catch (BusinessException expected) {
+            assertEquals("验证码错误次数过多，请 " + (Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS / 60)
+                    + " 分钟后再试", expected.getMessage());
+        }
+
+        // ★ 关键：锁定判定在**查库之前** —— 攻击流量不打到 MySQL
+        verify(emailVerifyCodeMapper, never()).selectList(any(EmailVerifyCodeQuery.class));
+    }
+
+    @Test
+    public void resetPasswordByEmail_underLimit_stillQueriesDb() {
+        String email = "test@example.com";
+
+        // 计数 = 阈值 - 1 → 未锁定
+        when(redisUtils.get(anyString()))
+                .thenReturn(Long.valueOf(Constants.EMAIL_CODE_FAIL_MAX - 1));
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(liveCode(email, "123456")));
+        when(userInfoMapper.selectByEmail(email)).thenReturn(registeredUser(email));
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), anyString())).thenReturn(1);
+
+        userInfoService.resetPasswordByEmail(email, "123456", "newpassword");
+
+        verify(emailVerifyCodeMapper).selectList(any(EmailVerifyCodeQuery.class));
+    }
+
+    @Test
+    public void resetPasswordByEmail_success_clearsFailureCounter() {
+        String email = "test@example.com";
+
+        when(redisUtils.get(anyString())).thenReturn(Long.valueOf(2));
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(liveCode(email, "123456")));
+        when(userInfoMapper.selectByEmail(email)).thenReturn(registeredUser(email));
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), anyString())).thenReturn(1);
+
+        userInfoService.resetPasswordByEmail(email, "123456", "newpassword");
+
+        // 成功验证必须清零，否则下次找回密码会被上次的陈旧计数挡住
+        verify(redisUtils).delete(anyString());
+    }
+
+    @Test
+    public void resetPasswordByEmail_sendEmailCode_doesNotClearCounter() {
+        String email = "test@example.com";
+
+        when(userInfoMapper.selectByEmail(email)).thenReturn(registeredUser(email));
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(new ArrayList<>());
+
+        userInfoService.sendEmailCode(email, 1);
+
+        // ★ 重发新码**不得**重置失败计数 —— 否则限流可被「受害者无法阻止的动作」绕过
+        verify(redisUtils, never()).delete(anyString());
+    }
+
+    @Test
+    public void resetPasswordByEmail_codeExpired_doesNotCountAsFailure() {
+        String email = "test@example.com";
+
+        EmailVerifyCode expired = liveCode(email, "123456");
+        expired.setExpireTime(System.currentTimeMillis() - 1000L);
+
+        when(redisUtils.get(anyString())).thenReturn(null);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(expired));
+
+        try {
+            userInfoService.resetPasswordByEmail(email, "123456", "newpassword");
+            fail("应当抛 BusinessException");
+        } catch (BusinessException expected) {
+            assertEquals("验证码已过期", expected.getMessage());
+        }
+
+        // ★ 过期**不计数**：此时无可猜的目标。若计数，攻击者等码一过期就发 5 次垃圾
+        //   即可把受害者**永久锁死** —— 限流反而成了更严重的 DoS。
+        verify(redisUtils, never()).incr(anyString());
+    }
+
+    @Test
+    public void resetPasswordByEmail_userNotFound_doesNotCountAsFailure() {
+        String email = "ghost@example.com";
+
+        when(redisUtils.get(anyString())).thenReturn(null);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(liveCode(email, "123456")));
+        when(userInfoMapper.selectByEmail(email)).thenReturn(null);
+
+        try {
+            userInfoService.resetPasswordByEmail(email, "123456", "newpassword");
+            fail("应当抛 BusinessException");
+        } catch (BusinessException expected) {
+            assertEquals(ResponseCodeEnum.CODE_2101.getMsg(), expected.getMessage());
+        }
+
+        // 该分支实际只在「发码后账号被删」时出现，计它会把罕见状态当攻击信号
+        verify(redisUtils, never()).incr(anyString());
+    }
+
+    @Test
+    public void resetPasswordByEmail_redisUnavailable_failsOpen() {
+        String email = "test@example.com";
+
+        // Redis 异常 → get 返回 null。必须**放行**到原有校验，而不是把所有人挡在门外。
+        // ⚠ 刻意**不** stub incr：本用例走的是「校验通过」路径，不会调用 incr。
+        //   MockitoJUnitRunner 是严格模式，多余 stub 会直接判失败（第一次写时正是被它抓出来的）。
+        when(redisUtils.get(anyString())).thenReturn(null);
+        when(emailVerifyCodeMapper.selectList(any(EmailVerifyCodeQuery.class)))
+                .thenReturn(Collections.singletonList(liveCode(email, "123456")));
+        when(userInfoMapper.selectByEmail(email)).thenReturn(registeredUser(email));
+        when(userInfoMapper.updateByUserId(any(UserInfo.class), anyString())).thenReturn(1);
+
+        userInfoService.resetPasswordByEmail(email, "123456", "newpassword");
+
+        verify(userInfoMapper).updateByUserId(any(UserInfo.class), eq("U12345678901"));
     }
 
     // ======================== 密码变更后会话失效（2026-10-03） ========================
