@@ -138,13 +138,17 @@ check('saveFile2Local 的 uploadFile 已 await（原未 await 就返回）',
 // ── 4. 当前错误数不超过基线 ─────────────────────────────────
 console.log('\n=== 4. 当前 lint 错误数（不超基线）===')
 // 基线语义：**新增任一 error 即报红**（errCount > BASELINE）。
-// 2026-10-13 实测：137 个文件被检查、真实 error 数 = 1（`src/main/file.js:20`
-// `isInsideRoot` defined but never used），故由 20 收紧到 1 ——
-// 原基线 20 意味着「还能新增 19 个 error 而全绿」，等于没有守护。
-// 之所以不取 0：留 1 个 error 的容错，避免上游 eslint 小版本差异导致 CI 假红；
-// 而收紧前**必须实证这个 1 是真数字而非 eslint 启动失败的兜底值**
-//（已实测：`--format json` 的 stdout 是 3.1MB 合法 JSON、stderr 空、137 文件）。
-const BASELINE = 1
+// 演进：20 → 1 → **0**（均为 2026-10-13 实测收紧）。
+//   20 意味着「还能新增 19 个 error 而全绿」，等于没有守护；
+//   1 对应 `src/main/file.js:20` 的 `isInsideRoot` defined but never used ——
+//   该死导入已删除（守卫本身完好：`assertInsideRoot` 是 `isInsideRoot` 的严格包装，
+//   越界即抛错，file.js 第 333 行一直在用），实测全量 **0 error / 6624 warning**。
+// 取 0 而非留 1 容错的理由：CI 的「前端构建」job 直接跑 `npm run lint`，
+// 而 **eslint 遇到任何 error 就 exit 1** —— 即基线取 1 会让本门禁绿、CI 却红，
+// 两道闸门口径分叉，正是 2026-10-13 CI 恒红的成因。
+// 收紧前**必须实证 0 是真数字而非 eslint 启动失败的兜底值**：
+// 已实测 137 个文件被扫、`--format json` 的 stdout 为合法 JSON（见下方 MIN_LINT_FILES 防空转）。
+const BASELINE = 0
 // ⚠ 纵深防御（AGENTS §2.1 第 3 条：如实登记，不假装覆盖）。
 //   动机：只断言「错误数不超基线」时，若 eslint 匹配不到文件却输出合法 JSON `[]`，
 //   求和得 0 → `0 <= BASELINE` 恒成立 → **假通过**。
