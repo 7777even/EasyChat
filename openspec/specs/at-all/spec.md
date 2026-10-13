@@ -211,3 +211,60 @@
 
 - **WHEN** 先建合法靓号、再编辑其 `userId` 为 `"ABC"`
 - **THEN** 抛 `CODE_1001`，不执行 `updateById`
+
+---
+
+### Requirement: 靓号保存端点接收 DTO 而非持久化对象（2026-10-13，遗留 #31）
+
+管理端保存靓号的写入口必须接收 `entity.dto` 下的入参对象，**不得**直接接收 `entity.po` 下的对象。
+
+**为什么这不是安全缺口、却仍要约束**（立项前已穷举后果链）：
+该端点有 `checkAdmin = true` 守着，`saveAccount` 已有四重校验
+（含上方「靓号字符集约束」），PO 上 4 个字段也都是管理员域内可改的数据，
+**无跨用户越权**。真正的风险是**结构性的**：
+
+> PO 直接绑定意味着「将来给这个 PO 加一个内部字段，它会**自动**变成可由外部提交的入参」，
+> 而构建、测试、门禁都不会给出任何提示。
+
+#### Scenario: 入参形状
+
+- **WHEN** 审视 `AdminUserInfoBeautyController#saveBeautAccount` 的入参
+- **THEN** 是 `entity.dto.UserInfoBeautySaveDTO`，**不是** `entity.po.UserInfoBeauty`
+- **AND** 入参带 `@Valid`，使 DTO 上的约束注解真正生效
+- **AND** 全仓 Controller 中「直接收 PO」的端点数为 **0**
+
+#### Scenario: 必填校验在进入 Service 前生效
+
+- **WHEN** `email` 为空 / `email` 格式非法 / `userId` 为空
+- **THEN** 返回 `1001` + 提示，**不**进入 Service
+
+#### Scenario: DTO → PO 的转换逐字段手写
+
+- **WHEN** Controller 把 DTO 转成 PO 传给 Service
+- **THEN** **逐字段** `setXxx`，**不用** `BeanUtils.copyProperties`
+- **AND** 转换后的 PO 四字段与入参逐一相等
+- **AND** `UserInfoBeautyService#saveAccount` 的入参**仍是** `UserInfoBeauty`（Service 签名不变）
+
+#### Scenario: 新建 / 编辑语义不被 DTO 干扰
+
+- **WHEN** `id` 为空或非空
+- **THEN** DTO 层**不**报错（两种都是合法路径）
+- **AND** 分流仍由 Service 的 `getId() == null` 负责，不在两层各写一遍
+
+#### Scenario: status 可选
+
+- **WHEN** `status` 未提交（新建场景的正常情况）
+- **THEN** **不**报错
+
+#### Scenario: 不引入 swagger 注解
+
+- **WHEN** 本仓尚未引入 swagger 注解依赖
+- **THEN** DTO **不加** `@Schema` / `@ApiModel`
+- **AND** 字段以中文注释说明（AGENTS §3.6 要求「中文注释**或** `@Schema`」）
+
+#### Scenario: 方法参数级约束不在单测中断言
+
+- **WHEN** 在 `standaloneSetup` 下验证 `@NotNull Integer id` 这类**方法参数**上的约束
+- **THEN** **不**做行为断言（`standaloneSetup` 不注册 `MethodValidationPostProcessor`，恒返回 200）
+- **AND** 改用结构断言「注解确实声明在参数上」，行为验证交由真机
+- **AND** **不**写出「因环境缺件而恒红」的用例
