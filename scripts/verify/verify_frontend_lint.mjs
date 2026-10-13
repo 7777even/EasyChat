@@ -137,13 +137,33 @@ check('saveFile2Local 的 uploadFile 已 await（原未 await 就返回）',
 
 // ── 4. 当前错误数不超过基线 ─────────────────────────────────
 console.log('\n=== 4. 当前 lint 错误数（不超基线）===')
-const BASELINE = 20   // 见 QA：2026-10-04 实测基线
+// 基线语义：**新增任一 error 即报红**（errCount > BASELINE）。
+// 2026-10-13 实测：137 个文件被检查、真实 error 数 = 1（`src/main/file.js:20`
+// `isInsideRoot` defined but never used），故由 20 收紧到 1 ——
+// 原基线 20 意味着「还能新增 19 个 error 而全绿」，等于没有守护。
+// 之所以不取 0：留 1 个 error 的容错，避免上游 eslint 小版本差异导致 CI 假红；
+// 而收紧前**必须实证这个 1 是真数字而非 eslint 启动失败的兜底值**
+//（已实测：`--format json` 的 stdout 是 3.1MB 合法 JSON、stderr 空、137 文件）。
+const BASELINE = 1
+// ⚠ 纵深防御（AGENTS §2.1 第 3 条：如实登记，不假装覆盖）。
+//   动机：只断言「错误数不超基线」时，若 eslint 匹配不到文件却输出合法 JSON `[]`，
+//   求和得 0 → `0 <= BASELINE` 恒成立 → **假通过**。
+//   ⚠ 但实测当前 eslint 8.57 **走不到这条路径**（2026-10-13 三次实测）：
+//     ① 空目录 pattern → exit 2 + stderr「No files matching」，stdout 空；
+//     ② `--ignore-pattern **/*` 全 ignore → 同上 fatal。
+//     即该情形已被上一条「能取得 lint 错误数」的 null 判定覆盖。
+//   故此断言**不是当前可触发的判别力**，只防「将来换 eslint 版本后行为变为返回 []」。
+//   若将来 eslint 行为变化使 (1) 不再成立，请把它当第一道闸门重新评估。
+//   下限 50：2026-10-13 实测扫到 137 个文件，留足余量以容忍 CI 环境差异。
+const MIN_LINT_FILES = 50
 let errCount = null
+let fileCount = null
 try {
   const out = execFileSync('cmd',
     ['/c', 'npx eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --format json'],
     { cwd: FRONT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 32 * 1024 * 1024 })
   const data = JSON.parse(out)
+  fileCount = data.length
   errCount = data.reduce((n, f) => n + f.messages.filter((m) => m.severity === 2).length, 0)
 } catch (e) {
   // eslint 以非 0 退出表示有错误，但 stdout 仍是有效 JSON
@@ -151,6 +171,7 @@ try {
   if (raw) {
     try {
       const data = JSON.parse(raw)
+      fileCount = data.length
       errCount = data.reduce((n, f) => n + f.messages.filter((m) => m.severity === 2).length, 0)
     } catch (_) { /* 落到下面的 null 判定 */ }
   }
@@ -160,9 +181,12 @@ if (errCount === null) {
   check('能取得 lint 错误数', false,
     'eslint 输出无法解析（可能存在 Parsing error 导致非 JSON 输出）——此时应先修语法错误')
 } else {
-  console.log(`        当前 ${errCount} 个 error（基线 ${BASELINE}）`)
+  console.log(`        当前 ${errCount} 个 error（基线 ${BASELINE}），扫到 ${fileCount} 个文件`)
   check(`lint 错误数不超过基线 ${BASELINE}`, errCount <= BASELINE,
     errCount > BASELINE ? `新增了 ${errCount - BASELINE} 个` : '')
+  check(`eslint 真的扫到了文件（≥ ${MIN_LINT_FILES}）`, fileCount >= MIN_LINT_FILES,
+    `实扫 ${fileCount} 个文件 —— 若为 0 说明 pattern 匹配不到（如全被 ignore），` +
+    '此时「错误数 0」是**假绿**而非干净')
 }
 
 // ── 汇总 ────────────────────────────────────────────────────
