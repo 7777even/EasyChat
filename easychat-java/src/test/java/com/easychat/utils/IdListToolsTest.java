@@ -190,6 +190,83 @@ class IdListToolsTest {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // 空值字面量 —— 2026-10-13（openspec 2026-10-13-id-list-null-literal-guard，
+    // 遗留 #20 治本）
+    //
+    // 背景：`StringTools.isEmpty` 只认**小写** `"null"`，故活库里那条字面量
+    // `"NULL"`（`user_info.moment_visible_list`，非 SQL NULL）会被 `parse`
+    // 当成一个**真实的用户 id** 产出。后果：白名单模式拿到 `["NULL"]` →
+    // 除作者外所有人都看不到该动态（没��任何真实用户 id 会等于 "NULL"）。
+    // 脏数据只是**症状**，根因是解析器这道口子，故本组用例锁的是**解析行为**。
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ parse: 大写 NULL 被剔除（StringTools.isEmpty 只认小写，故曾漏过）")
+    void parseSkipsUppercaseNullLiteral() {
+        assertTrue(IdListTools.parse("NULL").isEmpty(), "\"NULL\" 不应成为名单成员");
+        assertTrue(IdListTools.parse("[\"NULL\"]").isEmpty());
+        // 真实数据形态：单列里存的裸字面量
+        assertTrue(IdListTools.parse("  NULL  ").isEmpty(), "首尾空白也应归一后再判定");
+    }
+
+    @Test
+    @DisplayName("★ parse: 各种语言的空值表示一律剔除")
+    void parseSkipsNullFamilyLiterals() {
+        for (String junk : Arrays.asList("undefined", "UNDEFINED", "NaN", "NAN", "none", "None")) {
+            assertTrue(IdListTools.parse(junk).isEmpty(), junk + " 不应成为名单成员");
+            assertTrue(IdListTools.parse("[\"" + junk + "\"]").isEmpty(), junk + " 不应成为名单成员");
+        }
+    }
+
+    @Test
+    @DisplayName("★ parse: 大小写不敏感（Null / nUlL / Null）")
+    void parseSkipsNullLiteralCaseInsensitively() {
+        for (String junk : Arrays.asList("Null", "nUlL", "NULL", "null", "uNdEfInEd")) {
+            assertTrue(IdListTools.parse(junk).isEmpty(), junk + " 应被识别为空值字面量");
+        }
+    }
+
+    @Test
+    @DisplayName("★ parse: 混合名单只保留真实 id，垃圾项被剔除")
+    void parseMixedListKeepsOnlyRealIds() {
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("[\"U001\",\"NULL\",\"U002\"]")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")),
+                asSet(IdListTools.parse("U001,None,U002")));
+        assertEquals(asSet(Arrays.asList("U001")),
+                asSet(IdListTools.parse("[\"U001\",\"undefined\",\"\",null,\"NaN\"]")));
+    }
+
+    @Test
+    @DisplayName("★ parse: 全是垃圾时与「空输入」行为完全一致（隐私判定不得有分叉）")
+    void parseAllJunkEqualsEmptyInput() {
+        // 白名单分支：visible.contains(realId) 两者同为 false
+        // 黑名单分支：!invisible.contains(realId) 两者同为 true
+        // —— 即脏名单与空名单在 canView 里表现相同，不会造出「看似非空、
+        //     实则谁都不匹配」的白名单。
+        for (String junk : Arrays.asList("NULL", "None", "undefined", "NaN")) {
+            assertEquals(IdListTools.parse("").size(), IdListTools.parse(junk).size(),
+                    junk + " 解析结果应与空输入同规模");
+            assertEquals(IdListTools.parse("[]"), IdListTools.parse(junk),
+                    junk + " 解析结果应与空数组一致");
+        }
+    }
+
+    @Test
+    @DisplayName("parse: 合法 id 与既有宽松形态**不受**新守卫影响（回归护栏）")
+    void parseRealIdsUnaffected() {
+        // 既有测试数据用的是 U001（3 位），生产是 U + 11 位数字 —— 两种都必须原样通过
+        assertEquals(asSet(Arrays.asList("U001", "U002")), asSet(IdListTools.parse("[\"U001\",\"U002\"]")));
+        assertEquals(asSet(Arrays.asList("U01234567890", "U09876543210")),
+                asSet(IdListTools.parse("[\"U01234567890\",\"U09876543210\"]")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")), asSet(IdListTools.parse("\"U001\",\"U002\"")));
+        assertEquals(asSet(Arrays.asList("U001", "U002")), asSet(IdListTools.parse("  [ \"U001\" , \"U002\" ]  ")));
+        // 名字里恰好含 null / none 子串的 id 不该被误伤（黑名单是**全等**判定）
+        assertEquals(asSet(Arrays.asList("U001", "U0null1", "Unone1")),
+                asSet(IdListTools.parse("[\"U001\",\"U0null1\",\"Unone1\"]")));
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // serialize —— 写入侧
     // ─────────────────────────────────────────────────────────────
 
