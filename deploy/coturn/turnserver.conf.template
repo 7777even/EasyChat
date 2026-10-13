@@ -1,0 +1,108 @@
+# ============================================================================
+#  coturn 配置模板（TURN 中继）— EasyChat
+#
+#  ⚠ 本文件是**模板**，不是可直接运行的生产配置。
+#     仓库是公开的，故此处**刻意不写任何真实域名 / IP / 证书路径 / 密钥**，
+#     全部以 ${COTURN_*} 环境变量注入（见 docker-compose.yml 的 coturn service）。
+#
+#  ⚠ 启用前必读：官方文档依据见 design.md §3.2。凡标「★」者缺了就不工作。
+# ============================================================================
+
+# ---- 监听 ---------------------------------------------------------------
+# ★ WebRTC 中继走 UDP+TCP，3478 为默认。注意 TLS/DTLS 也能连到 3478（自动识别流量类型）。
+listening-port=${COTURN_LISTENING_PORT:-3478}
+tls-listening-port=${COTURN_TLS_LISTENING_PORT:-5349}
+
+# 暴露给外网的地址映射。**服务器在 NAT / 云主机 / 容器后必须设置**，
+# 否则客户端拿到的 relay 地址不可达 —— 这是「配了 TURN 却仍不通」的**头号原因**。
+# 官方原文：For that 'external' IP, NAT must forward ports directly
+#          (relayed port 12345 must be always mapped to the same 'external' port 12345).
+# ★ 单 IP 简写： external-ip=203.0.113.10
+#   内网映射： external-ip=203.0.113.10/10.0.0.5
+external-ip=${COTURN_EXTERNAL_IP:-}
+
+# ---- 中继端口段 ---------------------------------------------------------
+# 默认即 RFC5766 规定的区间，无需改动，但**必须在安全组 / 防火墙放行整个 UDP 段**：
+# 只放行 3478 会导致 Allocate 成功却没有实际媒体流。
+min-port=${COTURN_MIN_PORT:-49152}
+max-port=${COTURN_MAX_PORT:-65535}
+
+# ---- 认证：WebRTC 的两项硬要求 -----------------------------------------
+# ★ lt-cred-mech —— 官方原文：
+#   "WebRTC uses long-term authentication mechanism, so you have to use -a option
+#    (or --lt-cred-mech). WebRTC relaying will not work with anonymous access."
+#   缺这一项，WebRTC 中继**完全不工作**。
+lt-cred-mech
+
+# ★ realm —— 官方原文："With -a option, do not forget to set the default realm (-r option)."
+#   使用 lt-cred-mech 时**必须**设置，否则认证无法完成。
+realm=${COTURN_REALM:-}
+
+# ---- 认证：时效凭据（TURN REST API 模式）-------------------------------
+# ★ 与后端 easychat.turn.static-secret **必须是同一个值**，否则客户端算出的
+#   HMAC 与服务端校验对不上，通话直接失败。
+#
+#   凭据格式（coturn 官方 README 原文）：
+#     temporary-username  = "timestamp" + ":" + "username"
+#     temporary-password  = base64_encode(hmac-sha1(shared-secret, temporary-username))
+#   分隔符默认即 ":"，与后端实现一致（后端不需要额外配置）。
+#
+#   ★ 支持**逗号分隔的多个密钥**并存 → 轮换时新旧密钥同时有效，**无需停机**。
+use-auth-secret
+static-auth-secret=${COTURN_STATIC_AUTH_SECRET:-}
+
+# 提示：本模板**不使用** lt-cred-mech 的静态账号文件（-u / userdb），
+# 凭据一律由后端按需签发。若要与时效凭据并存，请知悉官方注明
+# "--user ... This setting may not be used with TURN REST API."
+
+# ---- WebRTC 常规选项 ----------------------------------------------------
+# 官方原文："Usually WebRTC uses fingerprinting (-f)."
+fingerprint
+
+# ---- 安全：回环与多播 ---------------------------------------------------
+# ★ 不要开 allow-loopback-peers。官方原文：
+#   "Allow it only for testing in a development environment!
+#    In production it adds a possible security vulnerability."
+#   默认即拒绝回环对端，故此处显式声明以免被误改。
+no-loopback-peers
+
+# 禁用多播对端（224.0.0.0+ 与 FFXX:*）。
+no-multicast-peers
+
+# 反向过滤：阻断内网地址可防「借中继扫内网」。按需追加行。
+# denied-peer-ip=10.0.0.0-10.255.255.255
+# denied-peer-ip=172.16.0.0-172.31.255.255
+# denied-peer-ip=192.168.0.0-192.168.255.255
+
+# ---- TLS ---------------------------------------------------------------
+# 建议开启：明文 3478 可被中间人阻断，但 TURN 媒体本身是 DTLS-SRTP 加密的，
+# 故不开 TLS 不影响媒体保密性，只影响可达性（网络封锁 3478 时）。
+# ★ 开启则必须同时提供 cert / pkey，且为**可信 CA 签发**的证书；
+#   浏览器会校验，自签证书会导致连接失败（coturn 与浏览器行为一致）。
+no-tls
+# tls
+# cert=${COTURN_CERT:-}
+# pkey=${COTURN_PKEY:-}
+
+# ---- 配额与限速（防单个客户端吃满带宽）---------------------------------
+# 按 KBytes/s 计。0 = 不限。
+max-bps=${COTURN_MAX_BPS:-0}
+# user-quota=10
+user-quota=${COTURN_USER_QUOTA:-10}
+
+# ============================================================================
+#  上线前自检清单（逐条确认，勿跳）
+#
+#   1. realm 已设置（lt-cred-mech 的前提）
+#   2. use-auth-secret 已开，且 static-auth-secret 与后端
+#      EASYCHAT_TURN_STATIC_SECRET 完全一致
+#   3. external-ip 已设为「公网IP/内网IP」（云主机 / 容器后必设）
+#   4. 安全组已放行 3478(udp+tcp) 与 49152-65535(udp) **整段**
+#   5. EASYCHAT_TURN_URL 指向本服务，且带 transport 参数
+#   6. 若开 tls，cert/pkey 为可信 CA 签发（非自签）
+#   7. 后端启动日志中**无** WARN「使用长期静态凭据」（有则说明 static-secret 未注入）
+#
+#  ⚠ 本机**无法**验证第 3、4 条（无 Docker daemon、无可控 NAT、无双实例）。
+#     这两条只能由真实部署环境验证 —— 见 QA「未运行项」，请勿以本模板可解析
+#     就认定「部署可用」。
+# ============================================================================

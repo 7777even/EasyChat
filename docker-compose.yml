@@ -51,6 +51,62 @@ services:
       timeout: 5s
       retries: 10
 
+  # ==========================================================================
+  #  coturn —— TURN 中继（音视频通话在对称 NAT 下唯一的连通手段）
+  #   2026-10-13，openspec/changes/2026-10-13-turn-deploy-and-key-mgmt（L4）
+  #
+  #  为什么放在这里：本仓此前**没有任何 TURN 部署物** —— 唯一可用的是
+  #  application-dev.properties 里入库的**公共**中继，而生产三项刻意留空，
+  #  结果是「对称 NAT 下接通后无声」。媒体不该经第三方服务器，故随仓库交付自建。
+  #
+  #  ⚠ 三处**必须**由运维注入、仓库不得写死（仓库公开，写死即等于公开的中继配置）：
+  #    COTURN_EXTERNAL_IP        —— 公网IP/内网IP。**漏设是「配了却不通」的头号原因**
+  #    COTURN_REALM              —— lt-cred-mech 的前提，缺了认证无法完成
+  #    COTURN_STATIC_AUTH_SECRET —— 必须与后端 EASYCHAT_TURN_STATIC_SECRET 一致
+  #
+  #  ⚠ 端口放行：3478(udp+tcp) + 5349 + **49152-65535(udp) 整段**。
+  #    只放行 3478 会出现「Allocate 成功但没有媒体流」。
+  #
+  #  ⚠ backend **刻意没有** depends_on coturn：TURN 不可用时后端**应当照常启动**，
+  #    只是通话降级（此时启动日志有 WARN）。让中继故障阻断后端启动是错误的耦合。
+  # ==========================================================================
+  coturn:
+    image: coturn/coturn:latest
+    container_name: easychat-coturn
+    restart: unless-stopped
+    # coturn 需要知道宿主机地址，容器内默认路由地址对外不可用
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: Asia/Shanghai
+      COTURN_LISTENING_PORT: ${COTURN_LISTENING_PORT:-3478}
+      COTURN_TLS_LISTENING_PORT: ${COTURN_TLS_LISTENING_PORT:-5349}
+      COTURN_EXTERNAL_IP: ${COTURN_EXTERNAL_IP:-}
+      COTURN_REALM: ${COTURN_REALM:-}
+      # 支持逗号分隔的多密钥并存 → 轮换时新旧密钥同时生效，无需停机
+      COTURN_STATIC_AUTH_SECRET: ${COTURN_STATIC_AUTH_SECRET:-}
+      COTURN_MIN_PORT: ${COTURN_MIN_PORT:-49152}
+      COTURN_MAX_PORT: ${COTURN_MAX_PORT:-65535}
+      COTURN_MAX_BPS: ${COTURN_MAX_BPS:-0}
+      COTURN_USER_QUOTA: ${COTURN_USER_QUOTA:-10}
+    ports:
+      - "${COTURN_LISTENING_PORT:-3478}:3478/udp"
+      - "${COTURN_LISTENING_PORT:-3478}:3478/tcp"
+      - "${COTURN_TLS_LISTENING_PORT:-5349}:5349/tcp"
+      # ⚠ 中继端口段**也必须**映射，否则 Allocate 会拿到容器内地址而不可达。
+      #    生产更推荐改用 host 网络 + 安全组放行整段，避免在此逐段列出。
+      - "${COTURN_MIN_PORT:-49152}-${COTURN_MAX_PORT:-65535}:${COTURN_MIN_PORT:-49152}-${COTURN_MAX_PORT:-65535}/udp"
+    volumes:
+      - ./deploy/coturn/turnserver.conf.template:/etc/coturn/turnserver.conf.template:ro
+    healthcheck:
+      # ⚠ 这只证明「进程在、3478 能建连」，**不证明** external-ip / 防火墙 / 端口段正确 ——
+      #    那三项只能在真实网络验证（见模板内「上线前自检清单」与 QA 未运行项）。
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3478 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # 迁移前置闸门（2026-10-04，openspec/changes/2026-10-04-flyway-migration-automation）
   #
   # 为什么需要它：Flyway 的 baseline-on-migrate **不比对 schema 内容**，只看
