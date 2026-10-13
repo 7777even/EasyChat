@@ -55,6 +55,7 @@ node "$ROOT/scripts/verify/verify_password_session.mjs"
 node "$ROOT/scripts/verify/verify_audit_and_at_all.mjs"
 node "$ROOT/scripts/verify/verify_migration_flyway.mjs"
 node "$ROOT/scripts/verify/verify_sql_concat_guard.mjs"
+node "$ROOT/scripts/verify/verify_db_model_core.mjs"
 node "$ROOT/scripts/verify/verify_local_file_guard_core.mjs"
 node "$ROOT/scripts/verify/verify_preflight_baseline_core.mjs"
 node "$ROOT/scripts/verify/verify_local_file_token_usage.mjs"
@@ -88,6 +89,7 @@ for (const [name, def] of Object.entries(hooks)) {
         'node "%ROOT%\\scripts\\verify\\verify_audit_and_at_all.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_migration_flyway.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_sql_concat_guard.mjs" || exit /b 1',
+        'node "%ROOT%\\scripts\\verify\\verify_db_model_core.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_local_file_guard_core.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_preflight_baseline_core.mjs" || exit /b 1',
         'node "%ROOT%\\scripts\\verify\\verify_local_file_token_usage.mjs" || exit /b 1',

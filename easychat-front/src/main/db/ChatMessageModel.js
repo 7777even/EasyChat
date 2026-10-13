@@ -1,6 +1,13 @@
 import { queryCount, queryOne, queryAll, insertOrReplace, update, run } from "./ADB";
 import { updateNoReadCount } from "./ChatSessionUserModel"
 import store from "../store"
+// 2026-10-12（遗留 #7）：SQL 构造抽到纯核心，ADB.js 是唯一的 sqlite3 加载点，
+//   本文件退回纯 IO 接线。核心位置见 dbModelCore.mjs 顶部说明。
+import {
+    buildExistsMessage, buildDelMessage, buildSelectByMessageId,
+    buildMessagePage, buildMessagePageCount, buildSelectAllMessageList,
+    buildSearchCount, buildSearchPage
+} from "./dbModelCore.mjs"
 
 const getPageOffset = (pageNo = 1, totalCount) => {
     const pageSize = 20;
@@ -21,19 +28,12 @@ const getPageOffset = (pageNo = 1, totalCount) => {
 // 调用方 .catch() 收不到），故改为 async 函数直写。
 const selectMessageList = async (query) => {
     const { sessionId, pageNo, maxMessageId } = query;
-    let sql = "select count(1) from chat_message where session_id = ? and user_id = ?";
-    const totalCount = await queryCount(sql, [sessionId, store.getUserId()]);
+    const userId = store.getUserId();
+    const countQ = buildMessagePageCount(userId, sessionId);
+    const totalCount = await queryCount(countQ.sql, countQ.params);
     const { pageTotal, offset, limit } = getPageOffset(pageNo, totalCount);
-    const params = [sessionId, store.getUserId()];
-    sql = "select * from chat_message where session_id = ? and user_id = ?";
-    if (maxMessageId) {
-        sql = sql + "and message_id <=?";
-        params.push(maxMessageId);
-    }
-    params.push(offset);
-    params.push(limit);
-    sql = sql + "order by message_id desc limit ?,?";
-    const dataList = await queryAll(sql, params);
+    const q = buildMessagePage(userId, sessionId, maxMessageId, offset, limit);
+    const dataList = await queryAll(q.sql, q.params);
     return {
         dataList,
         pageTotal,
@@ -47,9 +47,8 @@ const selectMessageList = async (query) => {
  */
 const selectAllMessageList = async (query) => {
     const { sessionId } = query;
-    const params = [sessionId, store.getUserId()];
-    const sql = "select * from chat_message where session_id = ? and user_id = ? order by message_id asc";
-    const dataList = await queryAll(sql, params);
+    const q = buildSelectAllMessageList(store.getUserId(), sessionId);
+    const dataList = await queryAll(q.sql, q.params);
     return dataList || [];
 }
 
@@ -66,13 +65,14 @@ const updateMessage = (data, paramData) => {
 
 //查询本地消息是否已存在（撤回帧补落历史：本地缺行时需插入而非仅更新）
 const existsMessage = (messageId) => {
-    return queryOne("select message_id from chat_message where user_id = ? and message_id = ?", [store.getUserId(), messageId]);
+    const q = buildExistsMessage(store.getUserId(), messageId);
+    return queryOne(q.sql, q.params);
 }
 
 //本地删除单条消息（多选删除 / 右键删除；服务端保留，仅本端不可见）
 const delMessage = (messageId) => {
-    const sql = "delete from chat_message where user_id = ? and message_id = ?";
-    return run(sql, [store.getUserId(), messageId]);
+    const q = buildDelMessage(store.getUserId(), messageId);
+    return run(q.sql, q.params);
 }
 
 // 2026-10-04 修正两处（原为 `new Promise(async (resolve, reject) => {` 包裹）：
@@ -106,74 +106,25 @@ const saveMessageBatch = async (chatMessageList) => {
 
 
 const selectByMessageId = (messageId) => {
-    let sql = "select * from chat_message where message_id = ? and user_id =?";
-    const params = [messageId, store.getUserId()];
-    return queryOne(sql, params)
+    const q = buildSelectByMessageId(store.getUserId(), messageId);
+    return queryOne(q.sql, q.params)
 }
 
 // 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve(v) })`。
 // executor 内 await 抛出的异常不会被 Promise 捕获，改为 async 直写。
 const searchMessages = async (query) => {
-    const { sessionId, keyword, sendUserId, messageType, startTime, endTime, pageNo } = query;
+    const { sessionId, pageNo } = query;
+    const userId = store.getUserId();
 
-    let sql = "select count(1) from chat_message where session_id = ? and user_id = ?";
-    const countParams = [sessionId, store.getUserId()];
-
-    // 构建查询条件
-    if (keyword) {
-        sql += " and message_content like ?";
-        countParams.push(`%${keyword}%`);
-    }
-    if (sendUserId) {
-        sql += " and send_user_id = ?";
-        countParams.push(sendUserId);
-    }
-    if (messageType) {
-        sql += " and message_type = ?";
-        countParams.push(messageType);
-    }
-    if (startTime) {
-        sql += " and send_time >= ?";
-        countParams.push(startTime);
-    }
-    if (endTime) {
-        sql += " and send_time <= ?";
-        countParams.push(endTime);
-    }
-
-    const totalCount = await queryCount(sql, countParams);
+    // ⚠ 2026-10-12：原先此处把条件构造**复制了两份**（count 一份、分页一份，逐字相同）。
+    //   两份若改一处漏一处，count 与实际结果会对不上，且**不抛异常**（表现为
+    //   「页码总数与实际条数不符」）。现统一走 buildSearchConditions，不再重复。
+    const countQ = buildSearchCount(userId, sessionId, query);
+    const totalCount = await queryCount(countQ.sql, countQ.params);
     const { pageTotal, offset, limit } = getPageOffset(pageNo, totalCount);
 
-    // 构建查询语句
-    let querySql = "select * from chat_message where session_id = ? and user_id = ?";
-    const queryParams = [sessionId, store.getUserId()];
-
-    if (keyword) {
-        querySql += " and message_content like ?";
-        queryParams.push(`%${keyword}%`);
-    }
-    if (sendUserId) {
-        querySql += " and send_user_id = ?";
-        queryParams.push(sendUserId);
-    }
-    if (messageType) {
-        querySql += " and message_type = ?";
-        queryParams.push(messageType);
-    }
-    if (startTime) {
-        querySql += " and send_time >= ?";
-        queryParams.push(startTime);
-    }
-    if (endTime) {
-        querySql += " and send_time <= ?";
-        queryParams.push(endTime);
-    }
-
-    queryParams.push(offset);
-    queryParams.push(limit);
-    querySql += " order by send_time desc limit ?,?";
-
-    const dataList = await queryAll(querySql, queryParams);
+    const pageQ = buildSearchPage(userId, sessionId, query, offset, limit);
+    const dataList = await queryAll(pageQ.sql, pageQ.params);
     return {
         dataList,
         pageTotal,

@@ -1,43 +1,48 @@
 import { run, queryAll, queryOne } from "./ADB";
+// 2026-10-12（遗留 #7）：SQL 构造抽到纯核心，本文件退回纯 IO 接线。
+import {
+    buildInsertLaterHandle, buildSelectLaterHandleList, buildSelectLaterHandleById,
+    buildDeleteLaterHandle, buildDeleteExpiredLaterHandle, buildSelectNeedRemindLaterHandle
+} from "./dbModelCore.mjs"
 
 /**
  * 稍后处理 Model 层
  */
 
 // 添加稍后处理
-const addLaterHandle = async ({ userId, messageId, sessionId, contactId, contactName, content, createTime, remindTime }) => {
-    const sql = `INSERT INTO later_handle (user_id, message_id, session_id, contact_id, contact_name, content, create_time, remind_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    await run(sql, [userId, messageId, sessionId, contactId, contactName, content, createTime, remindTime]);
+const addLaterHandle = async (row) => {
+    const q = buildInsertLaterHandle(row);
+    await run(q.sql, q.params);
 }
 
 // 查询稍后处理列表
 const selectLaterHandleList = async (userId) => {
-    const sql = `SELECT * FROM later_handle WHERE user_id = ? ORDER BY create_time DESC`;
-    return await queryAll(sql, [userId]);
+    const q = buildSelectLaterHandleList(userId);
+    return await queryAll(q.sql, q.params);
 }
 
 // 查询单条稍后处理
 const selectLaterHandleById = async (id) => {
-    const sql = `SELECT * FROM later_handle WHERE id = ?`;
-    return await queryOne(sql, [id]);
+    const q = buildSelectLaterHandleById(id);
+    return await queryOne(q.sql, q.params);
 }
 
 // 删除稍后处理
 const deleteLaterHandle = async (id) => {
-    const sql = `DELETE FROM later_handle WHERE id = ?`;
-    await run(sql, [id]);
+    const q = buildDeleteLaterHandle(id);
+    await run(q.sql, q.params);
 }
 
 // 删除已过期稍后处理
 const deleteExpiredLaterHandle = async (currentTime) => {
-    const sql = `DELETE FROM later_handle WHERE remind_time < ?`;
-    await run(sql, [currentTime]);
+    const q = buildDeleteExpiredLaterHandle(currentTime);
+    await run(q.sql, q.params);
 }
 
 // 查询需要提醒的稍后处理
 const selectNeedRemindLaterHandle = async (currentTime) => {
-    const sql = `SELECT * FROM later_handle WHERE remind_time <= ?`;
-    return await queryAll(sql, [currentTime]);
+    const q = buildSelectNeedRemindLaterHandle(currentTime);
+    return await queryAll(q.sql, q.params);
 }
 
 export {

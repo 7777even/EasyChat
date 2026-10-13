@@ -2,33 +2,28 @@ const os = require('os');
 import { queryOne, run, insertOrIgnore, update, queryAll } from "./ADB";
 import { startLocalServer } from "../file"
 import store from "../store"
+// 2026-10-12（遗留 #7）：SQL 构造抽到纯核心，本文件退回纯 IO 接线。
+import {
+    buildContactNoReadCount, buildSelectMaxServerPort, buildSelectSettingByUserId,
+    buildSelectSettingInfo, buildSelectLocalEmails, nextServerPort
+} from "./dbModelCore.mjs"
 const userDir = os.homedir();
 // 2026-10-04：原为 `new Promise(async (resolve, reject) => { ... resolve() })`。
 // executor 内 await 抛出的异常不会被 Promise 捕获，改为 async 直写。
 const updateContactNoReadCount = async ({ userId, noReadCount }) => {
-    let sql = null;
-    if (noReadCount) {
-        sql = "update user_setting set contact_no_read = contact_no_read+? where user_id = ?";
-    } else {
-        noReadCount = 0;
-        sql = "update user_setting set contact_no_read = ? where user_id = ?";
-    }
-    await run(sql, [noReadCount, userId]);
+    const q = buildContactNoReadCount(noReadCount, userId);
+    await run(q.sql, q.params);
 }
 
 const addUserSetting = async (userId, email) => {
-    let sql = "select max(server_port) server_port from user_setting";
-    let { serverPort } = await queryOne(sql, []);
-    if (serverPort == null) {
-        serverPort = 10240;
-    } else {
-        serverPort++;
-    }
+    const maxQ = buildSelectMaxServerPort();
+    let { serverPort } = await queryOne(maxQ.sql, maxQ.params);
+    serverPort = nextServerPort(serverPort);
     const sysSetting = {
         localFileFolder: userDir + "\\.easychat\\fileStorage\\"
     }
-    sql = "select * from user_setting where user_id =?";
-    const userInfo = await queryOne(sql, [userId]);
+    const byIdQ = buildSelectSettingByUserId(userId);
+    const userInfo = await queryOne(byIdQ.sql, byIdQ.params);
 
     let resultServerPort = null;
     let localFileFolder = sysSetting.localFileFolder + userId;
@@ -53,8 +48,8 @@ const addUserSetting = async (userId, email) => {
 }
 
 const selectSettingInfo = (userId) => {
-    let sql = "select  * from  user_setting where user_id = ?";
-    return queryOne(sql, [userId]);
+    const q = buildSelectSettingInfo(userId);
+    return queryOne(q.sql, q.params);
 }
 
 const updateSysSetting = (sysSetting) => {
@@ -68,8 +63,8 @@ const updateSysSetting = (sysSetting) => {
 }
 
 const loadLocalUser = async () => {
-    let sql = "select email from user_setting where email is not null";
-    return queryAll(sql, []);;
+    const q = buildSelectLocalEmails();
+    return queryAll(q.sql, q.params);
 }
 
 

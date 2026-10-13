@@ -1,6 +1,13 @@
 
 import { run, queryAll, insertOrIgnore, update, queryOne } from "./ADB";
 import store from "../store"
+// 2026-10-12（遗留 #7）：SQL 构造抽到纯核心，本文件退回纯 IO 接线。
+import {
+    buildUpdateNoReadCount, buildSelectUserSessionList, buildSelectSessionByContactId,
+    buildReadAll, buildSessionWhere, buildSessionUpdateInfo,
+    buildSessionAttrUpdate, buildUpdateSessionInfo, buildSimpleSessionUpdate,
+    buildSessionPreviewOnly, SESSION_USER_ATTR_WHITELIST
+} from "./dbModelCore.mjs"
 
 
 //新增
@@ -11,14 +18,8 @@ const addChatSession = (sessionInfo) => {
 
 //更新会话信息
 const updateChatSession = (sessionInfo) => {
-    const paramData = {
-        userId: store.getUserId(),
-        contactId: sessionInfo.contactId
-    }
-    const updateInfo = Object.assign({}, sessionInfo);
-    //更新的时候不更新userId contactId
-    updateInfo.contactId = null;
-    updateInfo.userId = null;
+    const paramData = buildSessionWhere(store.getUserId(), sessionInfo.contactId);
+    const updateInfo = buildSessionUpdateInfo(sessionInfo);
     return update("chat_session_user", updateInfo, paramData);
 }
 
@@ -49,51 +50,35 @@ const saveOrUpdateChatSessionBatch4Init = async (chatSessionList) => {
 
 //更新未读数
 const updateNoReadCount = ({ contactId, noReadCount }) => {
-    let sql = "update chat_session_user set no_read_count = no_read_count+? where user_id=? and contact_id=?";
-    return run(sql, [noReadCount, store.getUserId(), contactId]);
+    const q = buildUpdateNoReadCount(store.getUserId(), contactId, noReadCount);
+    return run(q.sql, q.params);
 }
 
 //查询用户的会话列表
 const selectUserSessionList = () => {
-    let sql = "select * from chat_session_user where user_id = ? and status = 1";
-    return queryAll(sql, [store.getUserId()]);
+    const q = buildSelectUserSessionList(store.getUserId());
+    return queryAll(q.sql, q.params);
 }
 //根据联系人查询会话
 const selectUserSessionByContactId = (concatId) => {
-    let sql = "select * from chat_session_user where user_id = ? and contact_id = ?";
-    return queryOne(sql, [store.getUserId(), concatId]);
+    const q = buildSelectSessionByContactId(store.getUserId(), concatId);
+    return queryOne(q.sql, q.params);
 }
 
 //阅读会话所有消息
 const readAll = (contactId) => {
-    let sql = "update chat_session_user set no_read_count = 0 where user_id=? and contact_id=?"
-    return run(sql, [store.getUserId(), contactId]);
+    const q = buildReadAll(store.getUserId(), contactId);
+    return run(q.sql, q.params);
 }
 
 //根据 sessionId 更新会话元数据（用于跨端 SYNC_SESSION 同步）
 const updateSessionBySessionId = (updateInfo, sessionId) => {
-    let sql = "update chat_session_user set ";
-    const params = [];
-    const setClauses = [];
-    if (updateInfo.lastMessage !== undefined) {
-        setClauses.push("last_message = ?");
-        params.push(updateInfo.lastMessage);
-    }
-    if (updateInfo.lastReceiveTime !== undefined) {
-        setClauses.push("last_receive_time = ?");
-        params.push(updateInfo.lastReceiveTime);
-    }
-    if (updateInfo.noReadCount !== undefined) {
-        setClauses.push("no_read_count = ?");
-        params.push(updateInfo.noReadCount);
-    }
-    if (setClauses.length === 0) {
+    const q = buildSessionAttrUpdate(store.getUserId(), sessionId, updateInfo);
+    // ⚠ 无可更新字段时**直接返回**、不拼 SQL —— 拼出 `set  where ...` 是语法错
+    if (!q.hasClause) {
         return Promise.resolve();
     }
-    sql += setClauses.join(", ");
-    sql += " where user_id = ? and session_id = ?";
-    params.push(store.getUserId(), sessionId);
-    return run(sql, params);
+    return run(q.sql, q.params);
 }
 
 
@@ -110,27 +95,9 @@ const saveOrUpdate4Message = async (currentSessionId, sessionInfo) => {
     }
 }
 //收到消息更新会话
-const updateSessionInfo4Message = async (currentSessionId, { sessionId, contactName, lastMessage, lastReceiveTime, contactId, memberCount }) => {
-    const params = [lastMessage, lastReceiveTime];
-    let sql = "update chat_session_user set last_message=?,last_receive_time=?,status = 1";
-    //实时更新联系人信息
-    if (contactName) {
-        sql = sql + ",contact_name = ?"
-        params.push(contactName);
-    }
-    //成员数量
-    if (memberCount != null) {
-        sql = sql + ",member_count =?"
-        params.push(memberCount);
-    }
-    //未选中当前session增加未读消息数
-    if (sessionId !== currentSessionId) {
-        sql = sql + ",no_read_count = no_read_count + 1";
-    }
-    sql = sql + " where user_id = ? and contact_id = ?";
-    params.push(store.getUserId());
-    params.push(contactId);
-    return run(sql, params);
+const updateSessionInfo4Message = async (currentSessionId, sessionInfo) => {
+    const q = buildUpdateSessionInfo(store.getUserId(), currentSessionId, sessionInfo);
+    return run(q.sql, q.params);
 }
 
 //删除会话
@@ -158,24 +125,14 @@ const topChatSession = (contactId, topType) => {
 
 //更新群名称
 const updateGroupName = (contactId, groupName) => {
-    const paramData = {
-        userId: store.getUserId(),
-        contactId
-    }
-    const sessionInfo = {
-        contactName: groupName
-    }
+    const paramData = buildSessionWhere(store.getUserId(), contactId);
+    const sessionInfo = buildSimpleSessionUpdate('contactName', groupName);
     return update("chat_session_user", sessionInfo, paramData);
 }
 
 const updateStatus = (contactId) => {
-    const paramData = {
-        userId: store.getUserId(),
-        contactId
-    }
-    const sessionInfo = {
-        status: 1
-    }
+    const paramData = buildSessionWhere(store.getUserId(), contactId);
+    const sessionInfo = buildSimpleSessionUpdate('status', 1);
     return update("chat_session_user", sessionInfo, paramData);
 }
 
@@ -184,7 +141,8 @@ const updateStatus = (contactId) => {
  * 收到跨端同步帧后直接落本地库，保证多端表现一致。
  */
 const updateSessionAttr = (contactId, attrName, attrValue) => {
-    const allowKeys = { topType: 1, noDisturb: 1, draft: 1 };
+    const allowKeys = {};
+    for (const k of SESSION_USER_ATTR_WHITELIST) allowKeys[k] = 1;
     if (!allowKeys[attrName]) {
         return Promise.resolve();
     }
@@ -204,9 +162,8 @@ const updateSessionAttr = (contactId, attrName, attrValue) => {
 //管理端删除帧（20）条件预览占位：仅改写 last_message，
 //不刷 last_receive_time（防会话重排）、不计 no_read_count（防未读脏增）——ADR-004
 const updateSessionPreviewOnly = (contactId, lastMessage) => {
-    const sql = "update chat_session_user set last_message = ? where user_id = ? and contact_id = ?";
-    const params = [lastMessage, store.getUserId(), contactId];
-    return run(sql, params);
+    const q = buildSessionPreviewOnly(store.getUserId(), contactId, lastMessage);
+    return run(q.sql, q.params);
 }
 
 
