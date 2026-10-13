@@ -1,0 +1,151 @@
+# 证据：后端集成测试层（openspec/changes/2026-10-13-backend-integration-test-layer）
+
+> 由脚本从**真实** mvn / 门禁输出中抽取，**未改写任何内容**。做了三件纯机械的处理：
+> ① 截断超长行；② 丢弃 `BeanCreationException` 的**包装层**（它只说明「谁注入失败」，
+> 而 `Caused by:` 之后的**根因行**才说明「为什么」）；③ mvn 的 stdout 是平台默认编码
+> （GBK），按 UTF-8 读会乱码，故用 `TextDecoder('gbk')` 兜底转码后**原样**输出。
+
+⚠ 变异 ①②③ 均已还原：`git diff -- easychat-java/src/main` 为空（**生产代码零改动**）。
+
+⚠ **一处未存档**：最早的「不加任何 mock 时，`SensitiveWordServiceImpl#init` 因查库失败」
+那次输出走了屏幕管道、未重定向到文件，故本证据无对应片段；该结论的记录见
+`IntegrationContextLoadsTest` 类注释（该文件已入库），且可由 T2 第一步的日志反推。
+
+
+## T2 第一步：mock 敏感词 Mapper 生效后 → Redisson 在 Bean 创建期真连 Redis
+
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [org.redisson.api.RedissonClient]: Factory method 'redissonClient' threw exception; nested exception is org.redisson.client.RedisConnectionException: Unable to connect to Redis server: 127.0.0.1/127.0.0.1:1
+Caused by: org.redisson.client.RedisConnectionException: Unable to connect to Redis server: 127.0.0.1/127.0.0.1:1
+Caused by: java.net.ConnectException: Connection refused: no further information
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0, Time elapsed: 17.335 s <<< FAILURE! - in com.easychat.integration.IntegrationContextLoadsTest
+[ERROR]   IntegrationContextLoadsTest.contextLoads ? IllegalState Failed to load Applica...
+[ERROR]   IntegrationContextLoadsTest.dataSourceMustNotPointAtRealDatabase ? IllegalState
+[ERROR]   IntegrationContextLoadsTest.mockMvcComesFromRealWebApplicationContext ? IllegalState
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T2 第二步：mock RedissonClient 后 → MessageHandler 订阅 topic 时 NPE
+
+Caused by: java.lang.NullPointerException: Cannot invoke "org.redisson.api.RTopic.addListener(java.lang.Class, org.redisson.api.listener.MessageListener)" because "rTopic" is null
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0, Time elapsed: 13.072 s <<< FAILURE! - in com.easychat.integration.IntegrationContextLoadsTest
+[ERROR]   IntegrationContextLoadsTest.contextLoads ? IllegalState Failed to load Applica...
+[ERROR]   IntegrationContextLoadsTest.dataSourceMustNotPointAtRealDatabase ? IllegalState
+[ERROR]   IntegrationContextLoadsTest.mockMvcComesFromRealWebApplicationContext ? IllegalState
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T2 第三步：mock MessageHandler 后 → 上下文已起，仅 MockMvc 不可用
+
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0, Time elapsed: 15.925 s <<< FAILURE! - in com.easychat.integration.IntegrationContextLoadsTest
+[ERROR]   IntegrationContextLoadsTest.contextLoads ? UnsatisfiedDependency Error creatin...
+[ERROR]   IntegrationContextLoadsTest.dataSourceMustNotPointAtRealDatabase ? UnsatisfiedDependency
+[ERROR]   IntegrationContextLoadsTest.mockMvcComesFromRealWebApplicationContext ? UnsatisfiedDependency
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T2 第四步：加 @AutoConfigureMockMvc 后 → 仅剩元断言自身设计缺陷
+
+[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 18.842 s <<< FAILURE! - in com.easychat.integration.IntegrationContextLoadsTest
+Caused by: java.net.ConnectException: Connection refused: no further information
+[ERROR]   IntegrationContextLoadsTest.dataSourceMustNotPointAtRealDatabase:112 ? SQLTransientConnection
+[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T2 完成：3/3 全绿
+
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.878 s - in com.easychat.integration.IntegrationContextLoadsTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+## 变异① checkAdmin 守卫方向反写（!getAdmin → getAdmin）
+
+[ERROR] Tests run: 5, Failures: 3, Errors: 0, Skipped: 0, Time elapsed: 14.307 s <<< FAILURE! - in com.easychat.integration.InterceptorChainBehaviourTest
+java.lang.AssertionError: Status expected:<200> but was:<404>
+java.lang.AssertionError: JSON path "$.code" expected:<1003> but was:<0>
+[ERROR]   InterceptorChainBehaviourTest.adminIsAllowedThrough:89 Status expected:<200> but was:<404>
+[ERROR]   InterceptorChainBehaviourTest.adminRequestReachesService:103 Status expected:<200> but was:<404>
+[ERROR]   InterceptorChainBehaviourTest.nonAdminIsRejectedOnAdminEndpoint:73 JSON path "$.code" expected:<1003> but was:<0>
+[ERROR] Tests run: 5, Failures: 3, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T6/T7 全绿：5/5（变异还原后）
+
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 17.827 s - in com.easychat.integration.InterceptorChainBehaviourTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+## T8 全绿：3/3
+
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection; nested exception is java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2008ms.
+Caused by: java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2008ms.
+Caused by: java.net.ConnectException: Connection refused: no further information
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 19.893 s - in com.easychat.integration.RateLimitBehaviourTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+## 变异② 阈值 >= ：首次**未转红** —— 断言因 ISO-8859-1 解码恒真，属假通过
+
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection; nested exception is java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2015ms.
+Caused by: java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2015ms.
+Caused by: java.net.ConnectException: Connection refused: no further information
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.314 s - in com.easychat.integration.RateLimitBehaviourTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+## 变异② 修正解码后：正确转红
+
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection; nested exception is java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2004ms.
+Caused by: java.sql.SQLTransientConnectionException: HikariCPDatasource - Connection is not available, request timed out after 2004ms.
+Caused by: java.net.ConnectException: Connection refused: no further information
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 19.953 s <<< FAILURE! - in com.easychat.integration.RateLimitBehaviourTest
+java.lang.AssertionError: 恰好等于阈值时被限流了，说明阈值判定方向写反（应为 count > 60）：body={"code":1001,"message":"请求过于频繁，请稍后再试","data":null}
+[ERROR]   RateLimitBehaviourTest.requestExactlyAtThresholdIsAllowed:125 恰好等于阈值时被限流了，说明阈值判定方向写反（应为 count > 60）：body={"code":1001,"message":"请求过于频繁，请稍后再试","data":null}
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+
+## T9/T10/T11 全绿：5/5
+
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 21.298 s - in com.easychat.integration.ParamValidationBehaviourTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+## 变异③ 删除类级 @Validated → 方法级校验失效（遗留 #32 闭环证据）
+
+[ERROR] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 16.768 s <<< FAILURE! - in com.easychat.integration.ParamValidationBehaviourTest
+java.lang.AssertionError: 方法级校验未触发（@Validated + @NotEmpty 形同虚设）：body={"code":0,"message":"success","data":null}
+[ERROR]   ParamValidationBehaviourTest.methodLevelValidationRejectsEmptyEmailBeforeMethodBody:128 方法级校验未触发（@Validated + @NotEmpty 形同虚设）：body={"code":0,"message":"success","data":null}
+[ERROR] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+
+## 全量 mvn test（既有 889 + 新增 16 = 905）
+
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.112 s - in com.easychat.config.CorsConfigTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.586 s - in com.easychat.controller.ABaseControllerTest
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.091 s - in com.easychat.controller.AccountControllerMockMvcTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.036 s - in com.easychat.controller.AdminControllersMockMvcTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.564 s - in com.easychat.controller.AdminGroupSettingUpdateControllersMockMvcTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.182 s - in com.easychat.controller.AdminUserInfoBeautyControllerMockMvcTest
+[INFO] Tests run: 22, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.885 s - in com.easychat.controller.ChatControllerSendMockMvcTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.12 s - in com.easychat.controller.FileUploadControllerMockMvcTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s - in com.easychat.controller.GlobalExceptionHandlerHttpStatusTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.426 s - in com.easychat.controller.GroupDomainControllersMockMvcTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.307 s - in com.easychat.controller.MomentControllerMockMvcTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.523 s - in com.easychat.controller.ThinDelegatingControllersMockMvcTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.239 s - in com.easychat.controller.UserContactControllerMockMvcTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.01 s - in com.easychat.enums.SortOptionTest
+[INFO] Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s - in com.easychat.service.impl.MomentCanViewTest
+[INFO] Tests run: 27, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.058 s - in com.easychat.service.impl.SensitiveWordFilterTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s - in com.easychat.utils.CopyToolsTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.057 s - in com.easychat.utils.DateUtilTest
+[INFO] Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.304 s - in com.easychat.utils.IdListToolsTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.101 s - in com.easychat.utils.JsonUtilsTest
+
+## 凭据门禁：探针行仍在（应报红）
+
+[FAIL] 测试资源敏感键为占位符形式：application-test.properties → spring.datasource.password
+===== 结论：25/26 通过 =====
+
+## 凭据门禁：删除探针行后（应全绿）
+
+[PASS] 测试资源无裸凭据：application-test.properties（已扫 8 个键）
+===== 结论：26/26 通过 =====

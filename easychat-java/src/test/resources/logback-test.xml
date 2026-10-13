@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  测试专用 logback 配置。
+
+  ⚠ 为何必须单独一份：主工程的 logback-spring.xml 位于 src/main/resources，也在 test classpath 上，
+    且其 root level 取自 ${log.root.level}（dev profile 下被调成 DEBUG）。
+    后果是集成测试启动失败时，同一条 BeanCreationException 会在日志里重复 **50 次以上**，
+    真正的首行原因被淹没 —— 这正是本任务 T1/T2 期间实际遇到的情况。
+
+  logback 的加载顺序为 logback-test.xml > logback.xml > logback-spring.xml，
+  故本文件会完全接管测试日志，不影响主工程。
+-->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>%d{HH:mm:ss.SSS} %-5level [%logger{36}] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+      根级别取 WARN：启动期的预期失败（如被 mock 的外部依赖）不应刷屏，
+      但 ERROR 仍然可见 —— 真实失败不会被降噪掩盖。
+    -->
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- Hikari / Lettuce 的连接池噪音同样只在 INFO 级别以下才有意义 -->
+    <logger name="com.zaxxer.hikari" level="ERROR"/>
+    <logger name="io.lettuce.core" level="ERROR"/>
+    <logger name="org.redisson" level="ERROR"/>
+</configuration>
