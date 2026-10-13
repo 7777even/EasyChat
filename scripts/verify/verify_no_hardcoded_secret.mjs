@@ -125,9 +125,41 @@ if (!existsSync(PROD)) {
   // 3.1 TURN 不得指向公共中继
   const pTurn = prod.get('easychat.turn.url')
   if (pTurn === undefined || pTurn === '' || pTurn === '${EASYCHAT_TURN_URL:}') {
-    pass('prod profile TURN 留空（降级纯 STUN，不经第三方中继）')
+    pass('prod profile TURN 留空（由外部注入，不经第三方中继）')
   } else {
     fail('prod profile TURN 留空', `实际为 ${pTurn}`)
+  }
+
+  // 3.1b 时效凭据的共享密钥不得有默认可用值（2026-10-13 新增）
+  //   动机：static-secret 是 coturn 的 static-auth-secret。有默认可用值意味着
+  //   **未注入也能起**，而所有人都会以为中继在工作 —— 实则 coturn 侧是另一个值、
+  //   拒签，对称 NAT 下接通后无声。故必须与 DB 密码同口径：无默认可用值。
+  const pSecret = prod.get('easychat.turn.static-secret')
+  if (pSecret === undefined || pSecret === '' || pSecret === '${EASYCHAT_TURN_STATIC_SECRET:}') {
+    pass('prod profile TURN 共享密钥无默认可用值（必须注入）')
+  } else {
+    fail('prod profile TURN 共享密钥无默认可用值',
+      `实际为 ${pSecret} —— 未注入时须启动告警而非带着占位值静默运行`)
+  }
+
+  // 3.1c prod 的 STUN 与 TURN 两个键**都必须被声明**（ADR-003 风险缓解）
+  //   动机：ADR-003 去掉了隐式的公共 STUN 兜底，故二者皆空时前端拿到空 iceServers，
+  //   对称 NAT 下「接通后无声」。运维必须看见这两个占位符才知道要注入其一。
+  //
+  //   ⚠ **踩过的坑（保留此注记）**：初版把本条写成「二者不得同时留空」的**硬失败**，
+  //   结果对**正确内容**报红 —— 因为 prod 模板本就刻意留空（由部署时注入 env），
+  //   把「部署时有没有注入」错当成了「仓库内容」约束，CI 会永久红。
+  //   仓库层面真正可验的不变量是「两个键都被声明」，故改为断言声明存在性；
+  //   「部署时是否至少注入一个」**无法在本门禁验证**，改由应用启动自检
+  //   （CallService#logTurnConfigStatus 打 WARN）与 QA 未运行项覆盖。
+  for (const [k, ph] of [['easychat.turn.stun-url', '${EASYCHAT_TURN_STUN_URL:}'],
+    ['easychat.turn.url', '${EASYCHAT_TURN_URL:}']]) {
+    if (prod.has(k)) {
+      pass(`prod profile 已声明 ${k}`)
+    } else {
+      fail(`prod profile 已声明 ${k}`,
+        `键不存在 → 运维看不到该注入点。模板值应为占位符 ${ph}`)
+    }
   }
 
   // 3.2 不得残留公共 TURN 凭据
