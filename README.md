@@ -132,7 +132,7 @@ java -jar target/easychat-1.0.jar
 |------|------|
 | `application.properties` | 公共基线，跨环境一致；`spring.profiles.active=dev`；敏感项一律 `${ENV_VAR:默认值}` 占位，**无裸值** |
 | `application-dev.properties` | 本地开发值（含公共 TURN 联调凭据、DB 口令、测试管理员邮箱） |
-| `application-prod.properties` | 生产模板（入库）；**DB 密码无默认可用值**，TURN 留空降级纯 STUN |
+| `application-prod.properties` | 生产模板（入库）；**DB 密码无默认可用值**，TURN 三项留空降级纯 STUN（**降级会打 WARN 日志**，见 §7） |
 | `.env.example` | 凭据模板（入库，仅占位值） |
 | `.env` | 真实凭据载体，**不入库** |
 
@@ -251,7 +251,37 @@ CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个
 - **JDK 必须 17**：`pom.xml` / CI / Dockerfile 已三方对齐（2026-10-03 由 1.8 升级）。用别的版本编译出的产物与 CI 不等价。
 - **ffmpeg 二进制不入库**（见 4.1），缺失是静默失败。
 - **后端不可多实例**：`CallService` 的通话房间注册表与 `ChannelContextUtils.USER_CONTEXT_MAP` 都是进程内 `ConcurrentHashMap`，`docker compose up --scale backend=2` 会让通话建立失败（消息广播走 RTopic 不受影响）。详见 `docs/system-facts.md` §1.1。
-- **TURN 配置**：`application.properties` 的 `easychat.turn.*` 目前是公共测试服务器（`guest/guess`），生产必须自建 coturn 并轮换凭据；留空则仅 STUN，对称 NAT 不通。
+- **TURN 配置**：**仅 `application-dev.properties`** 内置公共测试中继（`guest/guess`）供本机双实例联调；`application-prod.properties` 三项留空（**不是** `application.properties`，公共基线不含 TURN）。
+  生产必须自建 coturn —— 仓库已含部署物，见 §4.6。**留空不等于安全**：此时对称 NAT 下会「接通后无声」，后端启动日志会有 WARN。
+
+### 4.6 TURN 中继部署（音视频通话在对称 NAT 下唯一的连通手段）
+
+仓库自带 coturn 部署物（`deploy/coturn/turnserver.conf.template` + compose 的 `coturn` service）。
+
+```bash
+# 1) 填 .env：EXTERNAL_IP / REALM / 两个 SECRET（后者必须相同）
+#    完整变量清单见 .env.example「TURN 中继」与「coturn 服务端」两节
+# 2) 起服务
+docker compose --env-file .env up -d coturn
+docker compose --env-file .env up -d backend   # 后端从 .env 读 EASYCHAT_TURN_*
+```
+
+**凭据两种模式**（`.env`）：
+
+| 模式 | 配置 | 说明 |
+|------|------|------|
+| **时效凭据（推荐）** | `EASYCHAT_TURN_STATIC_SECRET` | 后端按需签发 `<时间戳>:<用户ID>` + HMAC-SHA1 签名；泄漏窗口 = TTL。**支持逗号分隔多密钥**，轮换期新旧并存、无需停机 |
+| 静态凭据（降级） | `EASYCHAT_TURN_USERNAME` / `_CREDENTIAL` | 长期不变，**一旦使用即打 WARN 日志**（泄漏窗口无上限） |
+
+**上线前必查三项**（配错的表现都是「Allocate 成功但通话不通」）：
+
+1. `COTURN_EXTERNAL_IP` 必须设为「公网IP/内网IP」—— **漏设是头号原因**
+2. 安全组放行 `3478`(udp+tcp)、`5349`(tcp) 与 **`49152-65535`(udp) 整段**——只放 3478 没有媒体流
+3. `COTURN_REALM` 非空 —— coturn 的 `lt-cred-mech` 前提，留空则认证无法完成
+
+> ⚠ **本机无法验证上述三项**（无 Docker daemon、无可控对称 NAT、无双实例）。
+> 模板可解析 / compose YAML 合法 **不代表部署可用** —— 以真实环境验证为准。
+> 完整自检清单见 `deploy/coturn/turnserver.conf.template` 末尾。
 - **WS 客户端在主进程**：渲染进程不直连 WS，统一由 `src/main/wsClient.js` 维护；新增 IPC 通道必须在 `ipc.js` 定义**且**在 `index.js` 调一次，漏注册构建无感、功能静默失效（已有门禁拦截）。
 - **本地 SQLite 字段是 snake_case**（`message_id` / `send_user_nick_name`），渲染层是 camelCase，主进程读库勿混用。
 
