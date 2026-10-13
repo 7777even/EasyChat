@@ -90,6 +90,33 @@ public class Constants {
     public static final String REDIS_KEY_CHECK_CODE = "easychat:checkcode:";
     public static final String REDIS_KEY_WS_TOKEN = "easychat:ws:token:";
 
+    // ── 邮箱验证码失败次数计数（2026-10-13，openspec 2026-10-13-email-code-failure-limit）──
+    //
+    // 背景（§14 遗留 #1 残余风险）：端点限流 60 次/分 × 验证码寿命 10 分钟
+    //   ⇒ 单邮箱 600 次尝试；6 位码空间 10⁶ ⇒ 命中 0.06%。命中即等于账号被接管。
+    //
+    // ⚠ 为什么放 Redis 而**不是**给 email_verify_code 加 fail_count 列（ADR-001）：
+    //   DB 方案粒度是「每个验证码行 N 次」，而攻击者**每 60 秒就能重发一个新码**
+    //   重置自己的额度（重发是受害者无法阻止的动作）—— 限流等于没加。
+    //   Redis 方案按 email 在整个窗口内累计，跨验证码生效，重发不重置。
+    //
+    // ⚠ 已知取舍（写进 spec 的「已知边界」，不假装没有）：
+    //   知道某邮箱的人可用 N 次错误尝试把该邮箱锁 10 分钟。
+    //   这是**所有**基于次数的验证码限流的固有代价（GitHub / Google 同）；
+    //   缓解是窗口与验证码寿命一致，被锁时长不会超过码本身的可用时长，且自动恢复。
+    public static final String REDIS_KEY_EMAIL_CODE_FAIL = "easychat:emailcode:fail:";
+
+    /** 同一邮箱在窗口内允许的验证码错误次数上限。超过即拒绝，直到窗口过期。 */
+    public static final Integer EMAIL_CODE_FAIL_MAX = 5;
+
+    /**
+     * 失败计数窗口（秒）。**刻意与验证码寿命一致**（10 分钟）：
+     * 若窗口短于码寿命，攻击者在码还有效时计数就过期了，等于没限；
+     * 若长于码寿命，受害者被锁的时间会超过「这批码本来还有多久可用」，
+     * 变成纯粹的损失。10 分钟 = 验证码 10 分钟 + 重发冷却 60 秒的量级。
+     */
+    public static final Integer EMAIL_CODE_FAIL_WINDOW_SECONDS = 600;
+
     public static final String REDIS_KEY_WS_TOKEN_USERID = "easychat:ws:token:userid";
 
     // 多端登录：同一账号的全部有效 token 列表（用于整体登出 / 挤下线）

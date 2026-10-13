@@ -22,6 +22,7 @@ import com.easychat.mappers.EmailVerifyCodeMapper;
 import com.easychat.mappers.UserInfoBeautyMapper;
 import com.easychat.mappers.UserInfoMapper;
 import com.easychat.redis.RedisComponet;
+import com.easychat.redis.RedisUtils;
 import com.easychat.service.ChatSessionUserService;
 import com.easychat.service.MailService;
 import com.easychat.service.UserContactService;
@@ -66,6 +67,13 @@ public class UserInfoServiceImpl implements UserInfoService {
 
     @Resource
     private RedisComponet redisComponet;
+
+    /**
+     * 2026-10-13 新增：邮箱验证码的失败次数计数（遗留 #1 根治）。
+     * 既有 Bean，非新依赖 —— 与 {@code GlobalOperationAspect} 用的是同一个。
+     */
+    @Resource
+    private RedisUtils redisUtils;
 
     /** 2026-10-03 新增：邮箱验证码的真实投递通道，取代原先「写日志」的降级实现 */
     @Resource
@@ -489,6 +497,18 @@ public class UserInfoServiceImpl implements UserInfoService {
         if (StringTools.isEmpty(email) || StringTools.isEmpty(code) || StringTools.isEmpty(newPassword)) {
             throw new BusinessException(ResponseCodeEnum.CODE_1001);
         }
+
+        // ── 2026-10-13 新增（遗留 #1 根治，openspec 2026-10-13-email-code-failure-limit）──
+        //
+        // 端点限流 60 次/分、验证码寿命 10 分钟 ⇒ 单邮箱仍可尝试 600 次，
+        // 而 6 位码空间只有 10⁶ ⇒ 命中 0.06%。命中即等于账号被接管，且无任何告警。
+        // 故「猜错次数」必须有**独立于请求频率**的上界。
+        //
+        // ★ 锁定检查刻意放在**任何 DB 查询之前**（ADR-003）：这里是一次 Redis GET，
+        //   比 emailVerifyCodeMapper.selectList 便宜得多，攻击流量在 Redis 层即被挡掉，
+        //   不会打到 MySQL。
+        checkEmailCodeNotLocked(email);
+
         EmailVerifyCodeQuery query = new EmailVerifyCodeQuery();
         query.setEmail(email);
         query.setCode(code);
@@ -498,6 +518,11 @@ public class UserInfoServiceImpl implements UserInfoService {
         query.setSimplePage(new SimplePage(0, 1));
         List<EmailVerifyCode> list = emailVerifyCodeMapper.selectList(query);
         if (list.isEmpty()) {
+            // ★ 只有「码不存在」（= 猜错）才计数，这是暴力破解唯一会走到的分支。
+            //   「码已过期」与「用户不存在」**刻意不计数**，理由见 ADR-002：
+            //   那两条路径上没有可猜的目标；若计入，攻击者只需等验证码一过期就发 5 次垃圾，
+            //   即可把受害者**永久锁死** —— 限流反而成了更严重的 DoS。
+            recordEmailCodeFailure(email);
             throw new BusinessException("验证码错误");
         }
         EmailVerifyCode verifyCode = list.get(0);
@@ -508,6 +533,9 @@ public class UserInfoServiceImpl implements UserInfoService {
         if (userInfo == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_2101);
         }
+        // 全部校验通过 → 清零失败计数（ADR-007）。
+        // 不清的话，用户本次成功后，下次找回密码会被上一次的陈旧计数挡住。
+        clearEmailCodeFailure(email);
         UserInfo updateInfo = new UserInfo();
         updateInfo.setPassword(com.easychat.utils.PasswordEncoder.encode(newPassword));
         userInfoMapper.updateByUserId(updateInfo, userInfo.getUserId());
@@ -524,6 +552,71 @@ public class UserInfoServiceImpl implements UserInfoService {
         // 反而成了拒绝服务（对应单测 resetPasswordByEmail_codeNotFound_doesNotInvalidateSessions）。
         redisComponet.cleanUserTokenByUserId(userInfo.getUserId());
         forceOffLine(userInfo.getUserId());
+    }
+
+    // ==================== 邮箱验证码失败次数计数（2026-10-13，遗留 #1 根治） ====================
+    //
+    // 三个方法刻意放在一起：它们的语义互相依赖（计数 / 判定 / 清零），
+    // 拆散到文件各处会让「谁在什么时候动了计数」变得难以追读。
+    //
+    // ⚠ 与端点限流的关系：@GlobalInterceptor 的 rate_limit 只管「请求频率」，
+    //   这里是「猜错次数」，两者是**不同维度**，不能互相替代 ——
+    //   低频慢速的暴力破解完全躲得过频率限流。
+
+    /**
+     * 失败计数键。邮箱做 **trim + 小写** 归一，否则 `A@x.com` 与 `a@x.com`
+     * 会是两个独立配额，攻击者靠大小写变体即可翻倍额度。
+     *
+     * <p>⚠ 键**只含 email、不含 type**（ADR-005）：本方法只服务 type=1 的找回密码，
+     * 单一消费者加维度是无效复杂度。若将来 type=2「修改邮箱」也走同一路径，
+     * 那时再拆键 —— 那时它们是两个独立的攻击面，混在一个键里反而互相拖累。
+     */
+    private String emailCodeFailKey(String email) {
+        return Constants.REDIS_KEY_EMAIL_CODE_FAIL + email.trim().toLowerCase();
+    }
+
+    /**
+     * 判定该邮箱是否已被失败次数锁定。
+     *
+     * <p><b>fail-open</b>（ADR / spec「Redis 不可用时 fail-open」）：
+     * {@code redisUtils.get} 返回 {@code null} 有两种含义 —— 键不存在（未超限）
+     * 或 Redis 不可用。两者都按「未超限」处理。理由与端点限流
+     * {@code GlobalOperationAspect#applyRateLimit} 一致：计数不可用时应退化为
+     * 「无失败次数限制」，而**不是**把所有用户的密码重置全部拒绝。
+     * 同一故障域、同一取舍。
+     */
+    private void checkEmailCodeNotLocked(String email) {
+        Object count = redisUtils.get(emailCodeFailKey(email));
+        Long failCount = count instanceof Long ? (Long) count : null;
+        if (failCount != null && failCount >= Constants.EMAIL_CODE_FAIL_MAX) {
+            throw new BusinessException(ResponseCodeEnum.CODE_1001,
+                    "验证码错误次数过多，请 " + (Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS / 60) + " 分钟后再试");
+        }
+    }
+
+    /**
+     * 记一次猜错。
+     *
+     * <p>窗口只在**首次**计数时设置（count == 1），与 {@code applyRateLimit} 同款 ——
+     * 否则每次猜错都把窗口往后推，等于「持续有尝试就永不失效」，
+     * 受害者可能因为攻击者一直试而**永远**解不了锁。
+     */
+    private void recordEmailCodeFailure(String email) {
+        String key = emailCodeFailKey(email);
+        Long count = redisUtils.incr(key);
+        if (count != null && count == 1) {
+            redisUtils.expire(key, Constants.EMAIL_CODE_FAIL_WINDOW_SECONDS);
+        }
+    }
+
+    /**
+     * 校验通过后清零。
+     *
+     * <p>⚠ <b>发码时绝不调用</b>（ADR-007）：清了等于给攻击者一个「重置额度」的开关 ——
+     *   而「让受害者重发验证码」恰恰是受害者无法阻止的动作。
+     */
+    private void clearEmailCodeFailure(String email) {
+        redisUtils.delete(emailCodeFailKey(email));
     }
 
     @Override
