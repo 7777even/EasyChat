@@ -160,12 +160,29 @@ const mutations = [
     // 2026-10-03 更新锚点：checkRateLimit 的 IP 取值已从私有 resolveClientIp(request)
     //   改为委托 IpTools.getClientIp()（与审计日志共用同一实现）。
     //   变异形态随之改为「整段 IP 降级分支换回 token 缺失即 return」。
+    // ⚠ 2026-10-12 再更新锚点（遗留 #1）：限流维度已从 IP 换成「目标 email」，
+    //   checkRateLimit(String rateLimitByParam) 多了前置的 email 分支并提前 return，
+    //   尾部不再是 `...}` 的直接收尾。故锚点改为**尾部那三行**，
+    //   变异形态同步改为「丢掉 IP 降级分支、token 空即 return」。
     name: '变异5 未登录端点限流退回「token 为空直接 return」',
     rel: ASPECT,
     edits: [
       {
-        find: '        String key = "rate_limit:";\r\n        if (!StringTools.isEmpty(token)) {\r\n            key = key + token;\r\n        } else {\r\n            key = key + "ip:" + IpTools.getClientIp();\r\n        }',
-        repl: '        if (token == null) {\r\n            return;\r\n        }\r\n        String key = "rate_limit:" + token;'
+        find: '        String token = request.getHeader("token");\r\n        if (!StringTools.isEmpty(token)) {\r\n            key = key + token;\r\n        } else {\r\n            key = key + "ip:" + IpTools.getClientIp();\r\n        }\r\n        applyRateLimit(key);',
+        repl: '        String token = request.getHeader("token");\r\n        if (!StringTools.isEmpty(token)) {\r\n            key = key + token;\r\n        }\r\n        applyRateLimit(key);'
+      }
+    ]
+  },
+  {
+    // 2026-10-12 新增（遗留 #1 的配套变异）：email 维度取不到值时**必须退回 IP**。
+    //   若改成「直接 return」，则攻击者只要随便填一个不同邮箱即可完全绕过限流 ——
+    //   而这正是 #1 决策要堵的洞（原按 IP 时换 IP 就能绕）。
+    name: '变异5c email 维度取不到值时直接 return（换邮箱即可绕过限流）',
+    rel: ASPECT,
+    edits: [
+      {
+        find: '        if (!StringTools.isEmpty(rateLimitByParam)) {\r\n            String target = request.getParameter(rateLimitByParam);\r\n            if (!StringTools.isEmpty(target)) {\r\n                String normalized = target.trim().toLowerCase();\r\n                key = key + "email:" + normalized;\r\n                applyRateLimit(key);\r\n                return;\r\n            }\r\n        }',
+        repl: '        if (!StringTools.isEmpty(rateLimitByParam)) {\r\n            String target = request.getParameter(rateLimitByParam);\r\n            if (!StringTools.isEmpty(target)) {\r\n                String normalized = target.trim().toLowerCase();\r\n                key = key + "email:" + normalized;\r\n            }\r\n            return;\r\n        }'
       }
     ]
   },
@@ -184,8 +201,10 @@ const mutations = [
     rel: CONTROLLER,
     edits: [
       {
-        find: '    @GlobalInterceptor(checkLogin = false, checkRateLimit = true)\r\n    public Result<Void> resetPassword(',
-        repl: '    @GlobalInterceptor(checkLogin = false)\r\n    public Result<Void> resetPassword('
+        // ⚠ 2026-10-12 更新锚点（遗留 #2）：resetPassword 的入参由 3 个散参
+    //   收敛为 `UserResetPasswordDTO dto`，方法签名已变，故整行锚点需带参数。
+        find: '    @GlobalInterceptor(checkLogin = false, checkRateLimit = true, rateLimitByParam = "email")\r\n    public Result<Void> resetPassword(@Valid UserResetPasswordDTO dto) {',
+        repl: '    @GlobalInterceptor(checkLogin = false)\r\n    public Result<Void> resetPassword(@Valid UserResetPasswordDTO dto) {'
       }
     ]
   },

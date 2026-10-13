@@ -224,6 +224,70 @@ check(
   !!rateLimitBody && /"rate_limit:"/.test(rateLimitBody)
 )
 
+// ── 3b. email 维度的**退回路径**必须存在（2026-10-12，遗留 #1）─────────
+//
+// ⚠ 为什么下面这条断言不能省：#1 把限流维度从 IP 换成「目标 email」后，
+//   上一组断言**全部照样通过**——它们只查「`IpTools.getClientIp` 还在」和
+//   「`"ip:"` 字面量还在」，而变异把 email 分支改成「取不到值就 return」后，
+//   `IpTools` 调用与 `"ip:"` 字面量**一个字都没动**（只是不可达了）。
+//   这是**不可达代码**骗过字面量断言的典型（§2.1 第 2 条：先验判别力再信门禁）。
+//
+// 本断言的判定边界：checkRateLimit 方法体，按**花括号配平**截取（不是「向上 N 行」
+// 这种经验窗口——相邻代码会给它背书）。
+//
+// 断言内容：email 分支的 `return` 必须**位于 `if (target 非空)` 之内**，
+// 即「取到值才提前返回；取不到必须继续往下走 IP 维度」。
+const emailBranch = (() => {
+  if (!rateLimitBody) return null
+  // 找 rateLimitByParam 的判空块整体（从 if 起到与之配平的收尾 }）
+  const m = /if\s*\(\s*!\s*StringTools\s*\.\s*isEmpty\s*\(\s*rateLimitByParam\s*\)\s*\)\s*\{/.exec(rateLimitBody)
+  if (!m) return null
+  let depth = 0
+  for (let i = m.index + m[0].length - 1; i < rateLimitBody.length; i++) {
+    if (rateLimitBody[i] === '{') depth++
+    else if (rateLimitBody[i] === '}') {
+      depth--
+      if (depth === 0) return rateLimitBody.slice(m.index, i + 1)
+    }
+  }
+  return null
+})()
+check('定位到 rateLimitByParam 的判空分支', emailBranch !== null)
+// 判定「early return 是否被额外一层 if 包住」：**用嵌套深度而非正则**。
+// 形态目标：rateLimitByParam 判空块内，只有「target 非空」那一层里才有 return；
+// 若变异把 return 提到与该 if 平级，深度就少一层。
+const earlyReturnDepth = (() => {
+  if (!emailBranch) return -1
+  // 从 rateLimitByParam 判空的 `{` 之后开始扫，跳过字符串字面量
+  const body = emailBranch.slice(emailBranch.indexOf('{') + 1)
+  let depth = 1 // 相对 emailBranch 自身的深度：1 = 直接子层
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '"') { // 跳字符串
+      i++
+      while (i < body.length && body[i] !== '"') i++
+      continue
+    }
+    if (body[i] === '{') depth++
+    else if (body[i] === '}') depth--
+    else if (body.startsWith('return', i) && depth >= 2) return depth
+  }
+  return 1 // 找不到提前 return（也不该通过本断言）
+})()
+check(
+  '★ email 分支的提前 return 必须嵌套在「target 非空」判空内（取不到值要退回 IP 维度）',
+  earlyReturnDepth >= 2,
+  `return 所处嵌套深度=${earlyReturnDepth}（需 ≥2，即必须被「target 非空」包住）`
+)
+check(
+  '★ email 分支之后仍可达 IP 降级（IpTools 调用位于 email 分支之外）',
+  !!rateLimitBody && !!emailBranch &&
+  rateLimitBody.indexOf('IpTools.getClientIp') > rateLimitBody.indexOf(emailBranch)
+)
+check(
+  '★ email 键前缀为 "email:" 且经 trim + toLowerCase 归一（大小写变体不得绕限流）',
+  !!emailBranch && /"email:"/.test(emailBranch) && /toLowerCase\s*\(\s*\)/.test(emailBranch)
+)
+
 // 四个未登录端点仍须标注 checkRateLimit（防止有人图省事删注解）。
 // 这里刻意用**原始**源码：端点路径与限流键都是字符串字面量，剥掉就查不到了。
 // 注意注解顺序为 @PostMapping → @GlobalInterceptor，故须向**前**找，且不得越过方法签名。

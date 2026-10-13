@@ -231,10 +231,15 @@ const CASES = [
   //   在此登记为**已知不可静态检测项**，不假装门禁能覆盖它。
   {
     name: '前置校验不再读 env 里的 baseline-version（运维声明对闸门失效）',
+    // ⚠ 2026-10-12 锚点更新：#4 把「读 env 并判定来源」抽进了纯核心
+    //   `preflightBaselineCore.configuredBaselineVersion`，本脚本只剩 IO 接线，
+    //   故锚点由 `const env = process.env.…` 变为对核心的调用处。
+    //   若只删掉这一处而核心内部仍读 env，变异会「看似生效实则被核心兜住」——
+    //   故改为**把整个调用替换成固定来源**，确保 env 真的到不了判定。
     apply () {
       mutate('scripts/migrate/preflight-baseline-check.mjs',
-        'const env = process.env.SPRING_FLYWAY_BASELINE_VERSION',
-        'const env = undefined // 故意忽略环境变量')
+        'return configuredBaselineVersion(process.env.SPRING_FLYWAY_BASELINE_VERSION, props)',
+        'return configuredBaselineVersion(undefined, props) // 故意忽略环境变量')
     }
   },
   {
