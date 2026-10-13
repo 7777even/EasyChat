@@ -129,6 +129,13 @@ console.log('== 6. 最大迁移编号 ==')
   check('取最大编号 12', maxMigrationVersion(files) === 12)
   check('无迁移文件 → 0', maxMigrationVersion([]) === 0)
   check('非迁移文件被忽略', maxMigrationVersion(['easychat.sql', 'x.txt']) === 0)
+  // ⚠ 2026-10-13 由 mutation_preflight_baseline_core.cjs 补：原用例只喂**三位**编号，
+  //   于是把正则 `\d{3}` 放宽成 `\d+` 时全部门禁照样通过（实测漏网）。
+  //   而仓库里若混进两位（013）或四位（1234）编号，最大号会算错 →
+  //   闸门把「声称自己是最新版」的存量库误判或漏判，直接影响能否启动。
+  const mixed = ['easychat-migration-012-c.sql', 'easychat-migration-13-x.sql', 'easychat-migration-1234-y.sql']
+  check('★ 非三位编号不计入最大号（两位 / 四位都不算）', maxMigrationVersion(mixed) === 12,
+    `${maxMigrationVersion(mixed)}`)
 }
 
 console.log('== 7. 基线解析 ==')

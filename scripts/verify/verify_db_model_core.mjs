@@ -58,6 +58,40 @@ console.log('== 1. chat_message：单条查询 ==')
     JSON.stringify(s.params) === JSON.stringify([9001, U]), JSON.stringify(s.params))
 }
 
+console.log('== 1b. ★ chat_message：分页与全量读取（2026-10-13 由变异检验补）==')
+{
+  // ⚠ 本节是被 mutation_db_model_core.cjs 的变异① 逼出来的：
+  //   此前 buildMessagePage / buildMessagePageCount / buildSelectAllMessageList
+  //   **一个断言都没有**，而它是聊天窗口最常走的一条查询。
+  //   即「门禁全绿」与「核心被覆盖」是两件事 —— 断言通过 ≠ 断言在做事。
+  const p1 = core.buildMessagePage(U, 'S1', 0, 20, 10)
+  check('无游标时 SQL 以双条件 + order by message_id desc limit 收尾',
+    p1.sql.includes('where session_id = ? and user_id = ?') &&
+    p1.sql.endsWith('order by message_id desc limit ?,?'), p1.sql)
+  check('★ 无游标时参数顺序 [sessionId, userId, offset, limit]',
+    JSON.stringify(p1.params) === JSON.stringify(['S1', U, 20, 10]), JSON.stringify(p1.params))
+  check('无游标时不含 message_id <=? 条件', !p1.sql.includes('message_id <=?'))
+
+  const p2 = core.buildMessagePage(U, 'S1', 9000, 20, 10)
+  check('带游标时追加 message_id <=? 条件', p2.sql.includes('and message_id <=?'), p2.sql)
+  check('★ 带游标时游标排在 offset / limit 之前',
+    JSON.stringify(p2.params) === JSON.stringify(['S1', U, 9000, 20, 10]), JSON.stringify(p2.params))
+
+  const cnt = core.buildMessagePageCount(U, 'S1')
+  check('count 语句为 select count(1) 且带双条件',
+    cnt.sql.startsWith('select count(1) from chat_message') &&
+    cnt.sql.includes('session_id = ?') && cnt.sql.includes('user_id = ?'))
+  check('count 参数顺序 [sessionId, userId]',
+    JSON.stringify(cnt.params) === JSON.stringify(['S1', U]))
+
+  const all = core.buildSelectAllMessageList(U, 'S1')
+  check('★ 全量读取按 message_id **asc**（与分页的 desc 相反，写反即导出顺序倒置）',
+    all.sql.includes('order by message_id asc'), all.sql)
+  check('全量读取不分页', !all.sql.includes('limit'))
+  check('全量读取参数顺序 [sessionId, userId]',
+    JSON.stringify(all.params) === JSON.stringify(['S1', U]))
+}
+
 console.log('== 2. ★ 搜索条件：漏项即命中范围扩大 ==')
 {
   const q = { keyword: 'hi', sendUserId: 'U002', messageType: 2, startTime: 1, endTime: 9 }
@@ -142,6 +176,60 @@ console.log('== 5. chat_session_user：查询与更新 ==')
   })())
 }
 
+console.log('== 5b. ★ 墓碑帧预览 / 收到消息更新会话（2026-10-13 由变异检验补）==')
+{
+  // ⚠ buildSessionPreviewOnly 此前**零断言**，而核心注释明写「三者中漏任何一个都会
+  //   产生用户可见的错误，故单列断言」—— 注释声称有断言而实现里没有，属背离。
+  //   buildUpdateSessionInfo 同样零断言，且其注释列了三处易错点。
+  const pv = core.buildSessionPreviewOnly(U, 'C1', '该消息已被管理员删除')
+  check('墓碑帧只改写 last_message', pv.sql.includes('set last_message = ?'), pv.sql)
+  check('★ 墓碑帧不得刷 last_receive_time（否则会话重排）',
+    !pv.sql.includes('last_receive_time'), pv.sql)
+  check('★ 墓碑帧不得计 no_read_count（否则删除消息反而给会话加红点）',
+    !pv.sql.includes('no_read_count'), pv.sql)
+  check('墓碑帧 WHERE 为 user_id + contact_id', pv.sql.includes('where user_id = ? and contact_id = ?'))
+  check('★ 墓碑帧参数顺序 [lastMessage, userId, contactId]',
+    JSON.stringify(pv.params) === JSON.stringify(['该消息已被管理员删除', U, 'C1']), JSON.stringify(pv.params))
+
+  const base = { lastMessage: 'm', lastReceiveTime: 100, contactId: 'C1' }
+  const watching = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S1' })
+  check('收到消息：SET 含 last_message / last_receive_time / status=1',
+    watching.sql.includes('last_message=?') &&
+    watching.sql.includes('last_receive_time=?') &&
+    watching.sql.includes('status = 1'), watching.sql)
+  check('★ 收到消息：WHERE 是 contact_id（不是 session_id，两处查询不同）',
+    watching.sql.includes('where user_id = ? and contact_id = ?'), watching.sql)
+  check('★ 用户正看着该会话时**不计未读**（不追加自增子句）',
+    !watching.sql.includes('no_read_count'), watching.sql)
+  check('基础分支参数顺序 [lastMessage, lastReceiveTime, userId, contactId]',
+    JSON.stringify(watching.params) === JSON.stringify(['m', 100, U, 'C1']), JSON.stringify(watching.params))
+
+  const away = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S2' })
+  check('★ 不在当前会话时未读数 +1',
+    away.sql.includes('no_read_count = no_read_count + 1'), away.sql)
+  check('不在当前会话时参数顺序不变（自增子句不占占位符）',
+    JSON.stringify(away.params) === JSON.stringify(['m', 100, U, 'C1']), JSON.stringify(away.params))
+
+  const named = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S2', contactName: '群A' })
+  check('contactName 非空时追加 contact_name 子句与参数',
+    named.sql.includes(',contact_name = ?') &&
+    JSON.stringify(named.params) === JSON.stringify(['m', 100, '群A', U, 'C1']), JSON.stringify(named.params))
+
+  const emptyName = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S2', contactName: '' })
+  check('contactName 为空串时**不**追加（真值判定，空串不写入）',
+    !emptyName.sql.includes('contact_name') &&
+    JSON.stringify(emptyName.params) === JSON.stringify(['m', 100, U, 'C1']), JSON.stringify(emptyName.params))
+
+  const zeroCount = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S2', memberCount: 0 })
+  check('★ memberCount = 0 仍写入（宽松比较 != null，与 contactName 的真值口径**故意不同**）',
+    zeroCount.sql.includes(',member_count =?') &&   // ⚠ 原文等号后**无空格**，抄错即永假
+    JSON.stringify(zeroCount.params) === JSON.stringify(['m', 100, 0, U, 'C1']), JSON.stringify(zeroCount.params))
+
+  const nullCount = core.buildUpdateSessionInfo(U, 'S1', { ...base, sessionId: 'S2', memberCount: null })
+  check('memberCount = null 不写入',
+    !nullCount.sql.includes('member_count'), nullCount.sql)
+}
+
 console.log('== 6. ★ 动态 SET 子句：列名映射 ==')
 {
   const r = core.buildSessionAttrSet({ lastMessage: 'm', lastReceiveTime: 123, noReadCount: 0 })
@@ -169,6 +257,28 @@ console.log('== 7. 会话属性白名单 ==')
     JSON.stringify(core.SESSION_USER_ATTR_WHITELIST) === JSON.stringify(['topType', 'noDisturb', 'draft']))
   check('同步字段白名单恰为 3 项',
     core.SESSION_ATTR_FIELDS.length === 3)
+}
+
+console.log('== 7b. ★ 跨端属性同步语句（2026-10-13 由变异检验补）==')
+{
+  // ⚠ buildSessionAttrUpdate / buildSimpleSessionUpdate / buildSessionWhere 此前零断言。
+  //   前者是 SYNC_SESSION 帧（置顶 / 免打扰 / 草稿）落库的构造，
+  //   「set 子句与 where 参数错位」属静默失效，故补断言。
+  const attr = core.buildSessionAttrUpdate(U, 'S1', { lastMessage: 'm', noReadCount: 0 })
+  check('属性同步以 update chat_session_user set 开头',
+    attr.sql.startsWith('update chat_session_user set '), attr.sql)
+  check('属性同步 WHERE 为 user_id + session_id（与会话预览的 contact_id 不同）',
+    attr.sql.includes(' where user_id = ? and session_id = ?'), attr.sql)
+  check('★ 属性同步参数顺序 [SET 值…, userId, sessionId]',
+    JSON.stringify(attr.params) === JSON.stringify(['m', 0, U, 'S1']), JSON.stringify(attr.params))
+  check('属性同步 hasClause 为 true', attr.hasClause === true)
+  check('★ 空更新 → hasClause 为 false（调用方据此跳过，避免拼出空 SET）',
+    core.buildSessionAttrUpdate(U, 'S1', {}).hasClause === false)
+  check('★ 空更新时参数只有 where 两项（不得凭空多出值）',
+    JSON.stringify(core.buildSessionAttrUpdate(U, 'S1', {}).params) === JSON.stringify([U, 'S1']))
+  check('单字段更新原样透传', core.buildSimpleSessionUpdate('topType', 1).topType === 1)
+  check('会话 WHERE 透传 userId / contactId',
+    core.buildSessionWhere(U, 'C1').userId === U && core.buildSessionWhere(U, 'C1').contactId === 'C1')
 }
 
 console.log('== 8. ★ 本地服务端口分配 ==')

@@ -141,6 +141,14 @@ for (const [name, provided] of tokenNegatives) {
 check('**期望令牌为空时一律拒绝**（服务未启动不得开无令牌窗口）',
     tokensMatch('', TOKEN) === false && tokensMatch(null, TOKEN) === false && tokensMatch(undefined, TOKEN) === false)
 if (tokensMatch('', TOKEN) === false) expectFalse.push('空期望令牌')
+// ⚠ 2026-10-13 补：上面只测了「期望为空 + 提供非空」，漏了**两头都空**这一组合。
+//   实测 Node 的 `timingSafeEqual(Buffer(''), Buffer(''))` 返回 **true**，
+//   故若两处空值守卫被**同时**删掉，`tokensMatch('', '')` 会**放行** ——
+//   对应「本地服务尚未启动（令牌未生成）+ 前端 URL 没带 token」这一真实场景。
+//   该组合此前无任何断言覆盖（变异检验时才发现）。
+check('**两头都空时判否**（服务未启动 + 前端未带 token，不得放行）',
+    tokensMatch('', '') === false, `实际=${tokensMatch('', '')}`)
+if (tokensMatch('', '') === false) expectFalse.push('两头都空')
 
 console.log('== 7. 空转自检（AGENTS §2.1 第 10/14 条）==')
 check(`正例断言已生效（≥5 条，实际 ${expectTrue.length}）`, expectTrue.length >= 5)

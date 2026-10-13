@@ -51,6 +51,16 @@ const manualSum = list.reduce((s, m) => s + heights[m.messageId], 0)
 check('末项 = 各条实测高度之和', off[1000] === manualSum, `${off[1000]} vs ${manualSum}`)
 const estOnly = buildOffsets(list, {}, EST)
 check('未测量时全部用估算高度', estOnly[1000] === 1000 * EST, `${estOnly[1000]}`)
+// ⚠ 2026-10-13 由 mutation_virtual_core.cjs 补：门禁此前**只测了「未测量」**，
+//   未测「测到了非法值（0 / 负数）」—— 而 `measured > 0` 这个守卫正是为此存在。
+//   实测去掉该守卫时上面所有断言照样通过（漏网）：负高度会让偏移表非单调，
+//   二分定位的前提随之失效，表现为「滚到某处消息错位」而非任何报错。
+const badHeights = Object.assign({}, heights)
+badHeights[list[0].messageId] = 0
+badHeights[list[1].messageId] = -50
+const offBad = buildOffsets(list, badHeights, EST)
+check('★ 实测高度为 0 / 负数时回落估算高度（否则偏移表非单调 → 二分定位前提失效）',
+  offBad[1] === EST && offBad[2] === EST * 2, `实际 [${offBad[1]}, ${offBad[2]}]，EST=${EST}`)
 
 // 2. 二分定位
 console.log('\n=== 2. findIndexAtOffset ===')
@@ -104,6 +114,17 @@ check('区间连续且升序', rangeOk)
 const r0 = computeVisibleRange(off, 0, VP, OVER)
 check('顶部区间从 0 开始', r0[0] === 0, `[${r0[0]}..${r0[r0.length - 1]}]`)
 check('空列表返回空区间', computeVisibleRange([0], 0, VP, OVER).length === 0)
+// ⚠ 2026-10-13 由 mutation_virtual_core.cjs 补：原断言循环 `st < off[1000] - VP`，
+//   **从不滚到底部**，而 overscan 的越界恰好只在底部暴露（end 已到 n-1，+overscan 即越界）；
+//   且所有调用都显式传了 VP，故「视口高度缺省」这条兜底分支从未被触发过。
+const rBottom = computeVisibleRange(off, off[1000], VP, OVER)
+check('★ 滚动到底部：区间含最后一条且末下标 ≤ n-1（overscan 不得越界到不存在的行）',
+  rBottom.length > 0 && rBottom[rBottom.length - 1] === 999,
+  `[${rBottom[0]}..${rBottom[rBottom.length - 1]}]`)
+const rNoVp = computeVisibleRange(off, 0, undefined, OVER)
+const r300 = computeVisibleRange(off, 0, 300, OVER)
+check('★ 视口高度缺省时按 600 兜底（渲染条数不少于显式传 300px 时）',
+  rNoVp.length >= r300.length, `[缺省 ${rNoVp.length} 条 vs 300px ${r300.length} 条]`)
 
 // 4. 头部插入后的锚点保持（模拟上翻加载历史）
 console.log('\n=== 4. 头部插入补偿（上翻加载）===')
