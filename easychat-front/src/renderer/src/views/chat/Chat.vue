@@ -198,6 +198,12 @@ import ChatGroupDetail from './ChatGroupDetail.vue'
 import GroupFile from './GroupFile.vue'
 import {getFileType} from '@/utils/Constants.js'
 import Blank from '@/components/Blank.vue'
+// 2026-10-13（台账 #7 挂载测试抓出）：模板第 22 行用了 <AvatarBase>，
+//   但它既没在这里 import，也没在 main.js 里全局注册（那里注册的是 `Avatar`，
+//   不是 `AvatarBase`）→ Vue 每次渲染都打 "Failed to resolve component: AvatarBase"
+//   并把该节点渲染成空。表现为「文件传输助手」那一行的头像**长期缺失**，
+//   且不抛任何异常 —— 典型的「只在界面上少一块」缺陷。
+import AvatarBase from '@/components/AvatarBase.vue'
 import ChatSession from './ChatSession.vue'
 import ChatMessage from './ChatMessage.vue'
 import ChatMessageTime from './ChatMessageTime.vue'
@@ -972,16 +978,37 @@ onActivated(() => {
   loadChatSession()
 })
 
+// 2026-10-13（台账 #7 挂载测试抓出）：本组件经 `window.ipcRenderer.on()` 注册了
+//   **13** 个频道，而这里原先只清理 9 个 —— 漏了 5 个（syncSessionUser / playNotifySound /
+//   locateSession / loadContactApplyCallback / getSysSettingCallback），
+//   且把 `loadContactApplyCallback` 误写成 `loadContactApply`（该监听因此永不被移除）。
+//
+//   后果是可累积的：Chat.vue 是 /chat 路由组件，切到 /moment 等即卸载重挂，
+//   每进出一次就多一批回调 —— 例如 playNotifySound 累积会让新消息**提示音重复播放**。
+//
+//   ⚠ 下面这份清单必须与 `window.ipcRenderer.on('X'` 的频道集合**逐字对齐**，
+//   由 `chat-view-mount.spec.js` 的「卸载后清理 IPC 监听」用例机控：
+//   任何一侧改动而另一侧没跟上，该用例会红并列出残留频道。
+const IPC_CHANNELS_REGISTERED = [
+  'loadSessionDataCallback',
+  'reciveMessage',
+  'loadChatMessage',
+  'addLocalCallback',
+  'syncSession',
+  'syncSessionUser',
+  'typingStatus',
+  'playNotifySound',
+  'locateSession',
+  'loadContactApplyCallback',
+  'reloadChatSessionCallback',
+  'exportChatRecordCallback',
+  'getSysSettingCallback'
+]
+
 onUnmounted(() => {
-  window.ipcRenderer.removeAllListeners('loadSessionDataCallback')
-  window.ipcRenderer.removeAllListeners('reciveMessage')
-  window.ipcRenderer.removeAllListeners('loadChatMessage')
-  window.ipcRenderer.removeAllListeners('loadContactApply')
-  window.ipcRenderer.removeAllListeners('addLocalCallback')
-  window.ipcRenderer.removeAllListeners('syncSession')
-  window.ipcRenderer.removeAllListeners('reloadChatSessionCallback')
-  window.ipcRenderer.removeAllListeners('exportChatRecordCallback')
-  window.ipcRenderer.removeAllListeners('typingStatus')
+  IPC_CHANNELS_REGISTERED.forEach((channel) => {
+    window.ipcRenderer.removeAllListeners(channel)
+  })
 })
 
 /**
