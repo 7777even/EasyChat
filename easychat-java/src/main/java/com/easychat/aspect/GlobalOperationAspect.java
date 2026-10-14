@@ -83,7 +83,14 @@ public class GlobalOperationAspect {
         if (tokenUserInfoDto == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_2001);
         }
-        if (checkAdmin && !tokenUserInfoDto.getAdmin()) {
+        // ⚠ 必须用 Boolean.TRUE.equals(...) 而非 !getAdmin()：
+        //   TokenUserInfoDto#admin 是**包装类型 Boolean**，为 null 时
+        //   `!getAdmin()` 会自动拆箱抛 NullPointerException，被上层 catch(Exception)
+        //   兜成 CODE_1002「系统错误」—— 用户看到的是系统错误而不是「无权访问」。
+        //   2026-10-14 实测确认：当前三条会话写入路径（登录、昵称同步、token 刷新）
+        //   均会 setAdmin，故该 NPE 目前**不可达**；但它属于「一旦历史数据缺字段就炸」的
+        //   隐患，且修复成本仅一行，故按防御性修复处理。
+        if (checkAdmin && !Boolean.TRUE.equals(tokenUserInfoDto.getAdmin())) {
             throw new BusinessException(ResponseCodeEnum.CODE_1003);
         }
     }

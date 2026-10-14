@@ -107,24 +107,22 @@ public class InterceptorChainBehaviourTest extends IntegrationTestBase {
     // ─────────────────────── 顺带发现的边界：admin 为 null ───────────────────────
 
     /**
-     * 🔴 <b>实测发现的边界缺陷</b>（登记，本 Change 不改生产代码）：
-     * {@code GlobalOperationAspect#checkLogin} 写的是
-     * {@code if (checkAdmin && !tokenUserInfoDto.getAdmin())}，
-     * 而 {@code TokenUserInfoDto#admin} 是包装类型 {@code Boolean}。
-     * 当会话里的 admin 为 {@code null}（历史数据 / 反序列化缺字段）时，
-     * {@code !getAdmin()} 会<b>自动拆箱抛 NullPointerException</b>，
-     * 被切面的 {@code catch (Exception)} 兜成 {@code CODE_1002 系统错误} ——
-     * 用户看到的是「系统错误」而不是「无权访问」。
+     * 会话里的 {@code admin} 为 {@code null} 时，必须判「无权访问」（CODE_1003），
+     * **不得**因自动拆箱抛 NPE 而落到「系统错误」（CODE_1002）。
      *
-     * <p>本用例把该现状<b>钉成断言</b>：这不是在赞美它，而是让行为可见 ——
-     * 将来若修复（改成 {@code Boolean.TRUE.equals(...)}），本用例会转红提醒同步更新。
+     * <p><b>2026-10-14 已修复</b>（本用例原名 {@code nullAdminFlagCurrentlyFallsBackToSystemError}，
+     * 是当时把<b>缺陷现状</b>钉成断言的护栏）。修复内容：切面改用
+     * {@code Boolean.TRUE.equals(...)}，原用例随之转红提醒 —— 正是它该起的作用。
+     *
+     * <p>⚠ 实测补充：当前三条会话写入路径（登录 / 昵称同步 / token 刷新）均会 {@code setAdmin}，
+     * 故该 NPE 此前<b>不可达</b>；本条按防御性回归用例保留，锁住「缺字段即崩」这一隐患不再复发。
      */
     @Test
-    public void nullAdminFlagCurrentlyFallsBackToSystemError() throws Exception {
+    public void nullAdminFlagIsRejectedAsForbiddenNotSystemError() throws Exception {
         when(redisUtils.get(anyString())).thenReturn(userWithAdmin(null));
 
         mockMvc.perform(post(ADMIN_URL).header("token", "tok-null-admin"))
-                .andExpect(jsonPath("$.code").value(1002));
+                .andExpect(jsonPath("$.code").value(1003));
     }
 
     // ─────────────────────────── T7：登录态缺失 ───────────────────────────
