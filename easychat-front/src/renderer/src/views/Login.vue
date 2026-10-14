@@ -179,6 +179,7 @@ const { proxy } = getCurrentInstance()
 import { useRouter } from 'vue-router'
 const router = useRouter()
 import { useUserInfoStore } from '@/stores/UserInfoStore'
+import { ErrorCode, RATE_LIMIT_WINDOW_SECONDS } from '@/utils/Request'
 const userInfoStore = useUserInfoStore()
 
 const checkCodeUrl = ref(null)
@@ -223,20 +224,19 @@ const sendEmailCode = async () => {
       email: formData.value.email,
       type: 1 // 1找回密码
     }
+  }).catch((e) => {
+    // 限流（1004）：直接进倒计时，用户不再连点重试
+    if (e && e.code === ErrorCode.RATE_LIMITED) {
+      startCountdown(e.rateLimitSeconds || 60)
+    }
+    throw e
   })
   if (!result) {
     return
   }
   proxy.Message.success('验证码已发送，10分钟内有效')
   // 60 秒倒计时，与后端同频防重发
-  codeCountdown.value = 60
-  countdownTimer = setInterval(() => {
-    codeCountdown.value--
-    if (codeCountdown.value <= 0) {
-      clearInterval(countdownTimer)
-      countdownTimer = null
-    }
-  }, 1000)
+  startCountdown(60)
 }
 
 const changeOpType = () => {
@@ -281,6 +281,43 @@ const checkValue = (type, value, msg) => {
 
 const clearVerify = () => {
   errorMsg.value = ''
+}
+
+// ===== 错误码分流（2026-10-14 error-code-split L4）=====
+// 限流与验证码失败此前都回 1001，客户端只能弹一句 Toast，用户不知还要等、
+// 也不知道验证码已经作废。拆码后按下码分流。
+const startCountdown = (seconds) => {
+  if (countdownTimer) clearInterval(countdownTimer)
+  codeCountdown.value = seconds
+  countdownTimer = setInterval(() => {
+    codeCountdown.value--
+    if (codeCountdown.value <= 0) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+/**
+ * 按错误码做**额外**处理。
+ *
+ * ⚠ **向后兼容**：老版本后端只回 1001，这里一个分支都不命中，
+ *   行为与拆码前完全一致。
+ * ⚠ 验证码失败**只清空并聚焦，不自动重发** —— 重发接口本身受同一限流约束，
+ *   失败后立刻自动重发只会连续再撞限流（ADR-003）。
+ */
+const handleErrorByCode = (code, opts = {}) => {
+  if (code === ErrorCode.RATE_LIMITED) {
+    startCountdown(opts.rateLimitSeconds || 60)
+    return true
+  }
+  if (code === ErrorCode.CAPTCHA_ERROR) {
+    changeCheckCode()
+    formData.value.emailCode = ''
+    errorMsg.value = opts.msg || '验证码错误或已过期，请重新获取'
+    return true
+  }
+  return false
 }
 
 const showLoading = ref(false)
@@ -360,8 +397,15 @@ const submit = async () => {
     },
     errorCallback: (response) => {
       showLoading.value = false
-      changeCheckCode()
-      errorMsg.value = response.message || response.info || '登录失败'
+      // 按码分流（1004 限流 / 1005 验证码）；未命中则退回原行为
+      const handled = handleErrorByCode(response.code, {
+        rateLimitSeconds: RATE_LIMIT_WINDOW_SECONDS,
+        msg: response.message || response.info,
+      })
+      if (!handled) {
+        changeCheckCode()
+        errorMsg.value = response.message || response.info || '登录失败'
+      }
     }
   })
   if (!result) {

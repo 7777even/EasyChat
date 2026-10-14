@@ -189,7 +189,7 @@ EasyChat/
 | 段 | 域 | 现有码 |
 |----|-----|-------|
 | `0` | 成功 | `0` |
-| `1000-1999` | 通用（参数、系统） | `1001` 参数非法、`1002` 系统错误、`1003` 资源不存在（**含非管理员访问管理端**，`GlobalOperationAspect` 的 `checkAdmin` 使用） |
+| `1000-1999` | 通用（参数、系统） | `1001` 参数非法、`1002` 系统错误、`1003` 资源不存在（**含非管理员访问管理端**，`GlobalOperationAspect` 的 `checkAdmin` 使用）、`1004` 请求过于频繁（**限流**）、`1005` 验证码错误或过期（2026-10-14 拆分，见下） |
 | `2000-2099` | 鉴权域 | `2001` TOKEN_EXPIRED、`2002` TOKEN_INVALID、`2003` 无权限 |
 | `2100-2199` | 用户域 | `2101` 用户不存在、`2102` 用户已存在、`2103` 密码错误、`2104` 文件不存在 |
 | `2200-2299` | 聊天域 | `2201` 消息不存在、`2202` 无权限操作消息 |
@@ -200,6 +200,12 @@ EasyChat/
 | `2700-2799` | 内容治理域 | `2701` 敏感词拦截、`2702` 举报不存在/已处置、`2703` 举报动作不合法、`2704` 词条已存在、`2705` 词条不存在 |
 
 > 旧码 `404`/`500`/`600`/`601`/`602`/`901`/`902`/`903` 已于 2026-09-26 全部迁出（枚举与源码零引用）。新增码必须落在上表对应分段内；`ResponseCodeEnum` 是唯一真源，本表与之不一致时以枚举为准并同步修表。
+
+> **`CODE_1001` 不是万能码（2026-10-14 起）**：它此前承载 **100+ 处、至少 8 类语义**（HTTP 绑定失败、Bean Validation、业务规则校验、权限性校验…），等于「失败了，看 message 吧」。
+> 现已把**用户处理方式本质不同**的两类拆出：`1004` 限流（需**等待**）、`1005` 验证码失败（需**重新获取**）。
+> ⚠ **其余 6 类有意保持共用 1001** —— 它们处理方式一致（「改输入」），拆开只放大回归面而无用户可感收益（`error-code-split` ADR-001，已获人工确认）。
+> ⚠ **拆码的真正价值不是「码好看」，而是让断言重新可信**：拆码前限流用例被迫放弃 code 判定、只能断言中文文案，且因 `getContentAsString()` 默认 ISO-8859-1 解码而**恒真**（`RateLimitBehaviourTest` 注释记录了三次修正）。
+> 门禁：`scripts/verify/verify_error_code.mjs`（枚举双向对账 + 「定义了必须被使用」+ 前后端窗口常量对账）。
 
 ## 4. 分页请求规范
 
@@ -462,6 +468,7 @@ L3 / L4 任务完成后**即刻**写 `engineering/qa/` 与 `engineering/retro/`�
 | `scripts/verify/verify_call_core.mjs` | CI | 通话**帧**核心逻辑（`callFrameCore.mjs`）：帧 → 状态转移映射与 `MessageTypeEnum` 漂移、非法帧号未拒、状态机存在非法转移 |
 | `scripts/verify/verify_turn_config.mjs` | CI | **TURN / STUN 配置外置**（2026-10-13 新增，`turn-deploy-and-key-mgmt` ADR-003/004）：前端源码含硬编码 STUN 地址（判定 `stun:` + 非 localhost，**不只匹配 `stun.l.google.com`** —— 换一家公共 STUN 同样跑题）、`WebRTC.js` 恢复 `defaultIce` 内置兜底、缺省回落非空数组；后端 `CallService` 硬编码 STUN 或不经 `TurnCredentialCore` 取值、缺时效凭据签名 / 多密钥 / 启动自检；prod 缺任一注入点。**⚠ 扫描范围刻意排除 `scripts/`** —— `verify_call_core.mjs` 自身含 STUN 测试夹具，扫进去会**永久自匹配误报**（同 §2.1 第 7 条那类坑）。含**防空转自检**：正例必须命中、反例（注释中的引用 / `127.0.0.1`）必须不命中（**断言通过 ≠ 断言在做事**） |
 | `scripts/verify/verify_call_ice_fail.mjs` | CI | **通话 ICE 失败兜底**（2026-10-13 新增，`turn-deploy-and-key-mgmt` C3）：`callFrameCore#reduceIceConnectionState` —— `iceconnectionstate === 'failed'` 进终态 `icefailed` + 产出 `endCall`（清理 peer 与本地流）+ 中文提示；**终态不可逆**（挂断后残留 ICE 事件不得把界面拉回失败）；`idle` 不得被凭空拉进通话；新来电清 `errorMsg`（否则上一通的失败提示挂在本次界面）。**含制衡用例**：`connected`/`completed`/`checking`/`new`/`disconnected` **一律不得判失败** —— 只断言 `failed` 会失败的话，判据写反或恒真都照样绿。⚠ 它**闭环的是 `specs/voice-call` 里自 2026-09-26 归档起就写着、却从未实现的 `Scenario: 连接失败兜底`**（当时的表现是「接通后无声」）；变异见 `mutation_call_core.cjs` 缺陷⑪~⑮（**15/15 捕获**），该脚本的沙箱**必须同时带上本门禁**否则那 5 条会被误判为「判别力不足」而真因是门禁没被调用 |
+| `scripts/verify/verify_error_code.mjs` | CI | **错误码分段与两端同步**（2026-10-14 新增，`error-code-split` ADR-004）：前端 `Request.js` 的 `ErrorCode` 与后端 `ResponseCodeEnum` **双向对账**（两个方向都查）；拒绝对象必须带 `code`（判定边界**只看 `buildReject` 函数体**、不扫全文 —— 否则请求层任意一处出现 `code` 字样即让断言通过，§2.1 第 8 条）；限流必须带 `rateLimitSeconds`；**向后兼容断言**：默认分支仍按 `message` 提示、且**不得**把 `1001` 写成「遇到即特殊处理」（否则老后端流量会被误路由）；客户端 `RATE_LIMIT_WINDOW_SECONDS` 与后端同名常量**静态对账**（防倒计时与真实窗口脱节）；含防空转自检 |
 | `scripts/verify/verify_virtual_core.mjs` | CI | 消息列表自研虚拟滚动算法（`virtualListCore.mjs`）：偏移表二分定位错误、高度表与累计偏移不一致、越界索引返回错误条目 |
 | `scripts/verify/verify_export_chat_core.mjs` | CI | 聊天记录导出纯逻辑（`exportChatCore.mjs`）：**`csvCell` 前置单引号防护可被前导空白绕过**（Excel 会先忽略空白再解释公式 → OWASP CSV Injection，实测曾为真实安全缺口）；TXT / CSV 格式化字段错位 |
 | `scripts/verify/verify_password_handoff.mjs` | CI | 密码明文交接红线：客户端对密码做哈希、MD5 存量双验证被移除、`isBCrypt` 与 `matches` 判定口径分叉（曾致已加密哈希被二次加密、账号永久无法登录） |

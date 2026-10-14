@@ -16,11 +16,20 @@ const instance = axios.create({
 });
 
 // ======================== 错误码枚举（与后端同步） ========================
+// ⚠ 双向对账由门禁 scripts/verify/verify_error_code.mjs 锁住：
+//   本枚举与后端 ResponseCodeEnum 任一侧多出项都报红。
+//   2026-10-14 起新增 1004/1005（error-code-split L4）。
 export const ErrorCode = {
     SUCCESS: 0,
     PARAM_ERROR: 1001,
     SYSTEM_ERROR: 1002,
     NOT_FOUND: 1003,
+    /** 请求过于频繁（API 限流）。2026-10-14 独立成码：此前与 1001 共用，
+     *  客户端无法区分「需要等待」与「需要改输入」。 */
+    RATE_LIMITED: 1004,
+    /** 验证码错误或已过期。2026-10-14 独立成码：此前与 1001 共用，
+     *  客户端无法识别「验证码已作废、需重新获取」。 */
+    CAPTCHA_ERROR: 1005,
     TOKEN_EXPIRED: 2001,
     TOKEN_INVALID: 2002,
     FORBIDDEN: 2003,
@@ -28,6 +37,40 @@ export const ErrorCode = {
     USER_EXISTS: 2102,
     PASSWORD_ERROR: 2103,
     FILE_NOT_FOUND: 2104,
+};
+
+/**
+ * 服务端限流窗口秒数。
+ *
+ * <p>⚠ **刻意与后端同名**（`GlobalOperationAspect.RATE_LIMIT_WINDOW_SECONDS`），
+ * 使门禁能做**静态对账**：两者一旦漂移即报红。
+ * 不为此给响应体加字段 —— 传一个服务端已知的常量属「用契约膨胀换零信息」（ADR-002）。
+ */
+export const RATE_LIMIT_WINDOW_SECONDS = 60;
+
+/**
+ * 构造失败拒绝对象。
+ *
+ * <p>🔴 **向后兼容的关键**：老版本客户端不认识 1004/1005，会落入默认分支，
+ *   仍按 `message` 弹出提示 —— 与变更前**完全一致**。
+ *   因此本函数只在**新增**字段，不改变既有 `showError` / `msg` 的语义。
+ *
+ * @param {object} responseData 后端 Result 结构
+ * @param {boolean} showError   是否弹 Toast
+ * @returns {Promise} reject 对象，含 showError / msg / code，限流时含 rateLimitSeconds
+ */
+const buildReject = (responseData, showError) => {
+    const code = responseData.code;
+    const base = {
+        showError,
+        msg: responseData.message || responseData.info || '请求失败',
+        code,
+    };
+    if (code === ErrorCode.RATE_LIMITED) {
+        // 让调用方据此禁用按钮并倒计时，而不是让用户干等
+        base.rateLimitSeconds = RATE_LIMIT_WINDOW_SECONDS;
+    }
+    return Promise.reject(base);
 };
 
 // ======================== 请求前拦截器 ========================
@@ -74,12 +117,13 @@ instance.interceptors.response.use(
             }, 2000);
             return Promise.reject({ showError: true, msg: "登录超时" });
         }
-        // 其他错误
+        // 其他错误（含 1001 / 1004 / 1005 等）
+        // ⚠ 老客户端不认识 1004/1005 时也走这里 → 行为与变更前完全一致（向后兼容）
         else {
             if (errorCallback) {
                 errorCallback(responseData);
             }
-            return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
+            return buildReject(responseData, showError);
         }
     },
     (error) => {
@@ -101,7 +145,7 @@ instance.interceptors.response.use(
                 if (reqCfg && reqCfg.errorCallback) {
                     reqCfg.errorCallback(responseData);
                 }
-                return Promise.reject({ showError: showError, msg: responseData.message || responseData.info || '请求失败' });
+                return buildReject(responseData, showError);
             }
             // 开发环境打印详细错误
             if (error && reqCfg) {

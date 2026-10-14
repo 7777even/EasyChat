@@ -199,6 +199,14 @@ jobs:
       - name: 通话 ICE 失败兜底
         run: node scripts/verify/verify_call_ice_fail.mjs
 
+      # 2026-10-14 新增（error-code-split L4）。CODE_1001 曾承载 8 类语义，
+      #   其中限流与验证码失败被拆出独立码（1004/1005）。本门禁锁住：
+      #   ① 前后端 ErrorCode 枚举**双向对账**；
+      #   ② 新码不得「定义了从未使用」（PARAM_ERROR:1001 正是那样长期无人发现的）；
+      #   ③ 客户端 RATE_LIMIT_WINDOW_SECONDS 与服务端常量**静态对账**（防倒计时脱节）。
+      - name: 错误码分段与两端同步
+        run: node scripts/verify/verify_error_code.mjs
+
       # 2026-10-04 新增。verify_call_core 只覆盖 callFrameCore（帧 → 状态转移），
       # 「store 拿到转移后怎么落地」这段（结束态重置、1800ms 复位守卫、出站报文）
       # 此前是黑箱——它与 Pinia/WebRTC/window 混在 useCallStore.js，node 中无法 import。
