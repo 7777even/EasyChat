@@ -25,6 +25,9 @@ const { execFileSync } = require('child_process')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const GATE_REL = 'scripts/verify/verify_call_core.mjs'
+// 2026-10-13：ICE 失败兜底由**另一道**门禁验证（verify_call_ice_fail.mjs），
+// 故沙箱必须同时带上它，否则缺陷⑪~⑮ 会被判成「门禁未跑到」而非「断言未覆盖」。
+const GATE2_REL = 'scripts/verify/verify_call_ice_fail.mjs'
 const CORE_REL = 'easychat-front/src/renderer/src/utils/callFrameCore.mjs'
 
 const COPY = [CORE_REL]
@@ -43,15 +46,30 @@ function resetSandbox () {
   const gateDst = path.join(sandbox, GATE_REL)
   fs.mkdirSync(path.dirname(gateDst), { recursive: true })
   fs.copyFileSync(path.join(ROOT, GATE_REL), gateDst)
+  const gate2Dst = path.join(sandbox, GATE2_REL)
+  fs.mkdirSync(path.dirname(gate2Dst), { recursive: true })
+  fs.copyFileSync(path.join(ROOT, GATE2_REL), gate2Dst)
 }
 
 function runGate () {
   let res
   try {
-    const out = execFileSync('node', [path.join(sandbox, GATE_REL)], {
-      cwd: sandbox, encoding: 'utf8', stdio: 'pipe', maxBuffer: 16 * 1024 * 1024
-    })
-    res = { code: 0, out }
+    // ⚠ **两道门禁都要跑**：缺陷⑪~⑮ 针对 ICE 失败兜底，其断言在 GATE2 里。
+    //   初版只跑第一道 → 那 5 条变异会全部「漏网」，而真因是门禁没被调用，
+    //   不是判别力不足（AGENTS §2.1 第 3 条：不把环境问题伪装成覆盖缺口）。
+    let out = ''
+    let code = 0
+    for (const rel of [GATE_REL, GATE2_REL]) {
+      try {
+        out += execFileSync('node', [path.join(sandbox, rel)], {
+          cwd: sandbox, encoding: 'utf8', stdio: 'pipe', maxBuffer: 16 * 1024 * 1024
+        })
+      } catch (e) {
+        code = e.status === undefined ? null : e.status
+        out += (e.stdout || '') + (e.stderr || '')
+      }
+    }
+    res = { code, out }
   } catch (e) {
     res = { code: e.status === undefined ? null : e.status, out: (e.stdout || '') + (e.stderr || '') }
   }
@@ -146,6 +164,39 @@ const CASES = [
     name: '【缺陷⑩】兜底失效：INVITE 判定改为恒真（任意未知帧都被当成来电处理）',
     apply () {
       mutate(CORE_REL, '  if (t === FRAME_INVITE) {', '  if (t !== FRAME_SIGNAL && t < 0) {')
+    }
+  },
+  // ── ICE 失败兜底（2026-10-13 新增，C3 / ADR-004）────────────────────
+  // 这几条针对**门禁 verify_call_ice_fail.mjs**，故沙箱需同时带上该门禁。
+  {
+    name: '【缺陷⑪ · 本轮】ICE 判定方向反写（connected 也被判失败 → 通话必断）',
+    apply () {
+      mutate(CORE_REL, '  if (iceState !== ICE_STATE_FAILED) return { patch, effects }',
+        '  if (iceState === ICE_STATE_FAILED) return { patch, effects }')
+    }
+  },
+  {
+    name: '【缺陷⑫ · 本轮】终态守卫被删（挂断后残留 ICE 事件把界面拉回「连接失败」）',
+    apply () {
+      mutate(CORE_REL, '  if (TERMINAL_STATUSES.includes(status)) return { patch, effects }', '')
+    }
+  },
+  {
+    name: '【缺陷⑬ · 本轮】idle 守卫被删（无通话时凭空进入通话并弹提示）',
+    apply () {
+      mutate(CORE_REL, "  if (status === 'idle') return { patch, effects }", '')
+    }
+  },
+  {
+    name: '【缺陷⑭ · 本轮】失败时不产出 endCall（状态卡在 icefailed，不清理 peer 与本地流）',
+    apply () {
+      mutate(CORE_REL, "  effects.push({ type: 'endCall', reason: ICE_PROMPT })", '')
+    }
+  },
+  {
+    name: '【缺陷⑮ · 本轮】新来电不清 errorMsg（上一通的失败提示挂在本次来电界面）',
+    apply () {
+      mutate(CORE_REL, "    patch.errorMsg = ''", '')
     }
   }
 ]
