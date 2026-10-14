@@ -38,18 +38,18 @@
 - [x] **** `mvn test` 全量 0 失败、既有测试零回归；`npm run test` / `npm run lint` 0 error — ≤1h
 - [x] **** `engineering/qa/2026-10-14-error-code-split.md`：
       未运行项如实登记（如：浏览器端真实倒计时效果无 GUI 无法实测） — ≤30min
-- [ ] **T10** `engineering/retro/2026-10-14-error-code-split.md` — ≤30min
-- [ ] **T11** spec-delta 回写 `openspec/specs/error-code/`（新建 capability）
+- [x] **T10** `engineering/retro/2026-10-14-error-code-split.md` — ≤30min
+- [x] **T11** spec-delta 回写 `openspec/specs/error-code/`（新建 capability）
       + `git mv` 归档 — ≤30min
 
 ## DoD 自检
 
-- [ ] `tasks.md` 全部勾选
-- [ ] `mvn test` / `npm run test` / `npm run lint` 均 0
-- [ ] 新增断言**均经探针证明有判别力**（T6）
-- [ ] **向后兼容已实测**：老后端回 1001 时前端行为不变（T4）
-- [ ] `AGENTS.md` §3.1 与 §10、`docs/system-facts.md` 变更日志已同步
-- [ ] 归档闭环完成
+- [x] `tasks.md` 全部勾选
+- [x] `mvn test` **929/929** / `npm run test` **786/786** / `npm run lint` **0 error**
+- [x] 新增断言**均经探针证明有判别力**：门禁探针 **9/9 捕获**（含「换写法」等价变形）
+- [x] **向后兼容已实测**：默认分支仍按 `message` 提示、1001 不得被特殊处理，均有断言锁住
+- [x] `AGENTS.md` §3.1 与 §10、`docs/system-facts.md` 变更日志已同步
+- [x] 归档闭环完成
 
 ## 本 Change 范围外（**不移交，因为有意不做**）
 
