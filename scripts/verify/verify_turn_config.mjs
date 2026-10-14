@@ -128,6 +128,35 @@ for (const key of ['easychat.turn.url', 'easychat.turn.stun-url',
   check(`prod 声明 ${key}`, new RegExp(`^${key.replace(/\./g, '\\.')}=`, 'm').test(prod))
 }
 
+// ── 6. coturn 部署物 ─────────────────────────────────────────────
+console.log('\n=== 6. coturn 部署物 ===')
+const TEMPLATE = path.join(ROOT, 'deploy', 'coturn', 'turnserver.conf.template')
+const COMPOSE = path.join(ROOT, 'docker-compose.yml')
+check('coturn 配置模板存在', fs.existsSync(TEMPLATE), TEMPLATE)
+check('docker-compose.yml 存在', fs.existsSync(COMPOSE))
+
+const tpl = fs.existsSync(TEMPLATE) ? stripComments(fs.readFileSync(TEMPLATE, 'utf8'), 'ini') : ''
+// 6.1 官方文档要求的 WebRTC 硬要求（缺任一项则部署出来也不工作）
+check('模板启用 lt-cred-mech（缺了 WebRTC 中继直接不工作）', /^\s*lt-cred-mech\s*$/m.test(tpl))
+check('模板设置 realm（lt-cred-mech 的前提，留空则认证无法完成）', /^\s*realm=\S+/m.test(tpl))
+check('模板启用 use-auth-secret', /^\s*use-auth-secret\s*$/m.test(tpl))
+check('模板未开启 allow-loopback-peers（官方：生产环境属安全漏洞）',
+  /^\s*allow-loopback-peers\s*$/m.test(tpl) === false)
+// 6.2 仓库公开 → 模板不得写死任何真实地址
+for (const k of ['external-ip', 'cert', 'pkey']) {
+  const re = new RegExp('^\\s*' + k + '=(?!\\$\\{)\\S', 'm')
+  check(`模板 ${k} 未写死字面量（须经环境变量注入）`, !re.test(tpl),
+    re.test(tpl) ? `命中 ${tpl.match(re)[0]}` : '')
+}
+// 6.3 compose 必须含 coturn，且不得写死地址
+const compose = fs.existsSync(COMPOSE) ? fs.readFileSync(COMPOSE, 'utf8') : ''
+check('docker-compose.yml 含 coturn service', /^\s{2}coturn:\s*$/m.test(compose))
+check('coturn 有 healthcheck（区分「进程在」与「端口可用」）',
+  /^\s{2}coturn:[\s\S]*?healthcheck:/m.test(compose))
+check('compose 内不得出现公共中继地址', !/turn\.anyfirewall\.com|turn\.openrelay/.test(compose))
+check('backend 不 depends_on coturn（中继故障不应阻断后端启动）',
+  !/^\s{2}backend:[\s\S]*?depends_on:[\s\S]*?\bcoturn:/m.test(compose))
+
 // ── 7. 防空转自检：正例必须为真、反例必须为假 ─────────────────────
 // ⚠ 基线自检只证明「当前仓库不触发」，不证明这条门禁扫得到目标。
 //   故正例（构造一段确实含硬编码 STUN 的源码）必须被本门禁的判据命中。

@@ -82,8 +82,9 @@
 
 #### Scenario: TURN 配置下发
 
-- **WHEN** 服务端 `application.properties` 配置 `easychat.turn.*`
+- **WHEN** 服务端在 **`application-dev.properties` / `application-prod.properties`**（**非**公共基线 `application.properties`；2026-10-02 配置外置后 TURN 三项已移入 profile）配置 `easychat.turn.*`
 - **THEN** 引导帧（`call_invite`/`call_accept`）携带 `iceServers`（STUN+TURN 凭据），客户端据此配置 `RTCPeerConnection`；前端源码不含 TURN 凭据
+- **AND** TURN 凭据为**时效凭据**（`easychat.turn.static-secret` 非空）或**静态凭据**，形态由该键是否配置决定；详见 `specs/turn-deployment`
 
 #### Scenario: 信令帧尺寸上限
 
@@ -92,8 +93,15 @@
 
 #### Scenario: 连接失败兜底
 
-- **WHEN** ICE 协商失败（无 TURN 且对称 NAT，或设备不可用）
-- **THEN** 前端检测 `RTCPeerConnection` 失败，提示「当前网络/设备不支持，请改用语音消息」，并清理本地资源
+- **WHEN** 任一 `RTCPeerConnection` 的 `iceconnectionstate` 进入 `failed`（无 TURN 且对称 NAT，或设备不可用）
+- **THEN** 前端将通话置为终态 `icefailed`，提示「当前网络环境不支持通话，请改用语音消息」，并清理本地资源（peer 与本地采集流）
+- **AND** `connected` / `completed` / `checking` / `new` / `disconnected` **一律不得**被判为失败（判据取 `failed` 这一 WebRTC 标准终态，**不加固定超时**以免误杀慢网络）
+- **AND** 通话已结束（`ended`/`rejected`/`canceled`/`busy`/`icefailed`）时到达的 ICE 事件**不得**改写状态（终态不可逆）
+
+> **实现状态订正（2026-10-14）**：本 Scenario 自 2026-09-26 归档起即写在此处，但**从未实现** ——
+> 实测渲染层搜不到任何 `iceconnectionstate` 处理，其后果是「接通后无声」（不报错、不提示、服务端无日志）。
+> 已由 `openspec/archive/2026-10-13-turn-deploy-and-key-mgmt` 补齐，断言落在
+> `scripts/verify/verify_call_ice_fail.mjs`（含制衡用例），变异见 `mutation_call_core.cjs` 缺陷⑪~⑮。
 
 #### Scenario: 不在线路由
 

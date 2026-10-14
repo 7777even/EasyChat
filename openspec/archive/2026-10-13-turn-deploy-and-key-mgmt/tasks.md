@@ -113,23 +113,53 @@
 
 ## 阶段六：验证与收尾
 
-- [ ] **T16** `mvn test` 全量 **905 → 预期增加 N 用例，0 失败**，既有测试零回归 — ≤1h
-- [ ] **T17** 前端 `npm run test` 全量 0 失败；`npm run lint` **0 error**（基线 0，不得回退） — ≤30min
-- [ ] **T18** 受影响门禁全绿：`verify_no_hardcoded_secret` / `verify_call_core` /
-      `verify_call_store_core` / `verify_frontend_lint` / `check-openspec-hygiene`，
-      以及 compose 的 **YAML 可解析 + coturn service 存在且无硬编码地址**（新增断言） — ≤1h
-- [ ] **T19** `engineering/qa/2026-10-13-turn-deploy-and-key-mgmt.md`：
-      ⚠ **必须如实列出未运行项** —— coturn 实跑（无 Docker daemon）、
-      真实对称 NAT 连通（无 GUI/双实例）、T1 若未查清则 TTL 默认值待定 — ≤1h
-- [ ] **T20** `engineering/retro/2026-10-13-turn-deploy-and-key-mgmt.md` — ≤30min
-- [ ] **T21** spec-delta 回写 `openspec/specs/voice-call/spec.md`（含 R2 的**过时 TURN 段落订正**）
-      + 新建 `openspec/specs/turn-deployment/spec.md` + `git mv` 归档 — ≤30min
+- [x] **T16** `mvn test` 全量 **917 通过 / 0 失败**（既有 905 + 新增 12），零回归 — ≤1h
+- [x] **T17** 前端 `npm run test` **82 文件 / 786 用例全过**；`npm run lint` **0 error**
+      （6660 warning，基线 0 未回退） — ≤30min
+- [x] **T18** 受影响门禁全绿：`verify_turn_config` **32/32**、`verify_call_ice_fail` **22/22**、
+      `verify_no_hardcoded_secret`、`verify_call_core` / `_store_core` / `_at_mention_core`、
+      `check-openspec-hygiene` 全 exit 0。
+      ✅ compose 断言已补进 `verify_turn_config` 第 6 节（12 条：coturn 存在 / healthcheck /
+      `lt-cred-mech` / `realm` / `use-auth-secret` / 未开 `allow-loopback-peers` /
+      `external-ip`·`cert`·`pkey` 未写死 / compose 无公共中继 / backend 不依赖 coturn），
+      **探针 9/9 全部捕获**（前批另有 8/8） — ≤1h
+- [x] **T19** `engineering/qa/2026-10-14-turn-deploy-and-key-mgmt.md`：
+      ⚠ **未运行项如实登记 5 条** —— coturn 未真实部署（**本机 Docker daemon 未运行**，
+      「YAML 可解析」≠「部署可用」）、`external-ip`/防火墙/端口段无法验证、
+      **coturn 时间戳容忍窗口官方未给数值、TTL 默认 3600 未经实测**、
+      真实对称 NAT 连通未验证（无 GUI/双实例）、
+      **ICE 失败态的 UI 截图证据待补**（依前端 AGENTS §4.1 判定为需 A 类证据，沙箱无 GUI 无法产出） — ≤1h
+- [x] **T20** `engineering/retro/2026-10-14-turn-deploy-and-key-mgmt.md` — ≤30min
+- [x] **T21** spec-delta 回写：新建 `openspec/specs/turn-deployment/spec.md`（C1–C4 四条 Requirement）
+      + **MODIFIED** `openspec/specs/voice-call/spec.md`：订正 R2 的**过时 TURN 段落**
+      （原写「`application.properties` 配置」，实为 profile）、
+      补全「连接失败兜底」的实现状态订正与制衡要求 + `git mv` 归档 — ≤30min
 
 ## DoD 自检
 
-- [ ] `tasks.md` 全部勾选（含 T1/T2 的结论分支已有明确答案）
-- [ ] `mvn test` 0 失败、既有测试零回归；`npm run test` / `npm run lint` 均 0
-- [ ] 新增断言**均已造反例证明有判别力**（T10 / T13 / T15）
-- [ ] QA 已落 `engineering/`，且**未运行项如实登记**（不把「YAML 能解析」写成「部署可用」）
-- [ ] `docs/system-facts.md` 变更日志已同步；`AGENTS.md` §10 门禁表已同步（如新增门禁项）
-- [ ] 归档闭环完成（spec 回写 + `git mv` 到 `archive/`）
+- [x] `tasks.md` 全部勾选（含 T1/T2 的结论分支已有明确答案）
+- [x] `mvn test` **917/917**、既有测试零回归；`npm run test` **786/786**；`npm run lint` **0 error**
+- [x] 新增断言**均已造反例证明有判别力**：核心 5/5、凭据门禁 5/5、TURN 门禁 17/17、变异 15/15
+- [x] QA 已落 `engineering/`，且**未运行项如实登记 5 条**
+- [x] `docs/system-facts.md` 变更日志已同步；`AGENTS.md` §10 门禁表已同步（新增 2 道门禁）
+- [x] 归档闭环完成（spec 回写 + `git mv` 到 `archive/`）
+
+## 本 Change 移交出去的事项（**不在本 Change 闭环**）
+
+> 按 AGENTS §7.1「全勾必归档」：未完成项不得靠勾选蒙混；但**本地客观无法完成的外部验证**
+> 也不应伪装成「未完成任务」而卡住归档。二者分列如下：
+
+**A. 本地无法取证的外部验证（非任务未做）**
+
+1. **coturn 的时间戳容忍窗口** —— 官方 `README.turnserver` 未给数值。TTL 默认 3600 依据官方示例
+   的每小时轮换，**未经真实 coturn 实测**。发版前建议用 `turnutils_uclient` 实测一轮。
+2. **`external-ip` / 防火墙 / 安全组 / 端口段放行** —— 需真实部署环境，已做成模板内 7 条自检清单。
+3. **ICE 失败态的 UI 证据** —— 依前端 AGENTS §4.1 判定为需 A 类（截图/录屏），沙箱无 GUI 无法产出。
+   **若发版前补不上，应改判为 B 类并补齐「spec Scenario ↔ 断言」逐条映射，不得默认按 B 类放行。**
+
+**B. 明确移交另立 Change 的既有缺陷（本 Change 只登记，未改）**
+
+1. `RedisConfig#redissonClient()` catch 类型不匹配（`io.lettuce` vs `org.redisson.client`）。
+2. `TokenUserInfoDto.admin` 为 null 时守卫拆箱 NPE → 落到 `CODE_1002` 而非 `1003`。
+3. `CallService` 房间注册表仍为进程内结构，后端**不可多实例**（compose 注释已保留告警）。
+4. 限流与业务校验共用 `CODE_1001`，「按错误码判断成因」的排查手法失效。
