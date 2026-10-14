@@ -1026,6 +1026,55 @@ public class UserInfoServiceImplTest {
         return userInfo;
     }
 
+    // ======================== 昵称变更时的会话同步（2026-10-14 缺陷修复）=======================
+
+    /**
+     * 🔴 <b>实测发现的潜在 NPE</b>：改昵称时会从 Redis 反查会话并改写其中的昵称，
+     * 但 {@code getTokenUserInfoDtoByUserId} 在<b>该用户没有在线会话时返回 null</b>
+     * （{@code get("easychat:ws:token:null")} 必然 miss），原实现直接
+     * {@code tokenUserInfoDto.setNickName(...)} → NPE → 接口 500。
+     *
+     * <p>当前不可达（{@code /saveUserInfo} 强制用请求者自己的 userId，而请求者必过拦截器校验，
+     * 故会话存在），但属「一旦 Redis 被清空/重启即触发」的隐患，修复成本两行。
+     */
+    @Test
+    public void updateUserInfoWithNoActiveSessionMustNotThrowNpe() throws Exception {
+        UserInfo db = existingUser();
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(db);
+
+        UserInfo update = existingUser();
+        update.setNickName("新昵称");
+
+        // 无会话：反查返回 null
+        when(redisComponet.getTokenUserInfoDtoByUserId("U_self")).thenReturn(null);
+
+        // 不得抛异常；库表更新仍须完成
+        userInfoService.updateUserInfo(update, null, null);
+
+        verify(userInfoMapper, times(1)).updateByUserId(any(UserInfo.class), eq("U_self"));
+        verify(redisComponet, never()).saveTokenUserInfoDto(any());
+    }
+
+    /** 制衡：会话存在时，昵称**必须**同步进 Redis（原行为不得被上述修复误伤）。 */
+    @Test
+    public void updateUserInfoSyncsNicknameIntoSessionWhenPresent() throws Exception {
+        UserInfo db = existingUser();
+        when(userInfoMapper.selectByUserId("U_self")).thenReturn(db);
+
+        UserInfo update = existingUser();
+        update.setNickName("新昵称");
+
+        TokenUserInfoDto session = new TokenUserInfoDto();
+        session.setUserId("U_self");
+        session.setNickName("原昵称");
+        when(redisComponet.getTokenUserInfoDtoByUserId("U_self")).thenReturn(session);
+
+        userInfoService.updateUserInfo(update, null, null);
+
+        assertEquals("会话内昵称必须被同步", "新昵称", session.getNickName());
+        verify(redisComponet, times(1)).saveTokenUserInfoDto(session);
+    }
+
     // ======================== 朋友圈可见范围（隐私设置）=======================
     // 覆盖 openspec/changes/2026-10-02-privacy-moment-and-status C1
 

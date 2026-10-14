@@ -384,9 +384,19 @@ public class UserInfoServiceImpl implements UserInfoService {
             return;
         }
         //更新token中的昵称
+        // ⚠ 2026-10-14 修复：getTokenUserInfoDtoByUserId 在**无在线会话时返回 null**
+        //   （内部会 get("easychat:ws:token:null")，必然 miss），原实现直接
+        //   setNickName(...) → NPE → 接口 500。当前入口 /saveUserInfo 强制使用
+        //   请求者自己的 userId，而请求者必过拦截器校验，故目前不可达；
+        //   但一旦 Redis 被清空/重启即触发，属应消除的隐患。
+        //   注意：**不得**吞掉后续的冗余字段更新 —— 会话不存在只意味着「跳过会话同步」。
         TokenUserInfoDto tokenUserInfoDto = redisComponet.getTokenUserInfoDtoByUserId(userInfo.getUserId());
-        tokenUserInfoDto.setNickName(contactNameUpdate);
-        redisComponet.saveTokenUserInfoDto(tokenUserInfoDto);
+        if (tokenUserInfoDto == null) {
+            logger.warn("用户 {} 无在线会话，跳过昵称同步（数据库已更新）", userInfo.getUserId());
+        } else {
+            tokenUserInfoDto.setNickName(contactNameUpdate);
+            redisComponet.saveTokenUserInfoDto(tokenUserInfoDto);
+        }
 
         chatSessionUserService.updateRedundanceInfo(contactNameUpdate, userInfo.getUserId());
     }
