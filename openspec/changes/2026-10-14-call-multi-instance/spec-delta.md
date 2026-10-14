@@ -1,0 +1,144 @@
+# Spec Delta — 后端通话支持多实例部署
+
+- 关联 Tasks: `2026-10-14-call-multi-instance/tasks.md`
+- 创建日期: 2026-10-14
+
+## ADDED Requirements
+
+### Requirement: 通话信令可跨实例送达（call-signaling-cross-instance）— C2
+
+通话信令帧 SHALL 经广播 Topic 分发，由**持有目标用户连接的那个实例**本地投递，
+不依赖「目标用户与我在同一实例」。
+
+#### Scenario: invite 跨实例送达
+
+- **WHEN** 实例 A 的某用户发起通话，目标用户连接在实例 B
+- **THEN** 信令帧经广播 Topic 发出，**B** 投递给目标用户
+- **AND** A 侧的调用方**不得**因「本地查不到该用户的 ChannelGroup」而静默丢弃
+
+#### Scenario: 应答与 candidate 跨实例回传
+
+- **WHEN** 被叫在实例 B 应答，发起方在实例 A
+- **THEN** 应答帧同样经广播回传，由 **A** 投递给发起方
+- **AND** A 侧房间状态被更新（A 是该 callId 的创建者）
+
+#### Scenario: 不广播无效目标
+
+- **WHEN** 信令帧的 `targetUserId` 为空
+- **THEN** **不**发广播（避免放大流量）
+- **AND** 记 WARN 而非静默
+
+#### Scenario: 广播可被紧急关闭且关闭时有告警
+
+- **WHEN** `easychat.call.broadcast-signaling` 置为 `false`
+- **THEN** 退化为本地直投（旧行为）
+- **AND** 启动时打显著 WARN：该配置下**多实例不可用**
+
+---
+
+### Requirement: 通话房间注册表以 Redis 为唯一真源（call-room-registry-redis）— C1
+
+通话房间与「用户 → 房间」映射 SHALL 存于 Redis（带 TTL），
+使房间状态不因创建者所在实例重启/漂移而丢失。
+
+#### Scenario: 房间键带 TTL
+
+- **WHEN** 创建房间
+- **THEN** Redis key **必须**设置 TTL（异常残留最终自动回收）
+- **AND** 无 TTL 的永久 key 属缺陷
+
+#### Scenario: 成员状态变更为字段级写
+
+- **WHEN** 成员接听 / 挂断 / 中途加入
+- **THEN** 只写该成员对应字段，**不**整房 read-modify-write
+- **AND** 避免并发下 lost update
+
+#### Scenario: Redis 不可用时明确失败
+
+- **WHEN** 房间读写过程中 Redis 不可用
+- **THEN** 向发起方 `sendCallError` 并记 ERROR
+- **AND** **不得**静默返回成功（那会让用户以为通话建立、随后无声）
+
+---
+
+### Requirement: callId 冲突须被拒绝而非静默合并（call-id-conflict-rejected）— 安全
+
+服务端 SHALL 拒绝与既有房间 `callId` 冲突的新通话，**绝不**把两个不同通话合并进同一房间。
+
+#### Scenario: 创建时检测到 callId 已存在
+
+- **WHEN** 收到 invite，而 Redis 中已存在同 `callId` 的房间
+- **THEN** 拒绝该 invite 并向发起方回错误
+- **AND** 记 WARN 日志，**不**向既有房间添加成员
+
+#### Scenario: 不改协议
+
+- **WHEN** 评估是否需要让客户端参与 callId 生成
+- **THEN** **不需要** —— 客户端用 `crypto.randomUUID()`，碰撞概率可忽略
+- **AND** 「拒绝 + 报错」已足够防住最坏情况；为概率 0 事件改协议属用契约变更换零收益
+
+---
+
+### Requirement: 用户断开跨实例收敛（call-disconnect-convergence）
+
+某实例上的用户断开连接 SHALL 广播断开事件，使其余实例清理相关本地状态。
+
+#### Scenario: 断开事件被广播
+
+- **WHEN** 实例 A 上某用户 WS 断开
+- **THEN** 广播 `call:disconnect`（含 userId）
+- **AND** 各实例（含 A 自身）据此清理本地残留状态
+
+#### Scenario: TTL 为兜底而非主路径
+
+- **WHEN** 断开事件丢失（网络分区 / 广播失败）
+- **THEN** 房间由 Redis TTL 最终回收
+- **AND** 该路径为**兜底**，不得被当作常规清理手段依赖
+
+---
+
+### Requirement: 多实例能力边界须被如实声明（call-multi-instance-boundary）
+
+规格 SHALL 如实声明本能力的边界，禁止把「单实例回归通过」表述为「多实例已验证」。
+
+#### Scenario: 分层能力须分别声明
+
+- **WHEN** 描述本能力的完成度
+- **THEN** **广播层落地后**，跨实例的常规通话链路可用
+- **AND** **发起方实例宕机**导致房间丢失仍未由本 Change 完全消除（Redis TTL 只是兜底）
+- **故**：不得合并宣称「多实例通话完全支持」
+
+#### Scenario: 本地不可验证项须登记
+
+- **WHEN** 交付本 Change
+- **THEN** QA **必须**登记「多实例实跑未验证」（本机无负载均衡器、无双实例）
+- **AND** 不得以单实例测试全绿替代该结论
+
+---
+
+### Requirement: 订正错误的系统事实陈述（call-multi-instance-fact-correction）
+
+`docs/system-facts.md` 中关于「信令能跨实例」的错误陈述 SHALL 被订正。
+
+**订正前（原文）**：
+
+> 信令能跨实例是因为广播走 Redisson RTopic，但**通话房间注册表不跨实例**。
+
+**订正后**：
+
+> 普通消息可跨实例（RTopic 广播 + 本地投递）；**通话信令与房间注册表均不跨实例**。
+> 通话信令原经 `sendRawToUser` 直写本地 Netty ChannelGroup，`rooms`/`userCall` 为进程内 Map。
+> 该错误判断于 2026-10-14 实测发现并订正；修复见 `specs/call-multi-instance`。
+
+---
+
+## 追溯矩阵
+
+| Proposal Capability | Requirement | Task |
+|---------------------|-------------|------|
+| C1 房间注册表跨实例 | call-room-registry-redis | T1, T5, T6, T7 |
+| C2 信令跨实例 | call-signaling-cross-instance | T2, T3, T4 |
+| C3 断开收敛 | call-disconnect-convergence | T8, T9 |
+| （安全） | call-id-conflict-rejected | T1, T7 |
+| （治理） | call-multi-instance-boundary | T10, T13, T15 |
+| （订正） | call-multi-instance-fact-correction | T15 |
