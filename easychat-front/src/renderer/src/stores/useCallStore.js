@@ -4,7 +4,7 @@
 //   -10 invite  -11 accept  -12 reject  -13 signal  -14 hangup  -15 cancel  -16 busy  -17 join
 import { defineStore } from 'pinia'
 import * as WebRTC from '@/utils/WebRTC'
-import { reduceCallFrame } from '@/utils/callFrameCore'
+import { reduceCallFrame, reduceIceConnectionState } from '@/utils/callFrameCore'
 // 纯逻辑已抽离到 callStoreCore.mjs（node 中可测），本 store 只保留副作用编排。
 // 抽离过程修正了两个既有缺陷：① 1800ms 陈旧定时器会清掉新通话的结束态
 // ② reason 为空时 endReason 会残留上一通通话的旧原因。见 callStoreCore.mjs 顶部说明。
@@ -125,7 +125,7 @@ export const useCallStore = defineStore('call', {
     async ensureLocalThenOffer(peerId) {
       try {
         await this.ensureLocalStream()
-        const offer = await WebRTC.createOfferTo(peerId, this.iceServers, this.onRemoteStream, this.sendSignal)
+        const offer = await WebRTC.createOfferTo(peerId, this.iceServers, this.onRemoteStream, this.sendSignal, this.onPeerIceState)
         this.sendSignal(peerId, 'offer', { sdp: offer.sdp })
       } catch (e) {
         console.warn('发起 offer 失败', e)
@@ -134,10 +134,33 @@ export const useCallStore = defineStore('call', {
     async ensureLocalThenAnswer(peerId, sdp) {
       try {
         await this.ensureLocalStream()
-        const answer = await WebRTC.handleRemoteOffer(peerId, sdp, this.iceServers, this.onRemoteStream, this.sendSignal)
+        const answer = await WebRTC.handleRemoteOffer(peerId, sdp, this.iceServers, this.onRemoteStream, this.sendSignal, this.onPeerIceState)
         this.sendSignal(peerId, 'answer', { sdp: answer.sdp })
       } catch (e) {
         console.warn('回 answer 失败', e)
+      }
+    },
+    /**
+     * ICE 连接状态变化回调（2026-10-13 新增，C3 / ADR-004）。
+     *
+     * 在此之前 WebRTC 层完全没挂 `oniceconnectionstatechange`，因此
+     * `specs/voice-call/spec.md` 的「连接失败兜底」Scenario 从未真正生效 ——
+     * 对称 NAT 且未配 TURN 时，用户是「接通后无声」。
+     *
+     * ⚠ 判定**必须**调纯核心（`reduceIceConnectionState`），不得在此内联
+     *   `if (iceState === 'failed')`：内联等于把判定从纯核心搬回组件，
+     *   缺陷会原地复活（同 `at_mention_core` 踩过的坑）。
+     */
+    onPeerIceState(peerId, iceState) {
+      const { patch, effects } = reduceIceConnectionState({ status: this.status }, iceState)
+      if (Object.keys(patch).length) Object.assign(this, patch)
+      for (const fx of effects) {
+        if (fx.type === 'endCall') {
+          // 同时落 errorMsg：CallWindow 用它展示提示；endReason 供通话记录/列表使用
+          this.errorMsg = fx.reason
+          console.warn('[通话] ICE 协商失败，结束通话：', fx.reason)
+          this.endCallLocal(fx.reason)
+        }
       }
     },
     // 分发后端下发的通话帧（状态转移在 utils/callFrameCore.mjs 纯函数中，本方法只执行副作用）

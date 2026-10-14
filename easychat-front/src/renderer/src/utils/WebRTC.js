@@ -43,7 +43,7 @@ const ensureTrack = (pc) => {
   })
 }
 
-const createPeer = (peerId, iceServers, onRemoteStream, onSignal) => {
+const createPeer = (peerId, iceServers, onRemoteStream, onSignal, onIceState) => {
   const pc = new RTCPeerConnection(buildConfig(iceServers))
   pc.onicecandidate = (e) => {
     if (e.candidate) onSignal(peerId, 'candidate', { candidate: e.candidate })
@@ -51,24 +51,33 @@ const createPeer = (peerId, iceServers, onRemoteStream, onSignal) => {
   pc.ontrack = (e) => {
     if (e.streams && e.streams[0]) onRemoteStream(peerId, e.streams[0])
   }
+  // ICE 连接失败兜底（2026-10-13，turn-deploy-and-key-mgmt C3 / ADR-004）。
+  //   在此之前**完全没有** ICE 失败监听：对称 NAT 且未配 TURN 时，
+  //   表现为「接通后无声」—— 不报错、不提示、服务端也无日志。
+  //   判定本身在 callFrameCore#reduceIceConnectionState（纯函数），
+  //   本层只负责把 WebRTC 事件转上去，不做任何判定。
+  pc.oniceconnectionstatechange = () => {
+    if (onIceState) onIceState(peerId, pc.iceConnectionState)
+  }
   ensureTrack(pc)
   peers.set(peerId, pc)
   return pc
 }
 
 // 新成员向某对端发起 offer（full-mesh：每个新成员负责建到自己到所有人的连接）
-export const createOfferTo = async (peerId, iceServers, onRemoteStream, onSignal) => {
+// onIceState(peerId, iceConnectionState)：ICE 状态变化回调，可选；见 createPeer 内的说明
+export const createOfferTo = async (peerId, iceServers, onRemoteStream, onSignal, onIceState) => {
   let pc = peers.get(peerId)
-  if (!pc) pc = createPeer(peerId, iceServers, onRemoteStream, onSignal)
+  if (!pc) pc = createPeer(peerId, iceServers, onRemoteStream, onSignal, onIceState)
   const offer = await pc.createOffer()
   await pc.setLocalDescription(offer)
   return offer
 }
 
 // 收到对端 offer：建连（若需要）、设置远端描述、采集本地轨道、回 answer
-export const handleRemoteOffer = async (peerId, sdp, iceServers, onRemoteStream, onSignal) => {
+export const handleRemoteOffer = async (peerId, sdp, iceServers, onRemoteStream, onSignal, onIceState) => {
   let pc = peers.get(peerId)
-  if (!pc) pc = createPeer(peerId, iceServers, onRemoteStream, onSignal)
+  if (!pc) pc = createPeer(peerId, iceServers, onRemoteStream, onSignal, onIceState)
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }))
   const answer = await pc.createAnswer()
   await pc.setLocalDescription(answer)
