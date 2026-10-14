@@ -81,6 +81,16 @@ public class CallService {
     private int maxParticipants;
 
     /**
+     * 通话信令广播通道（2026-10-14，call-multi-instance 层一）。
+     *
+     * <p>⚠ 用 {@code @Resource(required = false)} 而非强注入：单测可用
+     * {@code standaloneSetup}/纯 Mockito 构造本类而不必提供该依赖；
+     * 缺省时 {@link #sendTo} 自动退回本地直投（旧行为）。
+     */
+    @Resource
+    private CallFrameTopic callFrameTopic;
+
+    /**
      * 启动期自检：把「TURN/STUN 不可用」这一事实**显式打到日志**。
      *
      * <p>为何必要：三者（双空 / 配置不全 / 用静态凭据）的表现**都是用户侧静默失败** ——
@@ -171,6 +181,25 @@ public class CallService {
             }
         } catch (Exception e) {
             logger.error("处理通话信令异常 callId={}, type={}", callId, type, e);
+        }
+    }
+
+    /**
+     * 启动期自检：广播开关关闭时**显著告警**。
+     *
+     * <p>背景（call-multi-instance 层一）：广播是「多实例下通话信令能送达」的唯一手段。
+     * 关掉它（紧急止血用）后，若部署形态其实多实例，表现是「拨不通但毫无报错」——
+     * 与本次要消灭的故障同类，故必须让它在启动日志里**一眼可见**。
+     */
+    @PostConstruct
+    public void logBroadcastStatus() {
+        boolean enabled = callFrameTopic == null || callFrameTopic.isBroadcastEnabled();
+        if (enabled) {
+            logger.info("[通话] 信令广播已开启（easychat.call.broadcast-signaling=true），多实例可投递");
+        } else {
+            logger.warn("[通话] 信令广播已关闭（easychat.call.broadcast-signaling=false）："
+                    + "通话信令退化为本地直投，**仅单实例部署可用**。"
+                    + "若当前是多实例部署，通话将拨不通且无报错 —— 请立即改回 true。");
         }
     }
 
@@ -422,7 +451,19 @@ public class CallService {
     }
 
     private void sendTo(String userId, JSONObject frame) {
-        channelContextUtils.sendRawToUser(userId, frame.toJSONString());
+        String json = frame.toJSONString();
+        // 2026-10-14（call-multi-instance 层一 / ADR-001）：
+        //   原实现直接 channelContextUtils.sendRawToUser(...) —— 只写**本地** ChannelGroup，
+        //   而 USER_CONTEXT_MAP 是进程内的。多实例下目标用户挂在别处时**静默丢失**
+        //   （查不到本地 ChannelGroup 即 return，无日志无异常）。
+        //   现改为广播：各实例经本地投递各自判断，本实例的广播回声即完成本地投递。
+        if (callFrameTopic != null && callFrameTopic.isBroadcastEnabled()) {
+            if (callFrameTopic.broadcast(userId, json)) {
+                return;   // 发布成功：本实例会收到自己的回声并本地投递
+            }
+            // 发布失败 → 退回本地直投，保证本实例可达的用户至少还能收到
+        }
+        channelContextUtils.sendRawToUser(userId, json);
     }
 
     private void sendCallError(String toUserId, String callId, int code, String message) {

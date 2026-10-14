@@ -131,24 +131,35 @@ public class CallFrameTopic {
     /**
      * 广播一帧通话信令给指定用户。
      *
+     * <p>⚠ <b>返回值语义</b>：{@code true} 表示已成功发布到 Topic；{@code false} 表示未发布
+     * （开关关闭 / 目标为空 / 发布抛异常）。调用方据此决定是否退回<b>本地直投</b>兜底 ——
+     * 否则广播失败会让本实例本就可达的用户也收不到。
+     *
      * @param targetUserId 目标用户；为空则不广播（见 {@link #shouldBroadcast}）
      * @param frameJson     已序列化的信令帧
+     * @return 是否已成功发布
      */
-    public void broadcast(String targetUserId, String frameJson) {
+    public boolean broadcast(String targetUserId, String frameJson) {
         if (!broadcastEnabled) {
-            // 紧急回退路径：调用方应自行本地直投
-            return;
+            return false;
         }
         if (!shouldBroadcast(targetUserId)) {
             logger.warn("[通话信令] targetUserId 为空，跳过广播 frame={}", frameJson);
-            return;
+            return false;
         }
         try {
             redissonClient.getTopic(TOPIC_NAME).publish(new CallFramePayload(targetUserId, frameJson));
+            return true;
         } catch (Exception e) {
-            // 广播失败不应让信令处理崩溃；调用方仍有本地直投兜底
+            // 广播失败不应让信令处理崩溃；返回 false 让调用方本地直投兜底
             logger.error("[通话信令] 广播失败 target={}", targetUserId, e);
+            return false;
         }
+    }
+
+    /** 广播是否开启（启动自检与紧急回退判定用）。 */
+    public boolean isBroadcastEnabled() {
+        return broadcastEnabled;
     }
 
     // ── 纯判定（无 IO，可脱离 Redis 单测）────────────────────────────
