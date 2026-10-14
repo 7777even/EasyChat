@@ -95,13 +95,21 @@
 
 ## 阶段五：C3 降级可观测（补既有规格欠账，见 proposal R1）
 
-- [ ] **T13** **[TDD]** `callFrameCore.mjs` 新增「`iceconnectionstate === 'failed'` → 终态 `failed`」
+- [x] **T13** **[TDD]** `callFrameCore.mjs` 新增「`iceconnectionstate === 'failed'` → 终态 `failed`」
       的**纯判定**；断言必须含**制衡用例**（`connected`/`completed` **不得**被判失败），
-      防「恒拒绝」假通过 — ≤2h
-- [ ] **T14** 接入 `useCallStore` / `CallWindow.vue`：终态提示「当前网络环境不支持通话，请改用语音消息」
-      + 清理 peer 与本地流。**判定必须调纯核心，不得内联** — ≤2h
-- [ ] **T15** 扩展 `mutation_call_core.cjs` / `mutation_call_store_core.cjs`：把本轮新增判定加入变异清单，
-      **每条都要先实测转红**再收工（沿用「造等价变异验汇总行」的既有做法） — ≤1h
+      防「恒拒绝」假通过。
+      ✅ 红阶段 = 门禁 import 缺导出直接 `SyntaxError`；实现后 **22/22 通过**。
+      ✅ 覆盖：failed→`icefailed`+`endCall`+中文提示；**5 个正常 ICE 态一律不判失败**（制衡）；
+      **终态不可逆**（5 个终态逐一验）；`idle` 不得被凭空拉进通话；`undefined`/`null` 入参不崩；
+      新来电清 `errorMsg`（`startCall`/`accept` 原本已有，**来电路径漏了**） — ≤2h
+- [x] **T14** 接入 `useCallStore` / `CallWindow.vue`：`WebRTC` 每个 peer 挂
+      `oniceconnectionstatechange` → `useCallStore.onPeerIceState` → 调**纯核心** →
+      `endCallLocal` 清理 + 写 `errorMsg`（`CallWindow` 第 20/48 行本就分别渲染
+      `endReason`/`errorMsg`，无需改模板）。**判定未内联**（同 `at_mention_core` 教训） — ≤2h
+- [x] **T15** 扩展 `mutation_call_core.cjs`：新增缺陷⑪~⑮ 五条，**15/15 全部捕获**。
+      ⚠ **发现并修掉一处会让变异全漏网的机制缺陷**：`runGate()` 原本**只跑第一道门禁**，
+      而新断言在 `verify_call_ice_fail.mjs` 里 → 那 5 条会全判「漏网」，真因却是
+      「门禁没被调用」而非判别力不足。已改为两道门禁**都跑**并把新门禁拷进沙箱 — ≤1h
 
 ## 阶段六：验证与收尾
 
