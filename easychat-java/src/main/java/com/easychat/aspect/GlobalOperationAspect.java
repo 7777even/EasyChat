@@ -148,7 +148,13 @@ public class GlobalOperationAspect {
             redisUtils.expire(key, RATE_LIMIT_WINDOW_SECONDS);
         }
         if (count != null && count > RATE_LIMIT_PER_MINUTE) {
-            throw new BusinessException(ResponseCodeEnum.CODE_1001, "请求过于频繁，请稍后再试");
+            // 2026-10-14（error-code-split L4）：改用独立错误码。
+            //   此前抛 CODE_1001，与「参数错误 / 验证码错误」共用，导致：
+            //     ① 客户端无法区分「需要等待」与「需要改输入」；
+            //     ② 监控无法对刷接口单独告警；
+            //     ③ 本仓限流用例被迫放弃 code 判定、只能断言中文文案
+            //        （见 RateLimitBehaviourTest 注释里记录的三次修正）。
+            throw new BusinessException(ResponseCodeEnum.CODE_1004, "请求过于频繁，请稍后再试");
         }
     }
     // 注：原私有方法 resolveClientIp(HttpServletRequest) 已于 2026-10-03 迁至

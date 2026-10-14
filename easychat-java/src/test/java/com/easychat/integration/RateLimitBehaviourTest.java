@@ -48,12 +48,17 @@ public class RateLimitBehaviourTest extends IntegrationTestBase {
     private static final int RATE_LIMIT_PER_MINUTE = 60;
 
     /**
-     * 限流的<b>唯一</b>文案（{@code GlobalOperationAspect#applyRateLimit} 里
-     * {@code CODE_1001, "请求过于频繁，请稍后再试"}）。
-     * <p>为何不用 code 判断：实测发现<b>限流与业务错误共用 CODE_1001</b>
-     * （如「验证码已过期」也是 1001），用 code 会把业务错误误判成限流 —— 那就是测错了对象。
+     * 限流的独立错误码（2026-10-14 error-code-split 引入）。
+     *
+     * <p>🔴 <b>本类是「为什么需要拆码」的活证据</b>。拆码之前，限流抛的是
+     * {@code CODE_1001}，与「验证码已过期」等业务错误<b>完全同码</b>，
+     * 于是下面第 ② 条用例被迫三次改断言形态（见其 javadoc），
+     * 最终只能断言「响应文案不含『请求过于频繁』」——
+     * 而那正是本仓反复吃过亏的<b>脆弱断言</b>（还曾因 ISO-8859-1 解码而<b>恒真</b>）。
+     *
+     * <p>拆码后：限流有独立码，可直接用 {@code code} 判定，断言恢复稳固。
      */
-    private static final String RATE_LIMIT_MESSAGE = "请求过于频繁";
+    private static final int RATE_LIMIT_CODE = 1004;
 
     @MockBean
     private RedisUtils redisUtils;
@@ -81,39 +86,35 @@ public class RateLimitBehaviourTest extends IntegrationTestBase {
                 .param("checkCode", "code");
     }
 
-    /** ① 超阈值 → 被限流（CODE_1001） */
+    /** ① 超阈值 → 被限流（独立码 CODE_1004） */
     @Test
     public void requestOverThresholdIsRateLimited() throws Exception {
         when(redisUtils.incr(anyString())).thenReturn((long) RATE_LIMIT_PER_MINUTE + 1);
 
         mockMvc.perform(validLogin())
-                .andExpect(jsonPath("$.code").value(1001));
+                .andExpect(jsonPath("$.code").value(RATE_LIMIT_CODE));
     }
 
     /**
      * ② 正好等于阈值 → 放行（钉住 {@code count > 60} 的边界方向）。
      *
-     * <p>🔴🔴 断言形态两次修正，**每一次都是因为「测错了东西」而非环境问题**：
+     * <p>🔴 <b>2026-10-14 起本条改用 {@code code} 判定，不再依赖中文文案。</b>
+     *
+     * <p><b>拆码之前，这里被迫做过三次断言形态修正，每一次都是因为「测错了东西」：</b>
      * <ol>
      *   <li>初版断言 {@code jsonPath("$.code") != 1001} —— 失败，因放行后响应体可能为空，取不到值；</li>
-     *   <li>二版断言「body 不含 {@code "code":1001}」—— <b>仍然失败，且失败信息极具误导性</b>：
+     *   <li>二版断言「body 不含 {@code "code":1001}」—— <b>仍失败，且失败信息极具误导性</b>：
      *       实测 body 为 {@code {"code":1001,"message":"验证码已过期"}} ——
-     *       该 1001 来自<b>业务逻辑</b>（登录校验验证码），<b>限流根本没有触发</b>。
-     *       即「限流」与「业务错误」<b>共用同一个错误码</b>，用 code 判断限流属于测错对象。</li>
-     *   <li>现版断言「message 不含限流文案」—— 限流文案在 {@code GlobalOperationAspect} 中
-     *       是唯一的（{@code CODE_1001, "请求过于频繁，请稍后再试"}），故该断言既能放过
-     *       「验证码过期」这类同码异因的响应，又能在阈值方向被写反时立刻转红。</li>
+     *       该 1001 来自<b>业务逻辑</b>（登录校验验证码），<b>限流根本没触发</b>。
+     *       即限流与业务错误<b>共用同一个码</b>，用 code 判断限流属于测错对象。</li>
+     *   <li>三版只能断言「message 不含限流文案」—— 而那正是本仓反复吃亏的<b>脆弱断言</b>：
+     *       {@code getContentAsString()} 默认按 <b>ISO-8859-1</b> 解码，
+     *       中文被解成乱码 → {@code contains(...)} <b>恒为 false</b> → <b>断言恒真</b>。
+     *       变异「{@code count > 60} 写成 {@code >=}」后本应转红，实测<b>仍然全绿</b>。</li>
      * </ol>
      *
-     * <p>🔴🔴 <b>更危险的一次：上面第 3 条自己曾是个假通过，且是靠变异检验抓出来的。</b>
-     * {@code getContentAsString()} 默认按 <b>ISO-8859-1</b> 解码，而响应体是 UTF-8，
-     * 于是中文被解成 {@code éªè¯ç...} 这样的乱码，
-     * {@code contains("请求过于频繁")} <b>恒为 false</b> → 断言恒真 → 全绿。
-     * 变异「{@code count > 60} 写成 {@code >=}」后本应转红，实测<b>仍然全绿</b>，
-     * 才发现断言根本没在看内容。现改为
-     * {@code getContentAsString(StandardCharsets.UTF_8)} 显式解码。
-     * <p><b>教训：断言「某中文文案出现/不出现」时必须显式指定字符集</b>，
-     * 否则它会伪装成一个永远成立的断言 —— 失败会暴露，假通过不会。
+     * <p><b>拆码后这一条回到最稳固的形态</b>：只看 code，与字符集、文案均无关。
+     * 这就是本 Change 的直接价值 —— 不是「码变好看了」，而是<b>断言重新变得可信</b>。
      */
     @Test
     public void requestExactlyAtThresholdIsAllowed() throws Exception {
@@ -124,7 +125,7 @@ public class RateLimitBehaviourTest extends IntegrationTestBase {
 
         org.junit.Assert.assertFalse(
                 "恰好等于阈值时被限流了，说明阈值判定方向写反（应为 count > 60）：body=" + body,
-                body.contains(RATE_LIMIT_MESSAGE));
+                body.contains("\"code\":" + RATE_LIMIT_CODE));
     }
 
     /**

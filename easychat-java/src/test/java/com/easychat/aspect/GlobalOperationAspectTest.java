@@ -213,13 +213,13 @@ public class GlobalOperationAspectTest {
     }
 
     @Test
-    public void rateLimit_overThreshold_throws1001() throws Exception {
+    public void rateLimit_overThreshold_throws1004() throws Exception {
         request.setRemoteAddr("10.0.0.7");
         when(redisUtils.incr(anyString())).thenReturn((long) RATE_LIMIT + 1);
 
         JoinPoint point = loginEndpoint();
         BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
-        expectCode(e, 1001);
+        expectCode(e, 1004);   // 限流独立错误码，2026-10-14 error-code-split
     }
 
     @Test
@@ -247,25 +247,25 @@ public class GlobalOperationAspectTest {
     }
 
     @Test
-    public void rateLimit_loginEndpoint_overThreshold_throws1001() throws Exception {
+    public void rateLimit_loginEndpoint_overThreshold_throws1004() throws Exception {
         // 直接对 /account/login 这个真实端点验证限流真的生效（annotation + 切面联合）
         request.setRemoteAddr("10.0.0.7");
         when(redisUtils.incr(anyString())).thenReturn((long) RATE_LIMIT + 1);
 
         JoinPoint point = loginEndpoint();
         BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
-        expectCode(e, 1001);
+        expectCode(e, 1004);   // 限流独立错误码，2026-10-14 error-code-split
     }
 
     @Test
-    public void rateLimit_resetPasswordEndpoint_overThreshold_throws1001() throws Exception {
+    public void rateLimit_resetPasswordEndpoint_overThreshold_throws1004() throws Exception {
         // /account/resetPassword 是本批的核心受害端点（验证码可暴力），必须确认它受限
         request.setRemoteAddr("10.0.0.7");
         when(redisUtils.incr(anyString())).thenReturn((long) RATE_LIMIT + 1);
 
         JoinPoint point = resetPasswordEndpoint();
         BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
-        expectCode(e, 1001);
+        expectCode(e, 1004);   // 限流独立错误码，2026-10-14 error-code-split
     }
 
     // ============ 2026-10-12 遗留 #1：限流改按目标 email 计数 ============
@@ -341,7 +341,7 @@ public class GlobalOperationAspectTest {
     }
 
     @Test
-    public void rateLimit_emailDimension_overThreshold_throws1001() throws Exception {
+    public void rateLimit_emailDimension_overThreshold_throws1004() throws Exception {
         // 键换了，阈值判定不能跟着失效
         request.setRemoteAddr("10.0.0.7");
         request.setParameter("email", "victim@qq.com");
@@ -350,7 +350,7 @@ public class GlobalOperationAspectTest {
         // 端点解析必须在 lambda 外：Class#getMethod 抛受检异常，Runnable 不允许
         JoinPoint point = resetPasswordEndpoint();
         BusinessException e = catchBusiness(() -> aspect.interceptorDo(point));
-        expectCode(e, 1001);
+        expectCode(e, 1004);   // 限流独立错误码，2026-10-14 error-code-split
     }
 
     @Test

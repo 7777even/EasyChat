@@ -37,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -164,7 +165,7 @@ class AccountControllerMockMvcTest {
     }
 
     @Test
-    @DisplayName("验证码过期（缓存无此 key）→ 400 + 1001「验证码已过期」，且不得调用 login")
+    @DisplayName("验证码过期（缓存无此 key）→ 400 + 1005「验证码已过期」，且不得调用 login")
     void expiredCheckCodeIsRejected() throws Exception {
         when(redisUtils.get(Constants.REDIS_KEY_CHECK_CODE + CODE_KEY)).thenReturn(null);
 
@@ -174,7 +175,7 @@ class AccountControllerMockMvcTest {
                         .param("password", "pwd12345")
                         .param("checkCode", "ab12"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.code").value(1005))
                 .andExpect(jsonPath("$.message").value("验证码已过期"));
 
         verify(userInfoService, never()).login(anyString(), anyString());
@@ -183,7 +184,7 @@ class AccountControllerMockMvcTest {
     }
 
     @Test
-    @DisplayName("验证码不匹配 → 400 + 1001「验证码不正确」，且不得调用 login")
+    @DisplayName("验证码不匹配 → 400 + 1005「验证码不正确」，且不得调用 login")
     void wrongCheckCodeIsRejected() throws Exception {
         givenCachedCode("9999");
 
@@ -193,11 +194,35 @@ class AccountControllerMockMvcTest {
                         .param("password", "pwd12345")
                         .param("checkCode", "ab12"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.code").value(1005))
                 .andExpect(jsonPath("$.message").value("验证码不正确"));
 
         verify(userInfoService, never()).login(anyString(), anyString());
         verify(redisUtils).delete(Constants.REDIS_KEY_CHECK_CODE + CODE_KEY);
+    }
+
+    /**
+     * 制衡用例：验证码<b>正确</b>时**不得**抛验证码错误码。
+     *
+     * <p>只断言「错误时是 1005」的话，把守卫写成「永远抛 1005」也照样绿 ——
+     * 那样正常登录会被直接打断。故必须有这条反向用例。
+     */
+    @Test
+    @DisplayName("制衡：验证码正确 → 不得抛 CODE_1005，须正常进入 login")
+    void validCheckCodeMustNotBeRejected() throws Exception {
+        givenCachedCode("AB12");   // 与提交的 ab12 大小写不敏感相等
+
+        String body = mockMvc.perform(post("/account/login")
+                        .param("checkCodeKey", CODE_KEY)
+                        .param("email", "a@b.com")
+                        .param("password", "pwd12345")
+                        .param("checkCode", "ab12"))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        // ⚠ 本类用的是 JUnit 5 断言，签名是 assertFalse(条件, 消息) —— 与 JUnit 4 相反
+        assertFalse(body.contains("\"code\":1005"),
+                "验证码正确时不得返回 1005（否则守卫被写成「永远拒绝」）：body=" + body);
+        verify(userInfoService, times(1)).login(anyString(), anyString());
     }
 
     @Test
@@ -268,7 +293,7 @@ class AccountControllerMockMvcTest {
                         .param("nickName", "小明")
                         .param("checkCode", "ab12"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001));
+                .andExpect(jsonPath("$.code").value(1005));   // 验证码类错误码，2026-10-14 起为 1005
 
         verify(userInfoService, never()).register(anyString(), anyString(), anyString());
     }

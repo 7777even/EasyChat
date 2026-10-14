@@ -139,12 +139,15 @@ public class AccountController extends ABaseController {
      * 验证验证码
      */
     private void validateCheckCode(String checkCodeKey, String checkCode) {
+        // 2026-10-14（error-code-split L4）：改用独立错误码 CODE_1005。
+        //   此前与 CODE_1001 共用，客户端无法识别「验证码已作废、需重新获取」，
+        //   只能让用户对着一个已失效的码反复重试。
         String cachedCode = (String) redisUtils.get(Constants.REDIS_KEY_CHECK_CODE + checkCodeKey);
         if (cachedCode == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_1001, "验证码已过期");
+            throw new BusinessException(ResponseCodeEnum.CODE_1005, "验证码已过期");
         }
         if (!checkCode.equalsIgnoreCase(cachedCode)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_1001, "验证码不正确");
+            throw new BusinessException(ResponseCodeEnum.CODE_1005, "验证码不正确");
         }
     }
 }
