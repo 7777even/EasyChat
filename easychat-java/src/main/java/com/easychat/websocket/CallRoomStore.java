@@ -53,18 +53,25 @@ public class CallRoomStore {
         private String groupId;
         private int mediaType;
         private String iceServersJson;
+        /** 是否已有人接听（决定 call_log 落「已接」还是「未接」）*/
+        private boolean anyAccepted;
+        /** 房间创建时间（call_log.startTime）*/
+        private long startTime;
 
         public CallRoomSnapshot() {
         }
 
         public CallRoomSnapshot(String callId, String callerId, int callType,
-                String groupId, int mediaType, String iceServersJson) {
+                String groupId, int mediaType, String iceServersJson,
+                boolean anyAccepted, long startTime) {
             this.callId = callId;
             this.callerId = callerId;
             this.callType = callType;
             this.groupId = groupId;
             this.mediaType = mediaType;
             this.iceServersJson = iceServersJson;
+            this.anyAccepted = anyAccepted;
+            this.startTime = startTime;
         }
 
         public String getCallId() {
@@ -114,6 +121,22 @@ public class CallRoomStore {
         public void setIceServersJson(String iceServersJson) {
             this.iceServersJson = iceServersJson;
         }
+
+        public boolean isAnyAccepted() {
+            return anyAccepted;
+        }
+
+        public void setAnyAccepted(boolean anyAccepted) {
+            this.anyAccepted = anyAccepted;
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
     }
 
     private static String roomKey(String callId) {
@@ -153,6 +176,8 @@ public class CallRoomStore {
         map.put("groupId", snapshot.getGroupId() == null ? "" : snapshot.getGroupId());
         map.put("mediaType", String.valueOf(snapshot.getMediaType()));
         map.put("iceServersJson", snapshot.getIceServersJson() == null ? "" : snapshot.getIceServersJson());
+        map.put("anyAccepted", String.valueOf(snapshot.isAnyAccepted()));
+        map.put("startTime", String.valueOf(snapshot.getStartTime()));
         map.expire(TTL_SECONDS, TimeUnit.SECONDS);
         memberMap(snapshot.getCallId()).expire(TTL_SECONDS, TimeUnit.SECONDS);
         return true;
@@ -176,7 +201,14 @@ public class CallRoomStore {
         s.setGroupId(map.get("groupId"));
         s.setMediaType(parseInt(map.get("mediaType")));
         s.setIceServersJson(map.get("iceServersJson"));
+        s.setAnyAccepted(Boolean.parseBoolean(String.valueOf(map.get("anyAccepted"))));
+        s.setStartTime(parseLong(map.get("startTime")));
         return s;
+    }
+
+    /** 字段级写：仅改一个字段，避免整房 read-modify-write 的 lost update。 */
+    public void setAnyAccepted(String callId, boolean anyAccepted) {
+        roomMap(callId).put("anyAccepted", String.valueOf(anyAccepted));
     }
 
     /** 刷新房间 TTL（长通话续期）。 */
@@ -233,6 +265,39 @@ public class CallRoomStore {
     public void evict(String callId) {
         roomMap(callId).delete();
         memberMap(callId).delete();
+    }
+
+    /**
+     * 删除房间并返回是否由<b>本调用方</b>抢到结束权。
+     *
+     * <p>用于 {@code endCall} 的并发保护：单实例下原实现靠
+     * {@code rooms.remove(id) == null} 判「已被结束」；迁到 Redis 后不能再用
+     * 「删了之后看之前有没有值」，因为 {@code RMap#delete} 只返回 void。
+     * 故改为「先探测存在、再删除」的<em>近似</em>判定 ——
+     * 并如实标注它在极端并发下可能两侧都返回 true（都会写一条 call_log），
+     * 这是**已知的降级**，比「永远只结束一次」更容易接受（重复记录可查，悬挂不可查）。
+     *
+     * @return true = 删除成功且此前存在；false = 此前已不存在
+     */
+    public boolean evictRoom(String callId) {
+        RMap<String, String> map = roomMap(callId);
+        if (map.get("callerId") == null) {
+            return false;
+        }
+        map.delete();
+        memberMap(callId).delete();
+        return true;
+    }
+
+    private static long parseLong(String s) {
+        if (s == null || s.isEmpty()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(s.trim());
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     private static int parseInt(String s) {

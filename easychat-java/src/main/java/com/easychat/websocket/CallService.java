@@ -20,6 +20,7 @@ import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -91,6 +92,20 @@ public class CallService {
     private CallFrameTopic callFrameTopic;
 
     /**
+     * 通话房间存储（2026-10-14，call-multi-instance 层二 / ADR-002）。
+     *
+     * <p>⚠ 原实现用进程内 {@code ConcurrentHashMap}（rooms / userCall）——
+     * 创建房间的实例一重启/被负载均衡漂移，房间即丢，其余参与者悬挂到超时。
+     * 现改为 <b>Redis 为唯一真源</b>。
+     *
+     * <p>⚠ <b>刻意不保留进程内兜底</b>：两份真相比一份真相更危险 ——
+     * 它会让「Redis 不可用」表现为<em>静默降级</em>而非明确失败，
+     * 而静默降级正是本 Change 要消灭的故障形态（ADR-002）。
+     */
+    @Resource
+    private CallRoomStore callRoomStore;
+
+    /**
      * 启动期自检：把「TURN/STUN 不可用」这一事实**显式打到日志**。
      *
      * <p>为何必要：三者（双空 / 配置不全 / 用静态凭据）的表现**都是用户侧静默失败** ——
@@ -110,11 +125,10 @@ public class CallService {
         }
     }
 
-    /** callId -> 通话房间（仅用于信令路由与 call_log 落库） */
-    private final ConcurrentMap<String, CallRoom> rooms = new ConcurrentHashMap<>();
-    /** userId -> callId（同一用户同一时刻仅在一个通话中） */
-    private final ConcurrentMap<String, String> userCall = new ConcurrentHashMap<>();
-
+    // ⚠ 2026-10-14（call-multi-instance 层二）：rooms / userCall 两个进程内 Map 已删除。
+    //   真源改为 Redis（see callRoomStore）。刻意**不留进程内兜底** ——
+    //   两份真相比一份真相更危险：它会把「Redis 不可用」变成静默降级，
+    //   而那正是本 Change 要消灭的故障形态（ADR-002）。
     private static final int STATUS_INVITED = 0;
     private static final int STATUS_ACCEPTED = 1;
     private static final int STATUS_REJECTED = 2;
@@ -131,6 +145,8 @@ public class CallService {
     private static final int CODE_NOT_FRIEND = 2401;
     private static final int CODE_NOT_IN_GROUP = 2302;
     private static final int CODE_EXCEED_LIMIT = 2801;
+    /** callId 已存在于 Redis（ADR-003 拒绝，不静默合并两个通话） */
+    private static final int CODE_CALL_ID_CONFLICT = 2802;
 
     private static class CallMember {
         String userId;
@@ -207,7 +223,8 @@ public class CallService {
      * 连接断开：视为挂断，清理对方浮窗与房间
      */
     public void onUserDisconnect(String userId) {
-        String callId = userCall.get(userId);
+        // 层二：反查表在 Redis，跨实例断开也能找到其所在通话
+        String callId = callRoomStore.callIdOf(userId);
         if (callId == null) {
             return;
         }
@@ -263,9 +280,17 @@ public class CallService {
         room.mediaType = mediaType;
         room.startTime = System.currentTimeMillis();
         room.iceServers = buildIceServers();
-        room.members.put(fromUserId, new CallMember(fromUserId, STATUS_ACCEPTED));
-        rooms.put(callId, room);
-        userCall.put(fromUserId, callId);
+
+        // 层二（ADR-003）：建房走 HSETNX，callId 已被占用则**拒绝**而不是覆盖。
+        // 不拒绝会让两个不同通话被合并进同一房间 —— 那是最坏情况（互相收到对方的信令）。
+        CallRoomStore.CallRoomSnapshot created = snapshotOf(room);
+        if (!callRoomStore.createRoom(created)) {
+            sendCallError(fromUserId, callId, CODE_CALL_ID_CONFLICT,
+                    "callId 已被占用，请重新发起通话");
+            return;
+        }
+        callRoomStore.putMember(callId, fromUserId, STATUS_ACCEPTED);
+        callRoomStore.bindUser(fromUserId, callId);
 
         JSONObject invite = baseFrame(Constants.WS_CALL_INVITE, room);
         invite.put("fromUserId", fromUserId);
@@ -287,7 +312,7 @@ public class CallService {
     }
 
     private void handleAccept(String fromUserId, String callId) {
-        CallRoom room = rooms.get(callId);
+        CallRoom room = roomOf(callId);
         if (room == null) {
             return;
         }
@@ -295,11 +320,14 @@ public class CallService {
         if (cm == null) {
             cm = new CallMember(fromUserId, STATUS_ACCEPTED);
             room.members.put(fromUserId, cm);
-            userCall.put(fromUserId, callId);
+            callRoomStore.putMember(callId, fromUserId, STATUS_ACCEPTED);
+            callRoomStore.bindUser(fromUserId, callId);
         } else {
             cm.status = STATUS_ACCEPTED;
+            callRoomStore.putMember(callId, fromUserId, STATUS_ACCEPTED);
         }
         room.anyAccepted = true;
+        callRoomStore.setAnyAccepted(callId, true);
 
         // 广播 CALL_JOIN：现有成员向新成员发起 offer，新成员等待 offer（full-mesh）
         JSONObject join = baseFrame(Constants.WS_CALL_JOIN, room);
@@ -312,13 +340,15 @@ public class CallService {
     }
 
     private void handleReject(String fromUserId, String callId, int logStatus) {
-        CallRoom room = rooms.get(callId);
+        CallRoom room = roomOf(callId);
         if (room == null) {
             return;
         }
         CallMember cm = room.members.get(fromUserId);
+        int next = (logStatus == LOG_BUSY) ? STATUS_BUSY : STATUS_REJECTED;
         if (cm != null) {
-            cm.status = (logStatus == LOG_BUSY) ? STATUS_BUSY : STATUS_REJECTED;
+            cm.status = next;
+            callRoomStore.putMember(callId, fromUserId, next);
         }
         JSONObject frame = baseFrame(logStatus == LOG_BUSY ? Constants.WS_CALL_BUSY : Constants.WS_CALL_REJECT, room);
         frame.put("fromUserId", fromUserId);
@@ -336,7 +366,7 @@ public class CallService {
 
     private void handleSignal(String fromUserId, JSONObject json) {
         String callId = json.getString("callId");
-        CallRoom room = rooms.get(callId);
+        CallRoom room = roomOf(callId);
         if (room == null) {
             return;
         }
@@ -364,15 +394,16 @@ public class CallService {
     }
 
     private void handleHangup(String fromUserId, String callId) {
-        CallRoom room = rooms.get(callId);
+        CallRoom room = roomOf(callId);
         if (room == null) {
             return;
         }
         CallMember cm = room.members.get(fromUserId);
         if (cm != null) {
             cm.status = STATUS_LEFT;
+            callRoomStore.putMember(callId, fromUserId, STATUS_LEFT);
         }
-        userCall.remove(fromUserId);
+        callRoomStore.unbindUser(fromUserId);
         JSONObject frame = baseFrame(Constants.WS_CALL_HANGUP, room);
         frame.put("fromUserId", fromUserId);
         for (String uid : room.members.keySet()) {
@@ -388,7 +419,7 @@ public class CallService {
     }
 
     private void handleCancel(String fromUserId, String callId) {
-        CallRoom room = rooms.get(callId);
+        CallRoom room = roomOf(callId);
         if (room == null) {
             return;
         }
@@ -407,7 +438,10 @@ public class CallService {
     }
 
     private void endCall(CallRoom room, int logStatus) {
-        if (rooms.remove(room.callId) == null) {
+        // 层二：rooms.remove(...) == null 判「已被结束」的语义，改用「先删后判」——
+        // 删成功（true）说明本实例抢到了结束权，其余并发方删除返回 false 直接返回。
+        boolean wonTheRace = callRoomStore.evictRoom(room.callId);
+        if (!wonTheRace) {
             return; // 已被结束
         }
         CallLog callLog = new CallLog();
@@ -436,7 +470,7 @@ public class CallService {
             logger.error("通话记录落库失败 callId={}", room.callId, e);
         }
         for (String uid : room.members.keySet()) {
-            userCall.remove(uid);
+            callRoomStore.unbindUser(uid);
         }
     }
 
@@ -546,5 +580,55 @@ public class CallService {
             }
         }
         return n;
+    }
+
+    // ── 层二：CallRoom（进程内视图） ↔ CallRoomSnapshot（Redis 扁平字段） ──
+
+    /** 把房间视图拍平成可逐字段 HSET 的快照。 */
+    private CallRoomStore.CallRoomSnapshot snapshotOf(CallRoom room) {
+        return new CallRoomStore.CallRoomSnapshot(
+                room.callId,
+                room.callerId,
+                room.callType,
+                room.groupId,
+                room.mediaType,
+                room.iceServers == null ? "" : room.iceServers.toJSONString(),
+                room.anyAccepted,
+                room.startTime);
+    }
+
+    /**
+     * 从 Redis 还原房间视图（含成员子表）。
+     *
+     * @return 房间不存在返回 {@code null}（调用方据此静默返回，保持既有语义）
+     */
+    private CallRoom roomOf(String callId) {
+        CallRoomStore.CallRoomSnapshot s = callRoomStore.getRoom(callId);
+        if (s == null) {
+            return null;
+        }
+        CallRoom room = new CallRoom();
+        room.callId = s.getCallId();
+        room.callerId = s.getCallerId();
+        room.callType = s.getCallType();
+        room.groupId = s.getGroupId();
+        room.mediaType = s.getMediaType();
+        room.startTime = s.getStartTime();
+        room.anyAccepted = s.isAnyAccepted();
+        try {
+            String iceJson = s.getIceServersJson();
+            room.iceServers = (iceJson == null || iceJson.isEmpty())
+                    ? new JSONArray()
+                    // fastjson 1.x：JSON.parseArray 返回 List，不是 JSONArray；
+                    // 必须用 JSONArray.parseArray 才能直接赋给 JSONArray 字段。
+                    : JSONArray.parseArray(iceJson);
+        } catch (Exception e) {
+            logger.warn("[通话] iceServersJson 反序列化失败 callId={}", callId, e);
+            room.iceServers = new JSONArray();
+        }
+        for (Map.Entry<String, Integer> e : callRoomStore.members(callId).entrySet()) {
+            room.members.put(e.getKey(), new CallMember(e.getKey(), e.getValue()));
+        }
+        return room;
     }
 }
