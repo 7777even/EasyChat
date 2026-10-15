@@ -66,7 +66,9 @@ public class CallRoomStoreTest {
     }
 
     private CallRoomStore.CallRoomSnapshot snapshot() {
-        return new CallRoomStore.CallRoomSnapshot("c1", "U-caller", 2, "G1", 2, "[]");
+        // startTime 用固定值，便于断言；anyAccepted 建房时为 false
+        return new CallRoomStore.CallRoomSnapshot("c1", "U-caller", 2, "G1", 2, "[]",
+                false, 1757650000000L);
     }
 
     // ── 1. 建房必须原子（HSETNX）──────────────────────────────────────
