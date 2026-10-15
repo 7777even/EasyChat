@@ -207,6 +207,12 @@ jobs:
       - name: 错误码分段与两端同步
         run: node scripts/verify/verify_error_code.mjs
 
+      # 2026-10-14 新增（call-multi-instance）。锁住多实例通话的关键不变量：
+      #   无进程内房间表、信令走广播、Redis key 带 TTL、callId 冲突拒绝、
+      #   Redis 不可用明确报错、广播开关可回退。每条都对应一个曾真实存在的故障。
+      - name: 通话多实例部署不变量
+        run: node scripts/verify/verify_call_multi_instance.mjs
+
       # 2026-10-04 新增。verify_call_core 只覆盖 callFrameCore（帧 → 状态转移），
       # 「store 拿到转移后怎么落地」这段（结束态重置、1800ms 复位守卫、出站报文）
       # 此前是黑箱——它与 Pinia/WebRTC/window 混在 useCallStore.js，node 中无法 import。

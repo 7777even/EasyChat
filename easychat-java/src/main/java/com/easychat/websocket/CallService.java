@@ -33,13 +33,18 @@ import java.util.concurrent.ConcurrentMap;
  * - TURN 配置由服务端随信令引导帧下发（{@code iceServers}），前端源码不含凭据。
  * - 通话结束（任一方式）落 {@code call_log}。
  * <p>
- * <b>⚠️ 单实例约束（已知限制，勿用 --scale 横向扩后端）</b><br>
- * 本类的 {@code rooms} / {@code userCall} 是进程内 {@link ConcurrentHashMap}，
- * {@link ChannelContextUtils#USER_CONTEXT_MAP} 同理。信令能跨实例是因为广播走 Redisson RTopic，
- * 但**通话房间注册表不跨实例**：一旦后端跑多份，A 用户与 B 用户被负载均衡打到不同实例时，
- * 呼叫/接听信令将找不到对方，通话直接建立失败。
- * 修复方向：房间注册表迁 Redis（与离线缓冲同一套 Redis 基础设施）。当前部署形态为单实例，见
- * {@code docs/system-facts.md} §1.1 与仓库根 {@code docker-compose.yml}。
+ * <p><b>2026-10-14 层二后已跨实例</b>：{@code rooms} / {@code userCall} 两个进程内 Map 已删除，
+ * 真源迁至 Redis（{@link CallRoomStore}）。因此：
+ * <ul>
+ *   <li>跨实例断开自然收敛 —— {@link #onUserDisconnect} 经 {@code callRoomStore.callIdOf()}
+ *       找到通话，{@link #roomOf} / {@link #endCall} / {@code unbindUser} 全部读写 Redis，
+ *       与房间创建于哪个实例无关；</li>
+ *   <li>信令跨实例靠广播（{@link CallFrameTopic}，ADR-001）。</li>
+ * </ul>
+ * 仍受进程内约束的是 {@link ChannelContextUtils#USER_CONTEXT_MAP}（WS 通道映射本身），
+ * 它决定「某用户的连接挂在哪个实例」—— 这是 WS 建连层的事实，不因本类改变。
+ * <p>⚠ 已知边界：若创建房间的实例在 Redis key 写入前宕机，房间即不存在，
+ * 其余参与者会静默收不到信令（由 Redis TTL 兜底回收）。
  */
 @Component("callService")
 public class CallService {
@@ -147,6 +152,8 @@ public class CallService {
     private static final int CODE_EXCEED_LIMIT = 2801;
     /** callId 已存在于 Redis（ADR-003 拒绝，不静默合并两个通话） */
     private static final int CODE_CALL_ID_CONFLICT = 2802;
+    /** Redis 不可用等系统级故障（ADR-002：必须明确告知，不得静默） */
+    private static final int CODE_SYSTEM = 2803;
 
     private static class CallMember {
         String userId;
@@ -284,9 +291,17 @@ public class CallService {
         // 层二（ADR-003）：建房走 HSETNX，callId 已被占用则**拒绝**而不是覆盖。
         // 不拒绝会让两个不同通话被合并进同一房间 —— 那是最坏情况（互相收到对方的信令）。
         CallRoomStore.CallRoomSnapshot created = snapshotOf(room);
-        if (!callRoomStore.createRoom(created)) {
-            sendCallError(fromUserId, callId, CODE_CALL_ID_CONFLICT,
-                    "callId 已被占用，请重新发起通话");
+        try {
+            if (!callRoomStore.createRoom(created)) {
+                sendCallError(fromUserId, callId, CODE_CALL_ID_CONFLICT,
+                        "callId 已被占用，请重新发起通话");
+                return;
+            }
+        } catch (Exception e) {
+            // ADR-002：Redis 不可用必须**明确告知发起方**，不得静默。
+            // 静默的后果是用户以为通话已发起，随后无声无息超时。
+            logger.error("[通话] 房间创建失败 callId={}（Redis 不可用？）", callId, e);
+            sendCallError(fromUserId, callId, CODE_SYSTEM, "通话服务暂时不可用，请稍后重试");
             return;
         }
         callRoomStore.putMember(callId, fromUserId, STATUS_ACCEPTED);
