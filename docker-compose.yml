@@ -149,6 +149,33 @@ services:
       sh -c "apk add --no-cache mysql-client >/dev/null &&
              node /work/scripts/migrate/preflight-baseline-check.mjs"
 
+  # ==========================================================================
+  #  backend（2026-10-14 订正：通话已支持多实例，但**需要外部 LB**）
+  #   openspec/archive/2026-10-14-call-multi-instance（L4）
+  #
+  #  ✗ 本文件**不能**直接 scale：
+  #      docker compose up --scale backend=2
+  #    原因不是通话 —— 是 container_name 固定 + 下面 ports 直接映射宿主端口，
+  #    第二个副本起来就会端口冲突。**与通话能力无关，别归因错了。**
+  #
+  #  ✓ 正确形态：外部 LB（Nginx/HAProxy，本仓不交付）+ N 个无固定 container_name 的副本。
+  #    要求：
+  #      · 所有副本连**同一个** Redis —— 通话房间（CallRoomStore）以 Redis 为唯一真源；
+  #        刻意不保留进程内兜底，两份真相会把「Redis 故障」变成**静默降级**。
+  #      · LB 必须转发 **WebSocket（5051）的 upgrade**，不只是 HTTP。
+  #      · 会话粘性**非必需**：信令走广播（CallFrameTopic）、房间走 Redis，
+  #        无跨实例状态依赖；加粘性只是减少广播流量。
+  #
+  #  ⚠ 能力边界（不得误读）：
+  #      · easychat.call.broadcast-signaling 必须为 true（默认即 true）。
+  #        置 false **仅单实例安全**，多实例会静默丢信令；启动日志有显著 WARN。
+  #        可用环境变量 EASYCHAT_CALL_BROADCAST_SIGNALING 覆盖（Spring 松散绑定）。
+  #      · 仍受进程内约束的是 ChannelContextUtils.USER_CONTEXT_MAP（WS 通道映射本身，
+  #        决定某用户连接挂在哪个实例），属 WS 建连层事实，非本变更可解。
+  #      · **多实例未实跑验证**（交付环境无 LB / 无双实例 / Docker daemon 未运行）。
+  #        单测与门禁 verify_call_multi_instance.mjs 只能证明「不回退」，
+  #        **不能证明跨实例可用** —— 上线前须做一次双实例通话冒烟。
+  #  ==========================================================================
   backend:
     build:
       context: .

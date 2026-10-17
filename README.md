@@ -250,7 +250,7 @@ CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个
 
 - **JDK 必须 17**：`pom.xml` / CI / Dockerfile 已三方对齐（2026-10-03 由 1.8 升级）。用别的版本编译出的产物与 CI 不等价。
 - **ffmpeg 二进制不入库**（见 4.1），缺失是静默失败。
-- **后端不可多实例**：`CallService` 的通话房间注册表与 `ChannelContextUtils.USER_CONTEXT_MAP` 都是进程内 `ConcurrentHashMap`，`docker compose up --scale backend=2` 会让通话建立失败（消息广播走 RTopic 不受影响）。详见 `docs/system-facts.md` §1.1。
+- **后端多实例：通话已跨实例，但需外部 LB**（2026-10-14 起，见 §4.7）：通话房间与「用户→房间」反查已迁 **Redis**（`CallRoomStore`）、信令走独立广播 Topic（`CallFrameTopic`），**故 `--scale backend=2` 不再必然让通话失败**。仍受进程内约束的是 `ChannelContextUtils.USER_CONTEXT_MAP`（WS 通道映射本身）。⚠ 本能力**未经多实例实跑验证**（本机无 LB / 双实例 / Docker daemon），单实例全绿不等于多实例可用。
 - **TURN 配置**：**仅 `application-dev.properties`** 内置公共测试中继（`guest/guess`）供本机双实例联调；`application-prod.properties` 三项留空（**不是** `application.properties`，公共基线不含 TURN）。
   生产必须自建 coturn —— 仓库已含部署物，见 §4.6。**留空不等于安全**：此时对称 NAT 下会「接通后无声」，后端启动日志会有 WARN。
 
@@ -284,6 +284,40 @@ docker compose --env-file .env up -d backend   # 后端从 .env 读 EASYCHAT_TUR
 > 完整自检清单见 `deploy/coturn/turnserver.conf.template` 末尾。
 - **WS 客户端在主进程**：渲染进程不直连 WS，统一由 `src/main/wsClient.js` 维护；新增 IPC 通道必须在 `ipc.js` 定义**且**在 `index.js` 调一次，漏注册构建无感、功能静默失效（已有门禁拦截）。
 - **本地 SQLite 字段是 snake_case**（`message_id` / `send_user_nick_name`），渲染层是 camelCase，主进程读库勿混用。
+
+### 4.7 后端多实例部署（通话已跨实例，但需外部 LB）
+
+2026-10-14 起（`openspec/archive/2026-10-14-call-multi-instance`），两处进程内状态已迁出：
+
+- 通话**房间与「用户→房间」反查在 Redis**（`CallRoomStore`，带 TTL），不再是进程内 Map；
+- 通话**信令走独立广播 Topic**（`CallFrameTopic`），由**持有目标用户连接的那个实例**本地投递。
+
+故「A、B 两个用户被负载均衡打到不同实例」时，通话仍**具备**建立前提。
+
+**但本仓 compose 不能直接 scale**：
+
+```bash
+docker compose up --scale backend=2   # ✗ container_name 固定 + 宿主端口直接映射 → 端口冲突
+```
+
+正确形态是「外部 LB + N 个无固定 `container_name` 的后端副本」：
+
+| 要求 | 说明 |
+|------|------|
+| **外部 LB（Nginx / HAProxy）** | **不在本仓交付**（需运维自行部署）。必须同时转发 HTTP 与 **WebSocket（5051）的 upgrade** |
+| **共享同一 Redis** | 所有副本必须连同一 Redis —— 那是通话房间的**唯一真源**（刻意不保留进程内兜底，两份真相会把 Redis 故障变成静默降级） |
+| **会话粘性非必需** | 信令靠广播、房间靠 Redis，无跨实例状态依赖；加粘性只减少广播流量，属优化而非前提 |
+| **`easychat.call.broadcast-signaling=true`** | 默认即 `true`。置 `false` **仅在单实例下安全**，多实例会静默丢信令（启动时有 WARN） |
+
+**故障语义**（配错时能看到什么）：
+
+- Redis 不可用 → 发起方收到 WS 错误帧 `2803`「通话服务暂时不可用」并记 ERROR，**不再静默**；
+- `callId` 冲突 → WS 错误帧 `2802` 拒绝，**不会**把两个通话合并进同一房间；
+- 房间残留（如创建实例在写入前宕机）→ 由 Redis TTL 最终回收（兜底，非常规路径）。
+
+> ⚠ **本节未经多实例实跑验证**：交付环境无负载均衡器、无第二个后端实例、Docker daemon 未运行。
+> 单元测试与门禁 `verify_call_multi_instance.mjs` 只能证明**不回退**，**不能证明跨实例可用**。
+> 上线前请在真实 LB 环境做一次「A、B 分属不同实例」的双实例通话冒烟。
 
 ## 8. License
 
