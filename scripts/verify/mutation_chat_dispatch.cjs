@@ -206,10 +206,17 @@ try {
     base.out.split('\n').filter((l) => l.trim()).slice(0, 5)
       .forEach((l) => console.log('         ' + l.trim().slice(0, 130)))
     console.log('         请先修好测试再谈判别力')
+    // ⚠ 2026-10-17 补：初版此处只设 exitCode 就**直落下面的探针循环**。
+    //   两个后果：① 基线本来就红时仍逐条变异并报「9/9 捕获」—— 那不是判别力，
+    //   是在红基线上比大小；② 更糟：此时 pristine 已可能被上一次残留污染，
+    //   继续跑等于把污染**固化写回**。2026-10-17 实际发生 ——
+    //   ChatMessage.vue 的 `v-if="false"` 变异残留未还原，前端全量测试 785/786 恒红，
+    //   而红的原因正是「上一次跑变异没还原」（自引用的假故障）。
+    //   基线失败必须**立即中止**，与上面那句注释说的一致。
     process.exitCode = 1
-  } else {
-    console.log('  [基线] 未变异时测试全绿（确认后续「捕获」不是环境问题）\n')
+    return
   }
+  console.log('  [基线] 未变异时测试全绿（确认后续「捕获」不是环境问题）\n')
 
   for (const c of CASES) {
     restore()
@@ -262,4 +269,20 @@ try {
 } finally {
   // 必还原：即使中途抛错也不能把变异留在工作区
   restore()
+  // ⚠ 2026-10-17 补：还原必须**验字节**，「调用过 restore()」不等于「还原成功」。
+  //   本脚本曾把变异留在工作区（`ChatMessage.vue` 的 `v-if="data.status == 0"` → `v-if="false"`），
+  //   表现极具迷惑性：前端全量测试恒红 785/786，看上去像产品缺陷，
+  //   实为**上一次跑变异没还原**造成的自引用假故障（git blame 显示该行为 Not Committed Yet）。
+  //   加这道校验后，「污染」会在当场被报出来并自愈，而不是留给下一个人查半天。
+  if (pristine !== null) {
+    const now = fs.readFileSync(TARGET, 'utf8')
+    if (now !== pristine) {
+      console.error('\n[致命] 还原失败：' + TARGET + ' 与基线字节不一致，正在重写')
+      fs.writeFileSync(TARGET, pristine, 'utf8')
+      if (fs.readFileSync(TARGET, 'utf8') !== pristine) {
+        console.error('[致命] 二次写回仍不一致，请手工执行：git checkout -- ' + TARGET)
+        process.exitCode = 1
+      }
+    }
+  }
 }
