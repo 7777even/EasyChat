@@ -81,18 +81,24 @@
 
 ### Requirement: 用户断开跨实例收敛（call-disconnect-convergence）
 
-某实例上的用户断开连接 SHALL 广播断开事件，使其余实例清理相关本地状态。
+某实例上的用户断开连接后，房间状态 SHALL 经 Redis 收敛，不残留幽灵房间。
 
-#### Scenario: 断开事件被广播
+> **⚠ 本 Requirement 于 T8 执行时修订**：原设计为「广播 `call:disconnect`，各实例清理本地状态」，
+> 实测**不需要**——层二（T6）已删除 `rooms` / `userCall` 两个进程内 Map，`CallService`
+> 已无任何本地状态可清理。照原计划实现会为一个不存在的问题增加广播复杂度。
+> 依据 AGENTS §2.1 第 12 条（先穷举路径再执行计划），此处改计划而非照做。
+
+#### Scenario: 断开无本地状态可清理（原「断开事件被广播」已撤除）
 
 - **WHEN** 实例 A 上某用户 WS 断开
-- **THEN** 广播 `call:disconnect`（含 userId）
-- **AND** 各实例（含 A 自身）据此清理本地残留状态
+- **THEN** `onUserDisconnect` 经 `callRoomStore.callIdOf()`（Redis）定位其通话
+- **AND** 成员更新 / 解绑 / 结束房全部读写 Redis，**与房间创建于哪个实例无关**
+- **AND** **不**广播 `call:disconnect` —— 无本地状态可清理
 
 #### Scenario: TTL 为兜底而非主路径
 
-- **WHEN** 断开事件丢失（网络分区 / 广播失败）
-- **THEN** 房间由 Redis TTL 最终回收
+- **WHEN** 创建房间的实例在 Redis key 写入前宕机（房间即不存在）
+- **THEN** 已写入的房间由 Redis TTL 最终回收
 - **AND** 该路径为**兜底**，不得被当作常规清理手段依赖
 
 ---
@@ -118,17 +124,27 @@
 
 ### Requirement: 订正错误的系统事实陈述（call-multi-instance-fact-correction）
 
-`docs/system-facts.md` 中关于「信令能跨实例」的错误陈述 SHALL 被订正。
+`docs/system-facts.md` 中关于通话多实例能力的错误陈述 SHALL 被订正。
 
-**订正前（原文）**：
+> **⚠ 引文订正（2026-10-14 回写时修）**：本 delta 初版把「订正前原文」记成
+> `信令能跨实例是因为广播走 Redisson RTopic，但通话房间注册表不跨实例`——
+> 那句其实写在 `CallService` 的 **javadoc** 里，**不在** `system-facts.md`。
+> 按 §2.1 第 13 条「断言必须当场重算」，实际待订正的是 `system-facts.md` 下面三处。
 
-> 信令能跨实例是因为广播走 Redisson RTopic，但**通话房间注册表不跨实例**。
+**订正点 ①（§1.1 容器部署注意，原文）**：
 
-**订正后**：
+> `CallService.rooms` / `USER_CONTEXT_MAP` 为进程内 `ConcurrentHashMap`，
+> **后端多实例部署时通话房间路由会失效**（单实例约束，未解决）
 
-> 普通消息可跨实例（RTopic 广播 + 本地投递）；**通话信令与房间注册表均不跨实例**。
-> 通话信令原经 `sendRawToUser` 直写本地 Netty ChannelGroup，`rooms`/`userCall` 为进程内 Map。
-> 该错误判断于 2026-10-14 实测发现并订正；修复见 `specs/call-multi-instance`。
+**订正后**：通话房间与反查已迁 Redis（`CallRoomStore`），**房间路由可跨实例**；
+仍受进程内约束的是 `USER_CONTEXT_MAP`（WS 通道映射本身，属建连层）。
+
+**订正点 ② / ③（§1.4 与语音通话行，原文）**：
+
+> 服务端 `CallRoomRegistry`（内存，线程安全）维护房间
+
+**订正后**：`CallRoomRegistry` **从未作为类存在**（`git log -S "class CallRoomRegistry"` 为 0 条），
+真实结构是 `CallService`（编排）+ `CallRoomStore`（Redis 持久化）+ `CallRoomCore`（纯判定）。
 
 ---
 
