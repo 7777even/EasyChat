@@ -75,9 +75,15 @@ public class RedisConfig<V> {
      * （{@code RedissonUtils} 是死代码）；**鉴权 / 会话 / 验证码 / 限流全走 Jedis**
      * （{@code RedisTemplate}，{@code spring.redis.timeout=2000}），不受本条影响。
      *
-     * <p>⚠ <b>代价（诚实登记）</b>：普通消息广播在 Redis **瞬时**故障时不再自动重试
-     * （原先靠 Redisson 内部重试撑 ~16.8s）。但消息本身已落库、且有 SYNC 补推机制，
-     * 且「Redis 挂了 3s 以上还想实时送达」本就不是合理预期 → 已在 §14 登记为遗留项。
+     * <p><b>代价（2026-10-21 实测澄清，结论：不构成代价）</b>：曾担心「普通消息广播在 Redis
+     * 瞬时故障时不再自动重试 → 实时推送丢失」。实测**不成立**：
+     * 消息的 {@code seq} 由 Redis 递增（{@code nextMessageSeq}），而前端所有文本/媒体消息
+     * **必带 clientId** ⇒ 必走 seq 路径 ⇒ **Redis 不可用时消息根本创建不出来**
+     * （实测：发送直接失败并返回 {@code 1002}，**不落库、不静默丢**）。
+     * 也就是说：**开着重试也一样失败**（seq 那步就挂了），只是错误晚 ~16.8s 才报。
+     * 关闭内部重试的真实收益是：失败**更快暴露**（~2s）+ 消除 {@code PUBLISH} 重复投递。
+     *
+     * <p>（原「已在 §14 登记为遗留项」的表述已作废 —— 该条经实测后闭环删行。）
      */
     private static final int REDISSON_RETRY_ATTEMPTS = 0;
 
