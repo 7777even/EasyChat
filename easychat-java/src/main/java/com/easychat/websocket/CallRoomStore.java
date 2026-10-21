@@ -268,20 +268,32 @@ public class CallRoomStore {
     }
 
     /**
-     * 删除房间并返回是否由<b>本调用方</b>抢到结束权。
+     * 原子地结束通话房间：只有「房间仍属于该通话、且此前未被结束」的一方能拿到 true。
      *
-     * <p>用于 {@code endCall} 的并发保护：单实例下原实现靠
-     * {@code rooms.remove(id) == null} 判「已被结束」；迁到 Redis 后不能再用
-     * 「删了之后看之前有没有值」，因为 {@code RMap#delete} 只返回 void。
-     * 故改为「先探测存在、再删除」的<em>近似</em>判定 ——
-     * 并如实标注它在极端并发下可能两侧都返回 true（都会写一条 call_log），
-     * 这是**已知的降级**，比「永远只结束一次」更容易接受（重复记录可查，悬挂不可查）。
+     * <p><b>2026-10-21 修：重复写 call_log</b>。原实现是「先 {@code get} 探测存在、
+     * 再 {@code delete}」——<b>两步非原子</b>。双方<b>同时</b>挂断（分属两实例）时，
+     * 两边都探测到「存在」→ 都删成功 → <b>都写一条 call_log</b>。
+     * 实测：15 轮「同时挂断」落库 <b>16 行</b>（重复率 ~7%，重复行的 {@code start_time} 完全相同）——
+     * 这**不是极端并发**，双方一起挂断是日常场景。
      *
-     * @return true = 删除成功且此前存在；false = 此前已不存在
+     * <p><b>现修法</b>：{@code RMap#remove(key, value)} 在 Redisson 里是
+     * <b>单条 EVAL</b>（compare-and-delete，<b>原子</b>），于是「房间是否仍属于该通话」
+     * 与「抢占结束权」合并为<b>一步</b>：并发双方只有一方拿得到 true
+     * （第二个再来时 {@code callerId} 字段已被取走）。
+     *
+     * <p><b>副作用（刻意）</b>：{@code callerId} 被取走后，{@link #getRoom} / {@link #exists}
+     * 即判定「房间不存在」—— 这正是「已结束」的语义。
+     *
+     * <p><b>与旧取舍的对比</b>：旧实现刻意选了「重复记录可查、悬挂不可查」。
+     * 本修法把重复降到 0，代价是「抢占成功但进程在落库前崩溃」时该通话记录会丢
+     * （该窗口与旧实现的「delete 之后、落库之前」是同一个，不是新增类别）。
+     *
+     * @param expectedCallerId 该通话的发起方 id（房间快照里的值）；不匹配则抢不到结束权
+     * @return true = 抢到结束权（房间此前存在且未被结束）；false = 已被结束 / 房间不存在
      */
-    public boolean evictRoom(String callId) {
+    public boolean evictRoom(String callId, String expectedCallerId) {
         RMap<String, String> map = roomMap(callId);
-        if (map.get("callerId") == null) {
+        if (expectedCallerId == null || !map.remove("callerId", expectedCallerId)) {
             return false;
         }
         map.delete();

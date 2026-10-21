@@ -216,4 +216,66 @@ public class CallRoomStoreTest {
         assertFalse(CallRoomCore.assessJoin(6, 6).ok());
         assertTrue(CallRoomCore.assessJoin(5, 6).ok());
     }
+
+    // ── 6. 结束权必须**原子**（2026-10-21 修：重复 call_log）────────────
+
+    /**
+     * 🔴 抢占结束权必须**一步完成**。
+     *
+     * <p><b>缺陷（2026-10-21 实测复现）</b>：原实现是「先 {@code get} 探测房间存在、
+     * 再 {@code delete}」，<b>两步非原子</b>。双方<b>同时</b>挂断（分属两实例）时，
+     * 两边都探测到「存在」→ 都删成功 → <b>都写一条 call_log</b>。
+     * 实测：15 轮「同时挂断」落库 <b>16 行</b>（重复率 ~7%），且重复行的
+     * {@code start_time} 完全相同 —— 同一通话被记了两遍。
+     *
+     * <p>这不是「极端并发」：双方一起挂断是**日常场景**。
+     *
+     * <p><b>修法</b>：{@code RMap#remove(key, value)} 在 Redisson 里是
+     * <b>单条 EVAL</b>（compare-and-delete，原子），于是「房间是否仍属于该通话」
+     * 与「抢占结束权」合并为一步 —— 并发双方只有一方拿得到 true。
+     */
+    @Test
+    public void evictRoomClaimsEndRightAtomically() {
+        when(roomMap.remove(eq("callerId"), eq("U-caller"))).thenReturn(true);
+
+        assertTrue("抢到结束权必须返回 true（上层据此写 call_log）",
+                store.evictRoom("c1", "U-caller"));
+
+        verify(roomMap, times(1)).remove(eq("callerId"), eq("U-caller"));
+        // ★ 反向制衡：不得再用「先 get 探测、再 delete」的两步写法 ——
+        //   那正是重复 call_log 的根因（两步之间存在窗口）。
+        verify(roomMap, never()).get(eq("callerId"));
+    }
+
+    /** 已被他人结束 → 必须返回 false，且**不得**删房间（否则会把别人的结束动作重复做一遍）。 */
+    @Test
+    public void evictRoomReturnsFalseWhenEndRightAlreadyTaken() {
+        when(roomMap.remove(eq("callerId"), eq("U-caller"))).thenReturn(false);
+
+        assertFalse("结束权已被抢走必须返回 false —— 否则会多写一条 call_log",
+                store.evictRoom("c1", "U-caller"));
+
+        verify(roomMap, never()).delete();
+        verify(memberMap, never()).delete();
+    }
+
+    /** 房间不属于该通话（callerId 不匹配）→ 不得抢到结束权。 */
+    @Test
+    public void evictRoomRejectsMismatchedCaller() {
+        when(roomMap.remove(eq("callerId"), eq("U-other"))).thenReturn(false);
+
+        assertFalse(store.evictRoom("c1", "U-other"));
+        verify(roomMap, never()).delete();
+    }
+
+    /** 抢到结束权后，房间与成员两张表都要清掉。 */
+    @Test
+    public void evictRoomAlsoClearsMembers() {
+        when(roomMap.remove(eq("callerId"), eq("U-caller"))).thenReturn(true);
+
+        store.evictRoom("c1", "U-caller");
+
+        verify(roomMap).delete();
+        verify(memberMap).delete();
+    }
 }

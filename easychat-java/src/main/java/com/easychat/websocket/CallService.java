@@ -455,7 +455,7 @@ public class CallService {
     private void endCall(CallRoom room, int logStatus) {
         // 层二：rooms.remove(...) == null 判「已被结束」的语义，改用「先删后判」——
         // 删成功（true）说明本实例抢到了结束权，其余并发方删除返回 false 直接返回。
-        boolean wonTheRace = callRoomStore.evictRoom(room.callId);
+        boolean wonTheRace = callRoomStore.evictRoom(room.callId, room.callerId);
         if (!wonTheRace) {
             return; // 已被结束
         }
