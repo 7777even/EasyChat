@@ -253,6 +253,10 @@ CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个
 - **后端多实例：通话已跨实例，但需外部 LB**（2026-10-14 起，见 §4.7）：通话房间与「用户→房间」反查已迁 **Redis**（`CallRoomStore`）、信令走独立广播 Topic（`CallFrameTopic`），**故 `--scale backend=2` 不再必然让通话失败**。仍受进程内约束的是 `ChannelContextUtils.USER_CONTEXT_MAP`（WS 通道映射本身）。✅ **2026-10-21 起已做双实例实跑**（直连 / LB 分流 / Redis 不可用 / 4 路并发隔离，含反例对照），工具见 `scripts/smoke/`；⚠ **真实 Nginx/HAProxy 形态与 WebRTC 媒体链路仍未在本机覆盖**。
 - **TURN 配置**：**仅 `application-dev.properties`** 内置公共测试中继（`guest/guess`）供本机双实例联调；`application-prod.properties` 三项留空（**不是** `application.properties`，公共基线不含 TURN）。
   生产必须自建 coturn —— 仓库已含部署物，见 §4.6。**留空不等于安全**：此时对称 NAT 下会「接通后无声」，后端启动日志会有 WARN。
+- **CORS 允许来源**：`easychat.cors.allowed-origin-patterns` 默认 `*`（维持现状，允许任意来源）。
+  该项与 `allowCredentials(true)` 并存时**当前不构成 CSRF 暴露面**（会话用 `token` 请求头，凭据不由浏览器自动携带），
+  但**任何端点一旦改用 Cookie 会话就立刻构成** —— 届时请立即收紧为精确白名单。
+  启动日志会对这个组合**显式告警**；收紧前记得把**桌面端渲染层的来源**也加进白名单，否则桌面端会访问不到后端。
 
 ### 4.6 TURN 中继部署（音视频通话在对称 NAT 下唯一的连通手段）
 
@@ -356,7 +360,9 @@ node scripts/smoke/multi-instance-hangup-race.mjs  # 双方同时挂断：一通
 >
 > ⚠ **仍未覆盖**（如实登记，详见 `engineering/qa/2026-10-14-call-multi-instance.md`）：
 > ① **WebRTC 媒体链路**（需 GUI + 真实媒体）；
-> ② **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）。
+> ② **容量 / 吞吐上限** —— 测量工具已就绪（`scripts/smoke/multi-instance-load.mjs`：
+>    多路并发 + 帧突发，输出吞吐与各阶段耗时），但**须在目标部署环境跑**：
+>    本机 DB/Redis 与后端同机争资源，测出的数字**不可迁移**到生产。
 >
 > ✅ **2026-10-21 已做真实 LB 形态验证**（**nginx 与 HAProxy 两种实现**都验过，
 > 配置见 `deploy/nginx/nginx-lb.conf.template` 与 `deploy/haproxy/haproxy.cfg`，
