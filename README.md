@@ -353,15 +353,18 @@ node scripts/smoke/multi-instance-hangup-race.mjs  # 双方同时挂断：一通
 >
 > ⚠ **仍未覆盖**（如实登记，详见 `engineering/qa/2026-10-14-call-multi-instance.md`）：
 > ① **WebRTC 媒体链路**（需 GUI + 真实媒体）；
-> ② **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）；
-> ③ **HAProxy 等其它 LB 实现**（只验了 nginx —— 不同实现的粘性策略与超时默认值可能不同）。
+> ② **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）。
 >
-> ✅ **2026-10-21 已做真实 Nginx 形态验证**（容器化 nginx，配置见
-> `deploy/nginx/nginx-lb.conf.template`，脚本用 `MI_LB_MODE=external` 跑）：
-> 分流证据取自 **nginx 自己的 access log**（`$upstream_addr`），非脚本自证：
+> ✅ **2026-10-21 已做真实 LB 形态验证**（**nginx 与 HAProxy 两种实现**都验过，
+> 配置见 `deploy/nginx/nginx-lb.conf.template` 与 `deploy/haproxy/haproxy.cfg`，
+> 脚本用 `MI_LB_MODE=external` 跑）：分流证据取自 **LB 自己的日志**，非脚本自证：
 > ```
-> 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5051
-> 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5056
+> # nginx（$upstream_addr）
+> …|GET|/ws|101|192.168.65.254:5051
+> …|GET|/ws|101|192.168.65.254:5056
+> # HAProxy（tcplog）
+> … ws_lb ws_be/b1 …
+> … ws_lb ws_be/b2 …
 > ```
 > 两个 WS 客户端落在**两个不同副本**（`101` = Switching Protocols），五步信令全部跨实例送达。
 

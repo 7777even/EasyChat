@@ -30,7 +30,9 @@ import {
 const EXTERNAL = process.env.MI_LB_MODE === 'external'
 const EXT_HTTP_PORT = Number(process.env.MI_LB_HTTP || 8088)
 const EXT_WS_PORT = Number(process.env.MI_LB_WS || 8099)
-const NGINX_LOG = process.env.MI_NGINX_LOG || ''
+const LB_LOG = process.env.MI_LB_LOG || ''
+const LB_LOG_FILTER = process.env.MI_LB_LOG_FILTER || '/ws'
+const LB_LOG_EXTRACT = process.env.MI_LB_LOG_EXTRACT || '([^|\\s]+)$'
 
 const P = PAIRS[0]
 const R = createReporter(
@@ -56,21 +58,34 @@ const cleanup = () => {
 }
 const exitWith = (code) => { cleanup(); setTimeout(() => process.exit(code), 150) }
 
-/** 外部 LB 形态：读 nginx access log 里 /ws 请求的 $upstream_addr */
-function nginxWsUpstreams (sinceLines) {
-  if (!NGINX_LOG || !existsSync(NGINX_LOG)) return null
-  const all = readFileSync(NGINX_LOG, 'utf8').split(/\r?\n/).filter(Boolean)
+/**
+ * 外部 LB 形态：读 LB 自己的日志，提取「本次连接落到哪个后端副本」。
+ *
+ * <p>取证方式可配（不同 LB 的日志格式不同）：
+ * <ul>
+ *   <li>{@code MI_LB_LOG} —— 日志文件路径（nginx 挂载出来的 access log）；</li>
+ *   <li>{@code MI_LB_LOG_FILTER} —— 筛选行的子串（默认 `/ws`，只取 WS 连接）；</li>
+ *   <li>{@code MI_LB_LOG_EXTRACT} —— 提取「后端标识」的**正则（须含一个捕获组）**，
+ *       默认取行尾字段（nginx 的 {@code $upstream_addr} 就是行尾）。
+ *       HAProxy 用 {@code server (\S+)} 即可（raw 日志里形如 `... backend ws_be/server b2`）。</li>
+ * </ul>
+ */
+function lbBackendsFromLog (sinceLines) {
+  if (!LB_LOG || !existsSync(LB_LOG)) return null
+  const all = readFileSync(LB_LOG, 'utf8').split(/\r?\n/).filter(Boolean)
+  const re = new RegExp(LB_LOG_EXTRACT)
   return all.slice(sinceLines)
-    .filter((l) => l.includes('|/ws|'))
-    .map((l) => l.split('|').pop())
+    .filter((l) => l.includes(LB_LOG_FILTER))
+    .map((l) => { const m = l.match(re); return m ? m[1] : null })
+    .filter(Boolean)
 }
-function nginxLogLineCount () {
-  if (!NGINX_LOG || !existsSync(NGINX_LOG)) return 0
-  return readFileSync(NGINX_LOG, 'utf8').split(/\r?\n/).filter(Boolean).length
+function lbLogLineCount () {
+  if (!LB_LOG || !existsSync(LB_LOG)) return 0
+  return readFileSync(LB_LOG, 'utf8').split(/\r?\n/).filter(Boolean).length
 }
 
 async function main () {
-  const logBefore = nginxLogLineCount()
+  const logBefore = lbLogLineCount()
   if (!EXTERNAL) {
     lbHttp = startRoundRobinLb(PORTS.lbHttp, [PORTS.httpA, PORTS.httpB])
     lbWs = startRoundRobinLb(PORTS.lbWs, [PORTS.wsA, PORTS.wsB])
@@ -93,15 +108,15 @@ async function main () {
 
   // ── 前提断言：两个客户端确实落在不同副本 ──────────────────────
   if (EXTERNAL) {
-    // 外部 LB：等 nginx 把连接日志刷出来（WS 请求在**连接关闭**时才记 access log）
+    // 外部 LB：等 LB 把连接日志刷出来（WS 请求在**连接关闭**时才记 access log）
     cA.close()
     cB.close()
     await sleep(800)
-    const ups = nginxWsUpstreams(logBefore) || []
+    const ups = lbBackendsFromLog(logBefore) || []
     const distinct = [...new Set(ups)]
-    R.info(`nginx access log 中 /ws 请求的后端地址 = [${ups.join(', ')}]`)
-    R.ok('外部 LB 分流：A 与 B 落在**不同**实例（证据取自 nginx 自己的 access log）',
-      distinct.length >= 2, `去重后 ${distinct.length} 个后端地址`)
+    R.info(`LB 日志中 WS 连接的后端标识 = [${ups.join(', ')}]（日志：${LB_LOG || '未配置'}）`)
+    R.ok('外部 LB 分流：A 与 B 落在**不同**实例（证据取自 LB 自己的日志）',
+      distinct.length >= 2, `去重后 ${distinct.length} 个后端标识`)
     if (distinct.length < 2) {
       R.summary('（未能证明分流到不同实例，后续断言无意义）')
       exitWith(1)

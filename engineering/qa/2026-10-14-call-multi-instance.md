@@ -80,11 +80,13 @@
      仍未覆盖：更大并发下的表现、崩溃窗口的实测（见该 QA 的「未运行项」）。
 3. ~~**外部 LB 分流行为未验证**~~（README 提供的是配置示例）
    → **2026-10-21 已补验**：**6/6**，用**连接级 round-robin TCP 代理**等价模拟。
-   → **2026-10-21 追加真实 nginx 形态**：**6/6**，且分流证据取自 **nginx 自己的 access log**
-     （`$upstream_addr`：`…|GET|/ws|101|…:5051` 与 `…|GET|/ws|101|…:5056` —— 两个客户端落到
-     **两个不同副本**，`101` = Switching Protocols）；配置沉淀为
-     `deploy/nginx/nginx-lb.conf.template`，脚本用 `MI_LB_MODE=external` 跑。
-   ⚠ **HAProxy 等其它 LB 实现仍未验证**（只验了 nginx —— 不同实现的粘性策略与超时默认值可能不同）。
+   → **2026-10-21 追加真实 LB 形态（nginx 与 HAProxy 两种实现）**：均 **6/6**，
+     且分流证据取自 **LB 自己的日志**（非脚本自证）——
+     nginx：`$upstream_addr` = `…|GET|/ws|101|…:5051` / `…:5056`；
+     HAProxy：`option tcplog` = `… ws_lb ws_be/b1 …` / `… ws_be/b2 …`。
+     配置沉淀为 `deploy/nginx/nginx-lb.conf.template` 与 `deploy/haproxy/haproxy.cfg`，
+     脚本用 `MI_LB_MODE=external` 跑（日志取值可配：`MI_LB_LOG` / `MI_LB_LOG_FILTER` / `MI_LB_LOG_EXTRACT`）。
+   ⚠ **其它 LB 实现（云厂商 LB 等）仍未验证**（不同实现的粘性策略与超时默认值可能不同）。
 4. ~~**Redis 不可用路径仅做静态断言**~~（§2.1 第 3 条：静态断言有固有上限）
    → **2026-10-21 已实跑**：**6/6**（`2803` 错误帧 + 到期自动恢复）。
 5. **真实 WebRTC 媒体链路**沿用既有结论：需 GUI，沙箱无法覆盖。**仍未覆盖**。

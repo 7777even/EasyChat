@@ -58,10 +58,10 @@ node scripts/smoke/multi-instance-redis-down.mjs
 node scripts/smoke/multi-instance-hangup-race.mjs
 ```
 
-### 真实 nginx 形态（`MI_LB_MODE=external`）
+### 真实外部 LB 形态（`MI_LB_MODE=external`）
 
 默认的 LB 是脚本自带的**连接级 round-robin TCP 代理** —— 它只做 TCP 转发，
-**不处理 HTTP 层**（Host 头、upgrade 头、读超时…）。要验真实 LB，用容器化 nginx：
+**不处理 HTTP 层**（Host 头、upgrade 头、读超时…）。要验真实 LB，用容器化的 nginx 或 HAProxy：
 
 ```bash
 # 1) 起 nginx（配置见 deploy/nginx/nginx-lb.conf.template）
@@ -72,16 +72,33 @@ docker run -d --name easychat-lb -p 8088:8088 -p 8099:8099 \
 
 # 2) 跑冒烟（分流证据取自 nginx 自己的 access log —— $upstream_addr）
 MI_LB_MODE=external MI_LB_HTTP=8088 MI_LB_WS=8099 \
-MI_NGINX_LOG="$PWD/deploy/nginx/logs/lb_access.log" \
+MI_LB_LOG="$PWD/deploy/nginx/logs/lb_access.log" \
   node scripts/smoke/multi-instance-lb.mjs
 ```
 
-> **为什么要读 nginx 的日志而不是让脚本自己记账**：内置代理模式下「A 落在哪个副本」
+或用 HAProxy（配置见 `deploy/haproxy/haproxy.cfg`；日志走 stdout，需重定向到文件）：
+
+```bash
+docker run --rm --name easychat-lb-haproxy -p 8088:8088 -p 8099:8099 \
+  -v "$PWD/deploy/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro" \
+  haproxy:alpine > /tmp/haproxy.log 2>&1 &
+
+MI_LB_MODE=external MI_LB_HTTP=8088 MI_LB_WS=8099 \
+MI_LB_LOG=/tmp/haproxy.log MI_LB_LOG_FILTER=ws_be MI_LB_LOG_EXTRACT='(ws_be/\S+)' \
+  node scripts/smoke/multi-instance-lb.mjs
+```
+
+> **为什么要读 LB 的日志而不是让脚本自己记账**：内置代理模式下「A 落在哪个副本」
 > 是脚本自己记的账（可能自说自话）；外部模式下证据来自**被测系统本身**。
-> 日志样例（两个客户端 → 两个不同副本，`101` = Switching Protocols）：
+> nginx 日志样例（两个客户端 → 两个不同副本，`101` = Switching Protocols）：
 > ```
 > 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5051
 > 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5056
+> ```
+> HAProxy 日志样例（`option tcplog`）：
+> ```
+> 172.17.0.1:46146 [21/Oct/2026:08:18:08.161] ws_lb ws_be/b1 1/2/248 580 -- 4/2/1/0/0 0/0
+> 172.17.0.1:46156 [21/Oct/2026:08:18:08.249] ws_lb ws_be/b2 1/1/339  580 -- 3/1/0/0/0 0/0
 > ```
 
 反例对照需要**先把实例 A 的广播关掉**（这是前提，不是脚本能自己改的）：
@@ -110,8 +127,10 @@ node scripts/smoke/multi-instance-smoke.mjs --control
 | `MI_HTTP_A` / `MI_HTTP_B` | `5050` / `5055` | 两实例的 HTTP 端口 |
 | `MI_WS_A` / `MI_WS_B` | `5051` / `5056` | 两实例的 WS 端口 |
 | `MI_LB_HTTP` / `MI_LB_WS` | `8088` / `8099` | 脚本自带 round-robin LB 的入口端口 |
-| `MI_LB_MODE` | （内置） | 设为 `external` 则**不**起内置代理，改用外部 LB（真实 nginx） |
-| `MI_NGINX_LOG` | （空） | 外部 LB 模式下指定 nginx access log 路径 —— 分流证据从**它**读出 |
+| `MI_LB_MODE` | （内置） | 设为 `external` 则**不**起内置代理，改用外部 LB（真实 nginx / HAProxy） |
+| `MI_LB_LOG` | （空） | 外部 LB 模式下指定 **LB 自己的日志**路径 —— 分流证据从**它**读出 |
+| `MI_LB_LOG_FILTER` | `/ws` | 日志里筛出 WS 连接行的子串（nginx 用 `/ws`，HAProxy 用 `ws_be`） |
+| `MI_LB_LOG_EXTRACT` | `([^\\|\\s]+)$` | 提取「后端标识」的**正则（须含一个捕获组）**；nginx 取行尾（`$upstream_addr`），HAProxy 用 `server (\S+)` 或 `(ws_be/\S+)` |
 | `MI_RACE_ROUNDS` | `20` | `hangup-race` 脚本的竞态轮数 |
 | `MI_DB` / `MI_DB_USER` / `MI_DB_PASS` / `MI_DB_HOST` / `MI_DB_PORT` | `easychat`/`root`/`root`/`127.0.0.1`/`3306` | `hangup-race` 核对 `call_log` 用的活库连接参数 |
 | `MI_REDIS_PORT` | `6379` | Redis 端口 |
