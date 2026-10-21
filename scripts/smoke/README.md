@@ -46,6 +46,7 @@ Redis 不可用路径），并追加一项并发隔离冒烟。
 | `multi-instance-lb.mjs` | 外部 LB 分流形态 | **前提断言**：两个客户端**确实落在不同实例**；再跑五步信令 |
 | `multi-instance-redis-down.mjs` | Redis 不可用时的失败语义 | 发起方收到 `code=2803`（**不静默**），且到期**自动恢复** |
 | `multi-instance-concurrency.mjs` | 4 路并发下的**信令隔离** | 不串房、不丢帧、不乱序（**隔离性**，非容量测试） |
+| `multi-instance-hangup-race.mjs` | 双方**同时挂断**的竞态 | 同一通话**只能落一条 `call_log`**（2026-10-21 修「重复落库」缺陷；需本机有 mysql CLI 核对行数） |
 
 ## 用法
 
