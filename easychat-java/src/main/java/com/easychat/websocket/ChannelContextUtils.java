@@ -69,6 +69,7 @@ public class ChannelContextUtils {
      * @param channel
      */
     public void addContext(String userId, Channel channel) {
+        // ① 绑定通道属性（本地）
         try {
             String channelId = channel.id().toString();
             AttributeKey attributeKey = null;
@@ -78,20 +79,38 @@ public class ChannelContextUtils {
                 attributeKey = AttributeKey.valueOf(channel.id().toString());
             }
             channel.attr(attributeKey).set(userId);
+        } catch (Exception e) {
+            logger.error("通道属性绑定失败, userId={}", userId, e);
+        }
 
+        // ② ★ 本地注册通道 —— **必须先做，且不得依赖 Redis**（2026-10-21 实测，遗留 #35）
+        //   原实现把 addUserChannel 排在 redisComponet.getUserContactList 之后，
+        //   而整段只有一个 try：Redis 不可用时前者抛 RedisCommandTimeoutException →
+        //   被最外层 catch 吞掉 → addUserChannel **永不执行** →
+        //   该用户「WS 连上了、却不在投递体系内」：消息、通话信令、在线状态广播**全收不到**，
+        //   且**没有任何错误提示**（catch 只打一行「初始化链接失败」）。
+        addUserChannel(userId, channel);
+
+        // ③ Redis 相关步骤：各自容错，**不连累**后面的 DB 查询与 INIT 下发
+        //   （INIT 数据与离线补推都是**本地投递**（sendMsg 直写 ChannelGroup），
+        //     不经 Redis topic —— 故 Redis 故障不应让客户端连初始数据都收不到）
+        try {
             List<String> contactList = redisComponet.getUserContactList(userId);
             for (String groupId : contactList) {
                 if (groupId.startsWith(UserContactTypeEnum.GROUP.getPrefix())) {
                     add2Group(groupId, channel);
                 }
             }
-            addUserChannel(userId, channel);
             redisComponet.saveUserHeartBeat(userId);
 
             // 更新用户在线状态为在线，并向所有好友广播
             redisComponet.updateUserStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.ONLINE.getStatus());
             broadcastOnlineStatus(userId, com.easychat.entity.enums.OnlineStatusEnum.ONLINE.getStatus());
+        } catch (Exception e) {
+            logger.error("Redis 相关初始化失败（通道已注册、投递不受影响；仅群组订阅/心跳/在线状态暂缺）, userId={}", userId, e);
+        }
 
+        try {
             //更新用户最后连接时间
             UserInfo updateInfo = new UserInfo();
             updateInfo.setLastLoginTime(new Date());
@@ -202,16 +221,25 @@ public class ChannelContextUtils {
     /**
      * 直推原始 WS 帧给指定用户（不重复序列化、不做联系人转换、不进离线缓冲）。
      * 用于实时性要求高的信令帧（如语音/视频通话），目标离线则静默丢弃。
+     *
+     * <p><b>2026-10-21 起返回「是否真的投出去了」</b>（此前返回 void）：
+     * 呼叫失败错误帧要**优先本地直投**（发起方的连接必在本实例），
+     * 只有本地没投出去时才退回广播 —— 没有这个返回值，调用方无法区分
+     * 「已送达」与「目标不在本实例」，只能无条件走广播，而那会造成
+     * <b>重复投递</b>（topic 回声 + 本地兜底各一份，实测发起方会收到 4~5 份错误帧）。
+     *
+     * @return true = 已写入本地连接（送达）；false = 目标不在线/参数非法（未送达）
      */
-    public void sendRawToUser(String userId, String json) {
+    public boolean sendRawToUser(String userId, String json) {
         if (StringTools.isEmpty(userId) || json == null) {
-            return;
+            return false;
         }
         ChannelGroup userGroup = USER_CONTEXT_MAP.get(userId);
         if (userGroup == null || userGroup.isEmpty()) {
-            return;
+            return false;
         }
         userGroup.writeAndFlush(new TextWebSocketFrame(json));
+        return true;
     }
 
     public void sendMessage(MessageSendDto messageSendDto) {

@@ -41,13 +41,8 @@ public class RedisConfig<V> {
     @Bean(name = "redissonClient", destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         try {
-            // 创建配置 指定redis地址及节点信息
-            Config config = new Config();
-            // 使用 JSON 编码替代 FST，避免 Java 17+ 模块化系统下的反射访问限制
-            config.setCodec(new JsonJacksonCodec());
-            config.useSingleServer().setAddress("redis://" + redisHost + ":" + redisPort);
             // 根据config创建出RedissonClient实例
-            return Redisson.create(config);
+            return Redisson.create(buildConfig());
         } catch (Exception e) {
             // ⚠ 捕获范围是**全部** Exception：此处只做「包装 + 指引 + 保留 cause」，
             //   不改变失败这一事实（不会吞掉、不会返回 null）。
@@ -58,6 +53,48 @@ public class RedisConfig<V> {
             logger.error(message, e);
             throw new IllegalStateException(message, e);
         }
+    }
+
+    /**
+     * Redisson 自动重试次数：**0**（关闭）。
+     *
+     * <p><b>为何必须关（2026-10-21 实测，Redis 被阻塞时逐帧记录）</b>：
+     * Redisson 3.12.3 的默认是 {@code timeout=3000ms} + {@code retryAttempts=3}
+     * + {@code retryInterval=1500ms}。叠加出两个**真缺陷**：
+     * <ol>
+     *   <li><b>重复投递</b>：重试会把同一条 {@code PUBLISH} 再发一次 →
+     *       Redis 恢复后**排队的多条 PUBLISH 一起执行** →
+     *       呼叫失败时发起方收到 <b>5 份</b>「通话服务暂时不可用」（实测：1 份本地 + 4 份回声）；</li>
+     *   <li><b>失败反馈被拖到 25.8s</b>：建房要等重试链走完才判失败
+     *       （实测第 1 份错误帧在阻塞后 25.8s 才到，用户干等半分钟）。</li>
+     * </ol>
+     * 根因是 {@code PUBLISH} / {@code HSETNX} 都**不是幂等**命令：
+     * 重试它们等于「可能重复投递」与「其实成功了但回复丢了 → 被误判成 callId 冲突」。
+     *
+     * <p><b>影响面已穷举</b>：Redisson 仅服务通话房间、通话信令广播、普通消息广播
+     * （{@code RedissonUtils} 是死代码）；**鉴权 / 会话 / 验证码 / 限流全走 Jedis**
+     * （{@code RedisTemplate}，{@code spring.redis.timeout=2000}），不受本条影响。
+     *
+     * <p>⚠ <b>代价（诚实登记）</b>：普通消息广播在 Redis **瞬时**故障时不再自动重试
+     * （原先靠 Redisson 内部重试撑 ~16.8s）。但消息本身已落库、且有 SYNC 补推机制，
+     * 且「Redis 挂了 3s 以上还想实时送达」本就不是合理预期 → 已在 §14 登记为遗留项。
+     */
+    private static final int REDISSON_RETRY_ATTEMPTS = 0;
+
+    /**
+     * 构造 Redisson 配置（**抽出以便单测**：{@code Redisson.create()} 一旦调用就连真 Redis，
+     * 单测里既连不上也不该连；把「配置长什么样」变成可断言的纯函数）。
+     *
+     * <p>包级可见：仅供同包单测断言，不对外承诺 API。
+     */
+    Config buildConfig() {
+        Config config = new Config();
+        // 使用 JSON 编码替代 FST，避免 Java 17+ 模块化系统下的反射访问限制
+        config.setCodec(new JsonJacksonCodec());
+        config.useSingleServer()
+                .setAddress("redis://" + redisHost + ":" + redisPort)
+                .setRetryAttempts(REDISSON_RETRY_ATTEMPTS);
+        return config;
     }
 
 

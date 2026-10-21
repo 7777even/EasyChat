@@ -1,10 +1,13 @@
 package com.easychat.redis;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
+import org.redisson.config.Config;
+import org.redisson.config.SingleServerConfig;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -97,5 +100,60 @@ public class RedisConfigTest {
                         + expected.getClass().getName() + "）");
             }
         }
+    }
+
+    /**
+     * 🔴 Redisson 的**自动重试必须关闭**（遗留 #35）。
+     *
+     * <p><b>实测依据</b>（2026-10-21，Redis 被阻塞时逐帧记录）：
+     * Redisson 3.12.3 的默认是 {@code timeout=3000ms} + {@code retryAttempts=3}
+     * + {@code retryInterval=1500ms}。两者叠加出两个真缺陷：
+     * <ol>
+     *   <li><b>重复投递</b>：重试会把同一条 {@code PUBLISH} 再发一次 →
+     *       Redis 恢复后**排队的多条 PUBLISH 一起执行** →
+     *       呼叫失败时发起方收到 <b>5 份</b>「通话服务暂时不可用」（实测 1 份本地 + 4 份回声）；</li>
+     *   <li><b>失败反馈被拖到 25.8s</b>：建房操作要等 3s×4 次 + 3×1.5s 才判失败
+     *       （实测第 1 份错误帧在阻塞后 25.8s 才到）。</li>
+     * </ol>
+     * 而 {@code PUBLISH} / {@code HSETNX} 都<b>不是幂等</b>命令 —— 自动重试对它们是危险的
+     * （重复投递 / 「其实成功了但回复丢了」被误判成 callId 冲突）。
+     *
+     * <p>⚠ <b>影响面已穷举</b>：Redisson 仅服务通话房间、通话信令广播、普通消息广播
+     * （{@code RedissonUtils} 是死代码）；**鉴权/会话/验证码/限流全走 Jedis**
+     * （{@code RedisTemplate}，{@code spring.redis.timeout=2000}），不受本条影响。
+     */
+    @Test
+    public void redissonDisablesAutomaticRetries() {
+        Config config = new RedisConfig().buildConfig();
+        assertEquals(
+                "Redisson 自动重试必须关闭：PUBLISH/HSETNX 非幂等 → 重试会重复投递；"
+                        + "且 3 次重试把失败反馈拖到 ~26s（实测）",
+                0, singleServer(config).getRetryAttempts());
+    }
+
+    /**
+     * 反向制衡：单次命令超时**沿用** Redisson 默认 3s —— 重试已关，无需再调它。
+     *
+     * <p>顺带锁住「不要顺手把 timeout 也改了」：timeout 是「一次往返的预算」，
+     * 与「重试几次」是两件事。
+     */
+    @Test
+    public void redissonKeepsDefaultCommandTimeout() {
+        Config config = new RedisConfig().buildConfig();
+        assertEquals("单次命令超时应沿用 Redisson 默认 3000ms",
+                3000, singleServer(config).getTimeout());
+    }
+
+    /**
+     * 取回构建出的 {@link SingleServerConfig}。
+     *
+     * <p>Redisson 3.12.3 里 {@code Config.getSingleServerConfig()} 是**包私有**方法，
+     * 而 {@code SingleServerConfig} 本身与其 getter 都是 public ——
+     * 故用反射取回真实构建结果（而不是断言一个常量，那没有判别力）。
+     */
+    private static SingleServerConfig singleServer(Config config) {
+        SingleServerConfig ssc = (SingleServerConfig) ReflectionTestUtils.invokeMethod(config, "getSingleServerConfig");
+        assertNotNull("必须能取回构建出的 SingleServerConfig", ssc);
+        return ssc;
     }
 }

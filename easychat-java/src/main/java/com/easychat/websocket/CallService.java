@@ -522,6 +522,16 @@ public class CallService {
         frame.put("fromUserId", "system");
         frame.put("code", code);
         frame.put("message", message);
+        // ★ 2026-10-21（遗留 #35）：**本地优先**投递。
+        //   目标恒为「触发本次呼叫处理的发起方」—— 全部 7 个调用点传的都是 fromUserId，
+        //   而 handleCallFrame 的唯一调用点是 HandlerWebSocket（本实例的 WS 会话），
+        //   故发起方的连接**必在本实例**。
+        //   走 topic 有两个实测害处：① Redis 不可用时错误帧**发不出去**（用户永远看不到提示）；
+        //   ② Redisson 重试会排多条 PUBLISH，Redis 恢复后一起执行 → 发起方收到 **5 份**重复错误帧。
+        if (channelContextUtils.sendRawToUser(toUserId, frame.toJSONString())) {
+            return;
+        }
+        // 兜底：目标不在本实例（理论上不应发生）→ 仍走广播，别把错误帧丢掉
         sendTo(toUserId, frame);
     }
 

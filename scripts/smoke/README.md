@@ -85,7 +85,7 @@ node scripts/smoke/multi-instance-smoke.mjs --control
 | `MI_REDIS_PORT` | `6379` | Redis 端口 |
 | `MI_TEST_PASSWORD` | `Test12345` | 测试账号口令（须与种子 SQL 一致） |
 | `MI_REDIS_BLOCK` | `45` | `redis-down` 脚本阻塞 Redis 的秒数 |
-| `MI_REDIS_WAIT_MS` | `40000` | `redis-down` 脚本等待错误帧的毫秒数（**须大于 30s**，见下） |
+| `MI_REDIS_WAIT_MS` | `40000` | `redis-down` 脚本等待错误帧的毫秒数（**须 > 15s**，见下） |
 | `MI_BURST` | `50` | `concurrency` 脚本每路的突发帧数 |
 
 ## 踩过的坑（别改回去）
@@ -100,5 +100,8 @@ node scripts/smoke/multi-instance-smoke.mjs --control
    且到期自动恢复。
 4. **验证码要取真值** —— 走产品自己写入/校验的那条路径（从 Redis 读
    `easychat:checkcode:<key>` 再喂回去），不是绕过校验。
-5. **`redis-down` 的等待窗口必须 > 30s** —— Redisson 未显式配 `timeout`，
-   走默认约 30s，2803 错误帧约在阻塞后 28s 才到（实测）。窗口太短会误判成「没收到」。
+5. **`redis-down` 的等待窗口必须 > 15s** —— Redisson 单次命令超时默认 3s、
+   自动重试已关闭（`RedisConfig` 显式 `setRetryAttempts(0)`），故 2803 约在**阻塞后 7s**
+   到达（建房两步：`HSETNX` + `EXPIRE`，各 3s）。窗口太短会误判成「没收到」。
+   ⚠ 修复**前**是 3s × (1+3 次重试) + 3×1.5s 间隔 ≈ **28s**，且同一错误帧会被投递
+   **5 份**（1 份本地 + 4 份 Redisson 重试排队后一起执行的 `PUBLISH`）。
