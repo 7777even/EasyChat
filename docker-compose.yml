@@ -172,9 +172,11 @@ services:
   #        可用环境变量 EASYCHAT_CALL_BROADCAST_SIGNALING 覆盖（Spring 松散绑定）。
   #      · 仍受进程内约束的是 ChannelContextUtils.USER_CONTEXT_MAP（WS 通道映射本身，
   #        决定某用户连接挂在哪个实例），属 WS 建连层事实，非本变更可解。
-  #      · **多实例未实跑验证**（交付环境无 LB / 无双实例 / Docker daemon 未运行）。
-  #        单测与门禁 verify_call_multi_instance.mjs 只能证明「不回退」，
-  #        **不能证明跨实例可用** —— 上线前须做一次双实例通话冒烟。
+  #      · **多实例已做实跑**（2026-10-21：直连跨实例 / LB 分流 / Redis 不可用 / 4 路并发隔离，
+  #        含反例对照，全绿；工具见 scripts/smoke/）。但**真实 Nginx/HAProxy 形态**与
+  #        **WebRTC 媒体链路**仍未在本机覆盖 —— 上线前仍须在真实 LB 环境再冒烟一次。
+  #        单测与门禁 verify_call_multi_instance.mjs 证明的是「不回退」，
+  #        「跨实例可用」由上面的实跑冒烟证明 —— 两者不可互相替代。
   #  ==========================================================================
   backend:
     build:

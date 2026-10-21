@@ -250,7 +250,7 @@ CI 流水线见 `.github/workflows/ci.yml`：`main` 推送与 PR 自动跑 4 个
 
 - **JDK 必须 17**：`pom.xml` / CI / Dockerfile 已三方对齐（2026-10-03 由 1.8 升级）。用别的版本编译出的产物与 CI 不等价。
 - **ffmpeg 二进制不入库**（见 4.1），缺失是静默失败。
-- **后端多实例：通话已跨实例，但需外部 LB**（2026-10-14 起，见 §4.7）：通话房间与「用户→房间」反查已迁 **Redis**（`CallRoomStore`）、信令走独立广播 Topic（`CallFrameTopic`），**故 `--scale backend=2` 不再必然让通话失败**。仍受进程内约束的是 `ChannelContextUtils.USER_CONTEXT_MAP`（WS 通道映射本身）。⚠ 本能力**未经多实例实跑验证**（本机无 LB / 双实例 / Docker daemon），单实例全绿不等于多实例可用。
+- **后端多实例：通话已跨实例，但需外部 LB**（2026-10-14 起，见 §4.7）：通话房间与「用户→房间」反查已迁 **Redis**（`CallRoomStore`）、信令走独立广播 Topic（`CallFrameTopic`），**故 `--scale backend=2` 不再必然让通话失败**。仍受进程内约束的是 `ChannelContextUtils.USER_CONTEXT_MAP`（WS 通道映射本身）。✅ **2026-10-21 起已做双实例实跑**（直连 / LB 分流 / Redis 不可用 / 4 路并发隔离，含反例对照），工具见 `scripts/smoke/`；⚠ **真实 Nginx/HAProxy 形态与 WebRTC 媒体链路仍未在本机覆盖**。
 - **TURN 配置**：**仅 `application-dev.properties`** 内置公共测试中继（`guest/guess`）供本机双实例联调；`application-prod.properties` 三项留空（**不是** `application.properties`，公共基线不含 TURN）。
   生产必须自建 coturn —— 仓库已含部署物，见 §4.6。**留空不等于安全**：此时对称 NAT 下会「接通后无声」，后端启动日志会有 WARN。
 
@@ -315,9 +315,32 @@ docker compose up --scale backend=2   # ✗ container_name 固定 + 宿主端口
 - `callId` 冲突 → WS 错误帧 `2802` 拒绝，**不会**把两个通话合并进同一房间；
 - 房间残留（如创建实例在写入前宕机）→ 由 Redis TTL 最终回收（兜底，非常规路径）。
 
-> ⚠ **本节未经多实例实跑验证**：交付环境无负载均衡器、无第二个后端实例、Docker daemon 未运行。
-> 单元测试与门禁 `verify_call_multi_instance.mjs` 只能证明**不回退**，**不能证明跨实例可用**。
-> 上线前请在真实 LB 环境做一次「A、B 分属不同实例」的双实例通话冒烟。
+**实跑工具**（`scripts/smoke/`，手动脚本，**非 CI 门禁** —— 需要双实例 + 活库，CI 里没有这个形态）：
+
+```bash
+# 1) 起两个实例（同一 MySQL / 同一 Redis）
+java -jar easychat-java/target/easychat-1.0.jar --server.port=5050 --ws.port=5051
+java -jar easychat-java/target/easychat-1.0.jar --server.port=5055 --ws.port=5056
+# 2) 建测试账号（4 对好友，幂等可重跑）
+mysql -uroot -proot -D easychat --default-character-set=utf8mb4 < scripts/smoke/seed-test-users.sql
+# 3) 跑冒烟（退出码：0 符合预期 / 1 断言失败 / 2 环境前提不成立）
+node scripts/smoke/multi-instance-smoke.mjs        # 直连跨实例：完整通话生命周期
+node scripts/smoke/multi-instance-lb.mjs           # LB 分流：两个客户端确实落在不同实例
+node scripts/smoke/multi-instance-concurrency.mjs  # 4 路并发：不串房 / 不丢帧 / 不乱序
+node scripts/smoke/multi-instance-redis-down.mjs   # Redis 不可用：2803 错误帧 + 自动恢复
+```
+
+用法、环境变量与踩坑记录见 `scripts/smoke/README.md`。
+
+> ✅ **2026-10-21 已做双实例实跑**（本机起两个后端实例 + 同一 MySQL/Redis，工具见 `scripts/smoke/`）：
+> 直连跨实例 **5/5**、LB 分流 **6/6**、Redis 不可用 **6/6**、4 路并发隔离 **32/32** 全绿，
+> 并配了**反例对照**（关掉广播后 INVITE 必须送不到、且房间仍已建在 Redis）证明这些断言**有判别力**。
+>
+> ⚠ **仍未覆盖**（如实登记，详见 `engineering/qa/2026-10-14-call-multi-instance.md`）：
+> ① **真实 Nginx/HAProxy**（本次用等价的**连接级 round-robin TCP 代理**模拟，未验证真 LB 的粘性/upgrade 行为）；
+> ② **WebRTC 媒体链路**（需 GUI + 真实媒体）；
+> ③ **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）；
+> ④ **Redis 不可用时失败反馈偏慢**（实测约 **28s** 才把 2803 送到发起方，见遗留 #35）。
 
 ## 8. License
 

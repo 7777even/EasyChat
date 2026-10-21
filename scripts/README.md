@@ -41,6 +41,21 @@
 `verify/` 下另有 9 个 `mutation_*.cjs` / `mutation_*.mjs`（反向验证脚本）——
 2026-10-06 起由 `verify_mutation_scripts.mjs` 在 **CI 独立 job** 中统一驱动，见文末「变异检验」。
 
+## 手动冒烟工具（`smoke/`，**非门禁**）
+
+`smoke/` 下是**手动执行**的冒烟脚本，**不进 §10 门禁表、也不接 CI / pre-push**。
+理由：它们需要「两个后端实例 + 外部 LB + 活库」这一形态，CI 环境里没有 ——
+硬做成门禁只会得到一个恒红或恒绿的假信号。
+
+| 脚本 | 验证什么 |
+|------|----------|
+| `smoke/multi-instance-smoke.mjs` | 直连双实例的完整通话生命周期（INVITE / JOIN / SIGNAL×2 / HANGUP 五步跨实例送达）；加 `--control` 为**反例对照** |
+| `smoke/multi-instance-lb.mjs` | LB 分流形态：先断言两个客户端**确实落在不同实例**，再跑五步信令 |
+| `smoke/multi-instance-redis-down.mjs` | Redis 不可用时的失败语义（`2803` 错误帧 + 到期自动恢复），并打印实测失败反馈延迟 |
+| `smoke/multi-instance-concurrency.mjs` | 4 路并发下的**信令隔离**（不串房 / 不丢帧 / 不乱序）；⚠ 是隔离性冒烟，**不是**压测 |
+
+用法、前置条件、环境变量与踩坑记录见 **`scripts/smoke/README.md`**。
+
 ## 安装
 
 ```bash
