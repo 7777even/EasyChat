@@ -254,7 +254,12 @@ if (counts.nullResult) {
   } else {
     lintDetail = `${firstDetail} ｜ 重试后仍失败：${counts.detail}`
   }
-} else {
+}
+// ⚠ 赋值必须放在**重试判定之后**（不能写在 else 分支里）：
+//   初版写在 else 里，导致「重试成功」时 errCount/fileCount 仍为 null →
+//   门禁照样报红（只是报错信息误导）——**该缺陷由变异验证发现**
+//   （注入首次瞬时失败 → 期望 WARN + 通过；初版实际仍 exit 1）。
+if (!counts.nullResult) {
   errCount = counts.errCount
   fileCount = counts.fileCount
 }
