@@ -47,12 +47,16 @@ export const URLS = {
   lbWs: `ws://127.0.0.1:${PORTS.lbWs}/ws`
 }
 
-/** 种子脚本建的四对好友（发起方 a / 被叫方 b） */
+/** 种子脚本建的八对好友（发起方 a / 被叫方 b）—— 供多路并发与负载冒烟使用 */
 export const PAIRS = [
   { a: 'U90000000001', b: 'U90000000002', mail: ['mi-a1@easychat.test', 'mi-b1@easychat.test'] },
   { a: 'U90000000003', b: 'U90000000004', mail: ['mi-a2@easychat.test', 'mi-b2@easychat.test'] },
   { a: 'U90000000005', b: 'U90000000006', mail: ['mi-a3@easychat.test', 'mi-b3@easychat.test'] },
-  { a: 'U90000000007', b: 'U90000000008', mail: ['mi-a4@easychat.test', 'mi-b4@easychat.test'] }
+  { a: 'U90000000007', b: 'U90000000008', mail: ['mi-a4@easychat.test', 'mi-b4@easychat.test'] },
+  { a: 'U90000000009', b: 'U90000000010', mail: ['mi-a5@easychat.test', 'mi-b5@easychat.test'] },
+  { a: 'U90000000011', b: 'U90000000012', mail: ['mi-a6@easychat.test', 'mi-b6@easychat.test'] },
+  { a: 'U90000000013', b: 'U90000000014', mail: ['mi-a7@easychat.test', 'mi-b7@easychat.test'] },
+  { a: 'U90000000015', b: 'U90000000016', mail: ['mi-a8@easychat.test', 'mi-b8@easychat.test'] }
 ]
 
 /** 测试账号明文口令（一次性测试账号，可用 MI_TEST_PASSWORD 覆盖；对应种子 SQL 里的 MD5） */

@@ -54,6 +54,7 @@
 | `smoke/multi-instance-redis-down.mjs` | Redis 不可用时的失败语义（`2803` 错误帧 + 到期自动恢复），并打印实测失败反馈延迟 |
 | `smoke/multi-instance-concurrency.mjs` | 4 路并发下的**信令隔离**（不串房 / 不丢帧 / 不乱序）；⚠ 是隔离性冒烟，**不是**压测 |
 | `smoke/multi-instance-hangup-race.mjs` | 双方**同时挂断**的竞态：同一通话**只能落一条 `call_log`**（需 mysql CLI 核对行数） |
+| `smoke/multi-instance-load.mjs` | **负载 / 吞吐**测量：多路并发 + 帧突发，输出吞吐与各阶段耗时 |
 
 用法、前置条件、环境变量与踩坑记录见 **`scripts/smoke/README.md`**。
 
