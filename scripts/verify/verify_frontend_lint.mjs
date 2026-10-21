@@ -160,30 +160,108 @@ const BASELINE = 0
 //   若将来 eslint 行为变化使 (1) 不再成立，请把它当第一道闸门重新评估。
 //   下限 50：2026-10-13 实测扫到 137 个文件，留足余量以容忍 CI 环境差异。
 const MIN_LINT_FILES = 50
+
+/**
+ * eslint 的启动方式：**直接用 node 启本地 eslint**，不经 `npx` / `cmd /c` 包装层。
+ *
+ * <p><b>2026-10-21 硬化（遗留 #25）</b>：原实现是 `cmd /c npx eslint . ...`。
+ * 遗留 #25 记录了「偶发 exit 1」且**三次尝试均未复现**（累计 41 次 exit 0）——
+ * 按 §2.1 第 12 条，**机制未证实前不得凭假设改判定**。故此处**不改判定口径**，
+ * 只**消除两个已确认的变量**：
+ * <ol>
+ *   <li><b>启动层差异</b>（2026-10-13 已实测）：同一条 eslint 命令经 `npx.ps1` 与
+ *       `cmd /c` 结果不同（前者报「No files matching the pattern "."」且 exit 2，
+ *       后者正常产出合法 JSON）→ 现在**不经过任何包装层**；</li>
+ *   <li><b>registry 依赖</b>：`npx` 在**本地包不可用**时会去连 npm registry 下载，
+ *       那时它还会往 stdout 打印「Need to install the following packages」，
+ *       **污染 JSON 输出** → 门禁把「工具起不来」误判成「lint 解析失败」。
+ *       现在本地没装 eslint 时**直接报明确原因**，不再偷偷走网络。</li>
+ * </ol>
+ */
+function eslintLauncher () {
+  const localBin = join(FRONT, 'node_modules', 'eslint', 'bin', 'eslint.js')
+  if (existsSync(localBin)) {
+    return { bin: process.execPath, args: [localBin] }
+  }
+  return null
+}
+
+/** 跑一次 eslint，返回原始输出与失败分类 */
+function runEslint () {
+  const launcher = eslintLauncher()
+  if (!launcher) {
+    return { ok: false, reason: '本地未安装 eslint', raw: '', stderr: '请在 easychat-front 执行 npm install' }
+  }
+  const args = [...launcher.args, '.', '--ext', '.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts', '--format', 'json']
+  try {
+    const out = execFileSync(launcher.bin, args, {
+      cwd: FRONT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 64 * 1024 * 1024
+    })
+    return { ok: true, raw: out, stderr: '' }
+  } catch (e) {
+    // eslint 以非 0 退出表示有错误，但 stdout 仍是有效 JSON
+    return {
+      ok: false,
+      reason: `eslint 非 0 退出（${e.status ?? '信号 ' + e.signal}）`,
+      raw: e.stdout || '',
+      stderr: e.stderr || ''
+    }
+  }
+}
+
+/** 从 eslint 输出里取「错误数 + 扫到的文件数」；取不到则给出失败分类与诊断线索 */
+function readLintCounts (run) {
+  const raw = (run.raw || '').trim()
+  if (!raw) {
+    return {
+      nullResult: true,
+      detail: `eslint 未产出任何输出（${run.reason}）` +
+        (run.stderr ? `；stderr 摘录：${run.stderr.slice(0, 200).replace(/\s+/g, ' ')}` : '')
+    }
+  }
+  let data
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    return {
+      nullResult: true,
+      detail: `eslint 输出不是合法 JSON（${run.reason}）—— 常见于源码里有 Parsing error；` +
+        `stdout 开头：${raw.slice(0, 200).replace(/\s+/g, ' ')}`
+    }
+  }
+  if (!Array.isArray(data)) {
+    return { nullResult: true, detail: `eslint 输出不是数组（${run.reason}）：${raw.slice(0, 200)}` }
+  }
+  return {
+    errCount: data.reduce((n, f) => n + f.messages.filter((m) => m.severity === 2).length, 0),
+    fileCount: data.length
+  }
+}
+
 let errCount = null
 let fileCount = null
-try {
-  const out = execFileSync('cmd',
-    ['/c', 'npx eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --format json'],
-    { cwd: FRONT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 32 * 1024 * 1024 })
-  const data = JSON.parse(out)
-  fileCount = data.length
-  errCount = data.reduce((n, f) => n + f.messages.filter((m) => m.severity === 2).length, 0)
-} catch (e) {
-  // eslint 以非 0 退出表示有错误，但 stdout 仍是有效 JSON
-  const raw = (e.stdout || '').trim()
-  if (raw) {
-    try {
-      const data = JSON.parse(raw)
-      fileCount = data.length
-      errCount = data.reduce((n, f) => n + f.messages.filter((m) => m.severity === 2).length, 0)
-    } catch (_) { /* 落到下面的 null 判定 */ }
+let lintDetail = ''
+let run = runEslint()
+let counts = readLintCounts(run)
+// ★ 瞬时失败重试一次：「工具起不来」与「lint 真有错」共用同一个退出码（遗留 #25），
+//   这里只对「**取不到输出**」重试（**不**重试「有 error」），且重试成功会**显式告警**。
+if (counts.nullResult) {
+  const firstDetail = counts.detail
+  run = runEslint()
+  counts = readLintCounts(run)
+  if (!counts.nullResult) {
+    console.log(`        [WARN] 首次未取得 eslint 输出，已重试成功（疑似瞬时问题）→ ${firstDetail}`)
+  } else {
+    lintDetail = `${firstDetail} ｜ 重试后仍失败：${counts.detail}`
   }
+} else {
+  errCount = counts.errCount
+  fileCount = counts.fileCount
 }
 
 if (errCount === null) {
   check('能取得 lint 错误数', false,
-    'eslint 输出无法解析（可能存在 Parsing error 导致非 JSON 输出）——此时应先修语法错误')
+    lintDetail || 'eslint 输出无法解析（可能存在 Parsing error 导致非 JSON 输出）——此时应先修语法错误')
 } else {
   console.log(`        当前 ${errCount} 个 error（基线 ${BASELINE}），扫到 ${fileCount} 个文件`)
   check(`lint 错误数不超过基线 ${BASELINE}`, errCount <= BASELINE,
