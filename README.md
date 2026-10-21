@@ -342,6 +342,7 @@ node scripts/smoke/multi-instance-smoke.mjs        # 直连跨实例：完整通
 node scripts/smoke/multi-instance-lb.mjs           # LB 分流：两个客户端确实落在不同实例
 node scripts/smoke/multi-instance-concurrency.mjs  # 4 路并发：不串房 / 不丢帧 / 不乱序
 node scripts/smoke/multi-instance-redis-down.mjs   # Redis 不可用：2803 错误帧 + 自动恢复
+node scripts/smoke/multi-instance-hangup-race.mjs  # 双方同时挂断：一通电话只记一条 call_log
 ```
 
 用法、环境变量与踩坑记录见 `scripts/smoke/README.md`。
@@ -351,10 +352,18 @@ node scripts/smoke/multi-instance-redis-down.mjs   # Redis 不可用：2803 错�
 > 并配了**反例对照**（关掉广播后 INVITE 必须送不到、且房间仍已建在 Redis）证明这些断言**有判别力**。
 >
 > ⚠ **仍未覆盖**（如实登记，详见 `engineering/qa/2026-10-14-call-multi-instance.md`）：
-> ① **真实 Nginx/HAProxy**（本次用等价的**连接级 round-robin TCP 代理**模拟，未验证真 LB 的粘性/upgrade 行为）；
-> ② **WebRTC 媒体链路**（需 GUI + 真实媒体）；
-> ③ **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）；
-> ④ **Redis 不可用时失败反馈偏慢**（实测约 **28s** 才把 2803 送到发起方，见遗留 #35）。
+> ① **WebRTC 媒体链路**（需 GUI + 真实媒体）；
+> ② **容量 / 吞吐上限**（本次是**隔离性**冒烟，不是压测）；
+> ③ **HAProxy 等其它 LB 实现**（只验了 nginx —— 不同实现的粘性策略与超时默认值可能不同）。
+>
+> ✅ **2026-10-21 已做真实 Nginx 形态验证**（容器化 nginx，配置见
+> `deploy/nginx/nginx-lb.conf.template`，脚本用 `MI_LB_MODE=external` 跑）：
+> 分流证据取自 **nginx 自己的 access log**（`$upstream_addr`），非脚本自证：
+> ```
+> 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5051
+> 2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5056
+> ```
+> 两个 WS 客户端落在**两个不同副本**（`101` = Switching Protocols），五步信令全部跨实例送达。
 
 ## 8. License
 

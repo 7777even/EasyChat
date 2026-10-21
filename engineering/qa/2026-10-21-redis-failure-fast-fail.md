@@ -70,7 +70,10 @@
 
 ## 未运行项（如实登记，不得以全绿替代）
 
-1. **真实 Nginx/HAProxy 形态**未验证（本次仍是连接级 round-robin TCP 代理等价模拟）。
+1. **真实 Nginx/HAProxy 形态**：本轮补验时仍是连接级 round-robin TCP 代理等价模拟；
+   **同日稍后已用容器化 nginx 实跑并通过**（分流证据取自 nginx 自己的 access log，
+   见 `engineering/qa/2026-10-14-call-multi-instance.md` 未运行项 3）；
+   ⚠ **HAProxy 等其它 LB 实现仍未验证**。
 2. **WebRTC 媒体链路**未验证（需 GUI + 真实媒体）。
 3. **容量/吞吐上限**未压测（并发用例是**隔离性**冒烟）。
 4. **Redis 故障期间新连接客户端的「群组消息订阅 / 心跳 / 在线状态」**仍暂缺

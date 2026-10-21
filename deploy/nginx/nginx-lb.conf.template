@@ -1,0 +1,119 @@
+# ============================================================
+# EasyChat 后端 —— 外部 LB（Nginx）参考配置
+#
+# 用途：把「多个后端副本」放在一个 Nginx 后面，对外提供**一个** HTTP 入口与
+#       **一个** WebSocket 入口（README §4.7 的部署形态）。
+#
+# ⚠ 本仓的 compose **不能**直接 `--scale backend=2`
+#    （container_name 固定 + 宿主端口直接映射 → 端口冲突）。
+#    故正确形态是：外部 LB（本文件）+ N 个**无固定 container_name** 的后端副本，
+#    全部连**同一 Redis**（通话房间的唯一真源）。
+#
+# ⚠ 两处**必须**改：
+#    ① upstream 里的地址/端口 —— 换成你的副本实际监听地址；
+#    ② 若 WS 与 HTTP 用同一个入口端口，把两个 server 段合并（见文件末尾说明）。
+#
+# 用法（本地验证）：
+#   docker run -d --name easychat-lb -p 8088:8088 -p 8099:8099 \
+#     -v "$PWD/deploy/nginx/nginx-lb.conf.template:/etc/nginx/nginx.conf:ro" \
+#     -v "$PWD/deploy/nginx/logs:/var/log/nginx" \
+#     nginx:alpine
+#   # 后端副本需能被容器访问（Docker Desktop 用 host.docker.internal）
+#
+# 验证「两个客户端确实落在不同副本」：
+#   access log 里带 $upstream_addr，可直接读出每个连接落到哪个副本：
+#     2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5051
+#     2026-10-21T07:37:07+00:00|GET|/ws|101|192.168.65.254:5056
+#   两个客户端 → 两个不同端口 → 分流生效（scripts/smoke/multi-instance-lb.mjs
+#   的 external 模式正是读这份日志来断言的）。
+# ============================================================
+
+worker_processes  1;
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout  65;
+
+    # 记录「本次请求由哪个后端副本处理」—— 用来**证明**两个客户端确实落在不同实例
+    log_format lb '$time_iso8601|$request_method|$uri|$status|$upstream_addr';
+    access_log /var/log/nginx/lb_access.log lb;
+
+    # WebSocket upgrade 所需的标准映射（缺它则 Connection 头不会变成 upgrade）
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
+    # 副本 1：HTTP 5050 / WS 5051
+    upstream backend_http {
+        server host.docker.internal:5050;
+        # server 10.0.0.11:5050;   # 副本 2
+    }
+    upstream backend_ws {
+        server host.docker.internal:5051;
+        # server 10.0.0.11:5051;   # 副本 2
+    }
+
+    server {
+        listen 8088;
+        server_name _;
+
+        # HTTP（后端 context-path = /api）
+        location /api/ {
+            proxy_pass         http://backend_http;
+            proxy_http_version 1.1;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout    60s;
+        }
+    }
+
+    server {
+        listen 8099;
+        server_name _;
+
+        # WebSocket（/ws?token=…）
+        location /ws {
+            proxy_pass         http://backend_ws;
+            proxy_http_version 1.1;
+            proxy_set_header   Upgrade    $http_upgrade;
+            proxy_set_header   Connection $connection_upgrade;
+            proxy_set_header   Host       $host;
+            proxy_set_header   X-Real-IP  $remote_addr;
+            proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+            # 长连接不能被 nginx 默认的 60s 读超时掐断 —— 通话/消息 WS 会长时间静默
+            proxy_read_timeout    3600s;
+        }
+    }
+
+    # ── 若 HTTP 与 WS 想用**同一个**入口端口 ──────────────────────
+    #   把上面两个 server 段合并为一个 listen 80 的 server，
+    #   并用 location 前缀区分（注意 /ws 必须先于 / 匹配）：
+    #
+    #   server {
+    #       listen 80;
+    #       location /ws {
+    #           proxy_pass http://backend_ws;
+    #           proxy_http_version 1.1;
+    #           proxy_set_header Upgrade    $http_upgrade;
+    #           proxy_set_header Connection $connection_upgrade;
+    #           proxy_read_timeout 3600s;
+    #       }
+    #       location / {
+    #           proxy_pass http://backend_http;
+    #           proxy_set_header Host $host;
+    #           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    #       }
+    #   }
+}

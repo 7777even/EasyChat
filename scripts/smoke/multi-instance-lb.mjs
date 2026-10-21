@@ -1,29 +1,46 @@
 #!/usr/bin/env node
 /**
- * LB 分流下的跨实例通话冒烟 —— 模拟「外部 LB + N 个后端副本」部署形态
+ * LB 分流下的跨实例通话冒烟 —— 两种 LB 形态
  *
- * 形态：
- *        客户端 A ──┐
- *        客户端 B ──┼──► LB(HTTP 8088 → 5050|5055, WS 8099 → 5051|5056) ──► 实例A / 实例B
- *                   （连接级 round-robin，同一 Redis + MySQL）
+ * <p><b>形态 A（默认）内置 round-robin TCP 代理</b>：HTTP 8088 → 5050|5055，WS 8099 → 5051|5056。
+ * 它与真实 LB 的差别：只做 TCP 转发，<b>不处理 HTTP 层</b>（Host 头、upgrade 头、超时…）。
  *
- * 两条断言，缺一不可：
- *   [前提断言] 两个 WS 连接**确实落在不同实例**（以 LB 的分发记录为准）。
- *              —— 不断言这条，后面的「全通过」可能只是两个客户端挤在同一实例上，属假阳性。
- *   [行为断言] INVITE / JOIN / SIGNAL×2 / HANGUP 五步全部跨实例送达。
+ * <p><b>形态 B（{@code MI_LB_MODE=external}）真实 nginx</b>：外部 LB（容器）按真实配置
+ * 转发 HTTP 与 WebSocket upgrade。此时「两个客户端落在不同副本」不再由脚本自证，
+ * 而是从 <b>nginx 自己的 access log</b>（{@code $upstream_addr}）里读出来 ——
+ * <b>证据来自被测系统本身</b>，而不是来自测试脚本的记账。
  *
- * 前置：seed-test-users.sql 已执行；两个实例已起（HTTP 5050/5055、WS 5051/5056）。
- * 退出码：0 符合预期 / 1 断言失败 / 2 环境前提不成立
+ * <p>两条断言，缺一不可：
+ * <ol>
+ *   <li><b>前提</b>：两个 WS 连接**确实落在不同实例**。不断言这条，
+ *       后面的「全通过」可能只是两个客户端挤在同一个实例上（**假阳性**）。</li>
+ *   <li><b>行为</b>：INVITE / JOIN / SIGNAL×2 / HANGUP 五步全部跨实例送达。</li>
+ * </ol>
+ *
+ * <p>前置：seed-test-users.sql 已执行；两个实例已起（HTTP 5050/5055、WS 5051/5056）。
+ * 形态 B 另需：外部 LB 已就绪（默认 8088/8099），且 {@code MI_NGINX_LOG} 指向其 access log。
+ *
+ * <p>退出码：0 符合预期 / 1 断言失败 / 2 环境前提不成立
  */
+import { existsSync, readFileSync } from 'node:fs'
 import {
-  PORTS, URLS, PAIRS, loadWs, login, connectWs, createReporter, startRoundRobinLb, sleep
+  PORTS, PAIRS, loadWs, login, connectWs, createReporter, startRoundRobinLb, sleep
 } from './lib/smoke-lib.mjs'
+
+const EXTERNAL = process.env.MI_LB_MODE === 'external'
+const EXT_HTTP_PORT = Number(process.env.MI_LB_HTTP || 8088)
+const EXT_WS_PORT = Number(process.env.MI_LB_WS || 8099)
+const NGINX_LOG = process.env.MI_NGINX_LOG || ''
 
 const P = PAIRS[0]
 const R = createReporter(
-  'LB 分流下的跨实例通话冒烟' +
-  `\nHTTP LB ${PORTS.lbHttp} → ${PORTS.httpA}|${PORTS.httpB}   WS LB ${PORTS.lbWs} → ${PORTS.wsA}|${PORTS.wsB}`
+  (EXTERNAL ? '外部 LB（真实 nginx）' : '内置 round-robin TCP 代理') + '下的跨实例通话冒烟' +
+  `\nLB HTTP ${EXTERNAL ? EXT_HTTP_PORT : PORTS.lbHttp}   LB WS ${EXTERNAL ? EXT_WS_PORT : PORTS.lbWs}` +
+  `   后端 HTTP ${PORTS.httpA}|${PORTS.httpB}   WS ${PORTS.wsA}|${PORTS.wsB}`
 )
+
+const LB_HTTP = `http://127.0.0.1:${EXTERNAL ? EXT_HTTP_PORT : PORTS.lbHttp}/api`
+const LB_WS = `ws://127.0.0.1:${EXTERNAL ? EXT_WS_PORT : PORTS.lbWs}/ws`
 
 let cA
 let cB
@@ -37,40 +54,74 @@ const cleanup = () => {
   try { cA && cA.close() } catch { /* ignore */ }
   try { cB && cB.close() } catch { /* ignore */ }
 }
-const exitWith = (code) => {
-  cleanup()
-  setTimeout(() => process.exit(code), 150)
+const exitWith = (code) => { cleanup(); setTimeout(() => process.exit(code), 150) }
+
+/** 外部 LB 形态：读 nginx access log 里 /ws 请求的 $upstream_addr */
+function nginxWsUpstreams (sinceLines) {
+  if (!NGINX_LOG || !existsSync(NGINX_LOG)) return null
+  const all = readFileSync(NGINX_LOG, 'utf8').split(/\r?\n/).filter(Boolean)
+  return all.slice(sinceLines)
+    .filter((l) => l.includes('|/ws|'))
+    .map((l) => l.split('|').pop())
+}
+function nginxLogLineCount () {
+  if (!NGINX_LOG || !existsSync(NGINX_LOG)) return 0
+  return readFileSync(NGINX_LOG, 'utf8').split(/\r?\n/).filter(Boolean).length
 }
 
 async function main () {
-  lbHttp = startRoundRobinLb(PORTS.lbHttp, [PORTS.httpA, PORTS.httpB])
-  lbWs = startRoundRobinLb(PORTS.lbWs, [PORTS.wsA, PORTS.wsB])
-  await sleep(300)
+  const logBefore = nginxLogLineCount()
+  if (!EXTERNAL) {
+    lbHttp = startRoundRobinLb(PORTS.lbHttp, [PORTS.httpA, PORTS.httpB])
+    lbWs = startRoundRobinLb(PORTS.lbWs, [PORTS.wsA, PORTS.wsB])
+    await sleep(300)
+  }
 
   const WebSocket = loadWs()
   let tokA
   let tokB
   try {
-    tokA = await login(URLS.lbHttp, P.mail[0])
-    tokB = await login(URLS.lbHttp, P.mail[1])
+    tokA = await login(LB_HTTP, P.mail[0])
+    tokB = await login(LB_HTTP, P.mail[1])
   } catch (e) { R.fatal(e.message); return }
-  R.info(`A、B 均经 HTTP LB 登录成功；HTTP 分发记录 = [${lbHttp.assignments.join(', ')}]`)
+  R.info(`A、B 均经 LB 登录成功（${LB_HTTP}）`)
 
   try {
-    cA = await connectWs(WebSocket, URLS.lbWs, tokA, 'A@LB')
-    cB = await connectWs(WebSocket, URLS.lbWs, tokB, 'B@LB')
+    cA = await connectWs(WebSocket, LB_WS, tokA, 'A')
+    cB = await connectWs(WebSocket, LB_WS, tokB, 'B')
   } catch (e) { R.fatal(e.message); return }
 
-  const [wsA, wsB] = lbWs.assignments
-  R.info(`WS 分发记录 = [${lbWs.assignments.join(', ')}]  →  A 落在 :${wsA}，B 落在 :${wsB}`)
-
-  // ★ 前提断言：必须真的分到了两个不同实例
-  const split = lbWs.assignments.length >= 2 && wsA !== wsB
-  R.ok('LB 分流：A 与 B 落在**不同**实例', split, `分发 = [${lbWs.assignments.join(', ')}]`)
-  if (!split) {
-    R.summary('（未实现跨实例分流，后续断言无意义）')
-    exitWith(1)
-    return
+  // ── 前提断言：两个客户端确实落在不同副本 ──────────────────────
+  if (EXTERNAL) {
+    // 外部 LB：等 nginx 把连接日志刷出来（WS 请求在**连接关闭**时才记 access log）
+    cA.close()
+    cB.close()
+    await sleep(800)
+    const ups = nginxWsUpstreams(logBefore) || []
+    const distinct = [...new Set(ups)]
+    R.info(`nginx access log 中 /ws 请求的后端地址 = [${ups.join(', ')}]`)
+    R.ok('外部 LB 分流：A 与 B 落在**不同**实例（证据取自 nginx 自己的 access log）',
+      distinct.length >= 2, `去重后 ${distinct.length} 个后端地址`)
+    if (distinct.length < 2) {
+      R.summary('（未能证明分流到不同实例，后续断言无意义）')
+      exitWith(1)
+      return
+    }
+    // 重新连上（前面的连接已被关闭）
+    try {
+      cA = await connectWs(WebSocket, LB_WS, tokA, 'A')
+      cB = await connectWs(WebSocket, LB_WS, tokB, 'B')
+    } catch (e) { R.fatal(e.message); return }
+  } else {
+    const [wsA, wsB] = lbWs.assignments
+    R.info(`内置代理的分发记录 = [${lbWs.assignments.join(', ')}]  →  A 落在 :${wsA}，B 落在 :${wsB}`)
+    R.ok('LB 分流：A 与 B 落在**不同**实例', lbWs.assignments.length >= 2 && wsA !== wsB,
+      `分发 = [${lbWs.assignments.join(', ')}]`)
+    if (lbWs.assignments.length < 2 || wsA === wsB) {
+      R.summary('（未实现跨实例分流，后续断言无意义）')
+      exitWith(1)
+      return
+    }
   }
 
   hb = setInterval(() => {
@@ -79,7 +130,7 @@ async function main () {
 
   const callId = `lb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
-  R.head('[1] CALL_INVITE(-10) A→B（经 LB，A/B 不同实例）')
+  R.head('[1] CALL_INVITE(-10) A→B（经 LB）')
   cA.send({ messageType: -10, callType: 1, mediaType: 1, callId, toUserId: P.b })
   const invite = await cB.wait((f) => f.messageType === -10 && f.callId === callId, 8000)
   R.ok('跨实例：INVITE 送达 B', !!invite, invite ? `fromUserId=${invite.fromUserId}` : 'B 未收到 INVITE')
@@ -107,7 +158,7 @@ async function main () {
 
   await sleep(2000)
   console.log(`\n  callId=${callId}`)
-  R.summary(`WS 分发 = [${lbWs.assignments.join(', ')}]`)
+  R.summary()
   exitWith(R.fail === 0 ? 0 : 1)
 }
 
